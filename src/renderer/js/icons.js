@@ -1,0 +1,40 @@
+// Icônes SVG statiques (traits carrés, style pixel). Utilisées uniquement via icon() dans dom.js.
+const svg = (body, extra = '') =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ${extra}>${body}</svg>`;
+
+export const ICONS = {
+  home: svg('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>', 'stroke-linejoin="round"'),
+  mods: svg('<path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/>', 'stroke-linejoin="round"'),
+  servers: svg('<rect x="3" y="4" width="18" height="7"/><rect x="3" y="13" width="18" height="7"/><path d="M7 7.5h2M7 16.5h2"/>'),
+  versions: svg('<rect x="3" y="4" width="18" height="5"/><path d="M5 9v11h14V9M10 13h4"/>'),
+  notes: svg('<path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h7M9 7h4"/>'),
+  settings: svg('<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><rect x="13" y="4" width="4" height="4"/><rect x="7" y="10" width="4" height="4"/><rect x="15" y="16" width="4" height="4"/>', 'stroke-linecap="square"'),
+  worlds: svg('<path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z"/><path d="M3 12h18M12 3c3.5 3.5 3.5 14.5 0 18M12 3c-3.5 3.5-3.5 14.5 0 18"/>'),
+  screenshots: svg('<path d="M3 5h18v14H3z"/><path d="M3 16l5-5 4 4 3-3 6 6M15 9h1"/>'),
+  archive: svg('<path d="M4 8h16v12H4zM3 4h18v4H3zM10 12h4"/>'),
+  restore: svg('<path d="M4 4v6h6"/><path d="M4.5 15a8 8 0 1 0 1.5-8.5L4 10"/>'),
+  next: svg('<path d="M9 5l7 7-7 7"/>', 'stroke-width="2.5"'),
+  console: svg('<path d="M4 17l6-5-6-5M12 19h8"/>'),
+  folder: svg('<path d="M3 6h6l2 2h10v11H3z"/>', 'stroke-linejoin="round"'),
+  plus: svg('<path d="M12 4v16M4 12h16"/>', 'stroke-width="2.5"'),
+  bolt: svg('<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', 'stroke-linejoin="round"'),
+  play: svg('<path d="M7 4v16l12-8z"/>', 'stroke-width="2.5"'),
+  chevron: svg('<path d="M6 9l6 6 6-6"/>'),
+  back: svg('<path d="M15 5l-7 7 7 7"/>', 'stroke-width="2.5"'),
+  check: svg('<path d="M4 12.5l5 5L20 6.5"/>', 'stroke-width="3"'),
+  close: svg('<path d="M6 6l12 12M18 6L6 18"/>', 'stroke-width="2.5"'),
+  search: svg('<rect x="4" y="4" width="12" height="12"/><path d="M16 16l5 5"/>'),
+  download: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', 'stroke-width="2.5"'),
+  stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14"/></svg>',
+  trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
+  copy: svg('<rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/>'),
+  alert: svg('<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17v1"/>', 'stroke-width="2.5"'),
+  info: svg('<rect x="4" y="4" width="16" height="16"/><path d="M12 11v6M12 7.5v.5"/>'),
+  refresh: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'),
+  external: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>'),
+  upload: svg('<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>', 'stroke-width="2.5"'),
+  lock: svg('<rect x="5" y="11" width="14" height="10"/><path d="M8 11V7h8v4"/>'),
+  offline: svg('<path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 5-2.7M19 12.5a10 10 0 0 0-2.2-1.6M12 20h.01"/>'),
+  microsoft:
+    '<svg viewBox="0 0 18 18"><rect x="0" y="0" width="8.5" height="8.5" fill="#f25022"/><rect x="9.5" y="0" width="8.5" height="8.5" fill="#7fba00"/><rect x="0" y="9.5" width="8.5" height="8.5" fill="#00a4ef"/><rect x="9.5" y="9.5" width="8.5" height="8.5" fill="#ffb900"/></svg>',
+};

@@ -1,0 +1,1021 @@
+'use strict';
+
+// Pont entre l'interface et le cœur : chaque canal valide ses entrées avant d'agir.
+const { app, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } = require('electron');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { AccountStore } = require('./core/accounts');
+const { InstanceStore, DEFAULT_SETTINGS, sanitizeSettings } = require('./core/instances');
+const { LaunchSession } = require('./core/launch');
+const microsoft = require('./core/microsoft');
+const { SkinStore, Wardrobe } = require('./core/skins');
+const { gameDirs, readJson, writeJson } = require('./core/store');
+const versions = require('./core/versions');
+const { availableLoaders } = require('./core/loaders');
+const content = require('./core/content');
+const modrinth = require('./core/modrinth');
+const modpacks = require('./core/modpacks');
+const servers = require('./core/servers');
+const importer = require('./core/importer');
+const worlds = require('./core/worlds');
+const screenshots = require('./core/screenshots');
+const crashes = require('./core/crashes');
+const storage = require('./core/storage');
+const performance = require('./core/performance');
+const gpu = require('./core/gpu');
+const { findSystemJavas } = require('./core/java');
+const { DiscordPresence, gameActivity } = require('./core/discord');
+const { LauncherTray } = require('./tray');
+const discordConfig = require('./discord-config');
+const { clientId: MICROSOFT_CLIENT_ID } = require('./microsoft-config');
+const { promptMicrosoftLogin } = require('./microsoft-login');
+
+const LOG_BUFFER = 5000;
+
+/** Chiffre les jetons Microsoft avec la protection de Windows (DPAPI), liée à ta session Windows. */
+const vault = {
+  encrypt(text) {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error("Le chiffrement de Windows n'est pas disponible : impossible d'enregistrer la session.");
+    return `enc:${safeStorage.encryptString(text).toString('base64')}`;
+  },
+  decrypt(data) {
+    if (!data?.startsWith('enc:')) throw new Error('Session illisible.');
+    return safeStorage.decryptString(Buffer.from(data.slice(4), 'base64'));
+  },
+};
+
+function createServices() {
+  const configDir = app.getPath('userData');
+  const dirs = gameDirs(path.join(app.getPath('appData'), '.0rzxn'));
+  for (const dir of [dirs.instances, dirs.cache]) fs.mkdirSync(dir, { recursive: true });
+  return {
+    dirs,
+    accounts: new AccountStore(configDir, {
+      vault,
+      renew: MICROSOFT_CLIENT_ID ? (refreshToken) => microsoft.renew(MICROSOFT_CLIENT_ID, refreshToken) : null,
+    }),
+    instances: new InstanceStore(dirs),
+    settings: createSettingsStore(path.join(configDir, 'settings.json')),
+  };
+}
+
+// Réglages du launcher lui-même (Paramètres › Launcher).
+// lightMode : le launcher se met en veille pendant une partie ; gpuHighPerformance : accord donné pour la carte dédiée.
+const LAUNCHER_DEFAULTS = { accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false };
+const ACCENTS = new Set(['violet', 'bleu', 'cyan', 'vert', 'ambre', 'rouge', 'rose']);
+const LOADER_NAMES = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
+
+function sanitizeLauncher(input, base = LAUNCHER_DEFAULTS) {
+  const s = { ...base };
+  if (input == null) return s;
+  // Couleur d'accent : un thème prédéfini ou une couleur perso « #rrggbb ».
+  if (ACCENTS.has(input.accent) || /^#[0-9a-f]{6}$/i.test(input.accent ?? '')) s.accent = input.accent.toLowerCase();
+  for (const key of ['discord', 'discordShowName', 'tray', 'closeToTray', 'lightMode', 'gpuHighPerformance']) if (typeof input[key] === 'boolean') s[key] = input[key];
+  return s;
+}
+
+/** settings.json : réglages par défaut des instances, réglages du launcher et petites préférences d'interface. */
+function createSettingsStore(file) {
+  const read = () => readJson(file, {});
+  return {
+    defaults: () => sanitizeSettings(read().defaults ?? DEFAULT_SETTINGS),
+    setDefaults(patch) {
+      const data = read();
+      data.defaults = sanitizeSettings(patch, sanitizeSettings(data.defaults ?? DEFAULT_SETTINGS));
+      writeJson(file, data);
+      return data.defaults;
+    },
+    launcher: () => sanitizeLauncher(read().launcher),
+    setLauncher(patch) {
+      const data = read();
+      data.launcher = sanitizeLauncher(patch, sanitizeLauncher(data.launcher));
+      writeJson(file, data);
+      return data.launcher;
+    },
+    ui: () => ({ selectedId: null, ...read().ui }),
+    setUi(patch) {
+      const data = read();
+      const ui = { ...data.ui };
+      if (typeof patch.selectedId === 'string' || patch.selectedId === null) ui.selectedId = patch.selectedId;
+      // Groupes repliés dans la barre latérale, et date des derniers rapports de crash vus.
+      if (Array.isArray(patch.collapsedGroups)) ui.collapsedGroups = patch.collapsedGroups.filter((g) => typeof g === 'string').slice(0, 100);
+      if (Number.isFinite(patch.crashesSeenAt)) ui.crashesSeenAt = patch.crashesSeenAt;
+      data.ui = ui;
+      writeJson(file, data);
+      return data.ui;
+    },
+  };
+}
+
+/** Une seule partie (ou préparation) à la fois, comme dans l'interface. */
+class LaunchManager {
+  constructor(services, getWindow) {
+    this.services = services;
+    this.getWindow = getWindow;
+    this.session = null;
+    this.run = null; // { instanceId, phase, step, done, total, prepareOnly }
+    this.logs = [];
+    this.pendingLogs = [];
+    this.flushTimer = null;
+    this.onChange = null; // la zone de notification et Discord suivent la partie
+  }
+
+  send(channel, payload) {
+    const win = this.getWindow();
+    if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+  }
+
+  /** Mode léger : pendant la partie, fenêtre réduite ou masquée, les logs attendent que la fenêtre revienne. */
+  paused() {
+    if (this.run?.phase !== 'running' || !this.services.settings.launcher().lightMode) return false;
+    const win = this.getWindow();
+    return !win || win.isDestroyed() || !win.isVisible() || win.isMinimized();
+  }
+
+  pushLog(line) {
+    this.logs.push(line);
+    if (this.logs.length > LOG_BUFFER) this.logs.splice(0, this.logs.length - LOG_BUFFER);
+    this.pendingLogs.push(line);
+    // Trop de lignes en attente : l'interface recevra tout le tampon d'un coup.
+    if (this.pendingLogs.length > LOG_BUFFER) {
+      this.pendingLogs.splice(0, this.pendingLogs.length - LOG_BUFFER);
+      this.resync = true;
+    }
+    if (!this.flushTimer && !this.pausedNow) this.flushTimer = setTimeout(() => this.flushLogs(), 100);
+  }
+
+  flushLogs() {
+    this.flushTimer = null;
+    // Réglage relu une fois par paquet de logs, pas à chaque ligne.
+    this.pausedNow = this.paused();
+    if (this.pausedNow || !this.pendingLogs.length) return;
+    if (this.resync) {
+      this.resync = false;
+      this.pendingLogs = [];
+      this.send('launch:reset');
+      this.send('launch:logs', this.logs.slice());
+      return;
+    }
+    this.send('launch:logs', this.pendingLogs.splice(0));
+  }
+
+  /** La fenêtre réapparaît : les logs en attente partent tout de suite. */
+  resume() {
+    this.pausedNow = false;
+    if (this.pendingLogs.length && !this.flushTimer) this.flushTimer = setTimeout(() => this.flushLogs(), 0);
+  }
+
+  status(extra = {}) {
+    this.send('launch:status', { run: this.run, ...extra });
+    this.onChange?.();
+  }
+
+  start(instanceId, { verify = false, prepareOnly = false, server = null } = {}) {
+    if (this.session) throw new Error('Une partie ou une installation est déjà en cours.');
+    const { dirs, instances, accounts } = this.services;
+    const instance = instances.get(instanceId);
+    const accountId = accounts.resolveId(instance.accountId);
+    if (!accountId) throw new Error('Ajoute un compte avant de jouer.');
+
+    const session = new LaunchSession({
+      dirs,
+      instance,
+      instanceDir: instances.dir(instanceId),
+      getAccount: (log) => {
+        if (instance.accountId && instance.accountId !== accountId) log("Le compte choisi pour cette instance n'existe plus : compte actif utilisé.");
+        return accounts.launchAccount(log, accountId);
+      },
+      launcherVersion: app.getVersion(),
+      verify,
+      prepareOnly,
+      server,
+      prepareJava: (exe, log) => this.prepareJava(exe, log),
+    });
+    this.session = session;
+    this.logs = [];
+    this.pendingLogs = [];
+    this.pausedNow = false;
+    this.resync = false;
+    this.run = { instanceId, phase: 'preparing', step: 0, done: 0, total: 0, prepareOnly, server };
+    this.send('launch:reset');
+    this.status();
+
+    session.on('log', (line) => this.pushLog(line));
+    session.on('progress', ({ step, done, total }) => {
+      Object.assign(this.run, { step, done, total });
+      this.send('launch:progress', this.run);
+    });
+    session.on('loaderInstalled', ({ versionId }) => instances.markLoaderInstalled(instanceId, versionId));
+    session.on('prepared', () => this.finish({ prepared: true }));
+    session.on('failed', ({ message, cancelled }) => this.finish({ error: cancelled ? null : message, cancelled }));
+    session.on('running', () => {
+      this.run.phase = 'running';
+      this.run.startedAt = Date.now();
+      this.status();
+      const win = this.getWindow();
+      // Mode léger : les minuteurs de l'interface ralentissent quand la fenêtre est cachée.
+      if (win && this.services.settings.launcher().lightMode) win.webContents.setBackgroundThrottling(true);
+      if (win && instance.settings.afterLaunch === 'minimize') win.minimize();
+      if (win && instance.settings.afterLaunch === 'hide') win.hide();
+    });
+    session.on('exit', async ({ code, crashed, minutes }) => {
+      instances.recordPlay(instanceId, minutes);
+      const win = this.getWindow();
+      if (win && !win.isDestroyed() && (!win.isVisible() || win.isMinimized())) {
+        win.show();
+        win.restore();
+        win.focus();
+      }
+      const since = this.run?.startedAt ?? Date.now() - (minutes + 1) * 60000;
+      const crash = crashed ? await this.keepCrash(instanceId, since, code).catch(() => null) : null;
+      this.finish({ exited: true, code, crashed, crash });
+    });
+
+    session.start();
+    return this.run;
+  }
+
+  /** Rapport du plantage : celui écrit par le jeu ou par Java, sinon les logs de la partie, gardés par le launcher. */
+  async keepCrash(instanceId, since, code) {
+    const { instances } = this.services;
+    const dirs = { gameDir: instances.gameDir(instanceId), instanceDir: instances.dir(instanceId) };
+    const report = (await crashes.listCrashes(dirs)).find((c) => c.source !== 'log' && c.at >= since - 5000);
+    if (report) return { source: report.source, file: report.file };
+    return { source: 'log', file: await crashes.saveCrashLog(dirs.instanceDir, this.logs, { code }) };
+  }
+
+  /** Accord donné pour la carte dédiée : chaque nouveau java.exe la reçoit aussi. */
+  async prepareJava(exe, log) {
+    if (process.platform !== 'win32' || !this.services.settings.launcher().gpuHighPerformance) return;
+    if ((await gpu.preference(exe)) === 'high') return;
+    await gpu.setHighPerformance([exe]);
+    log('Carte graphique dédiée choisie pour ce Java (préférence Windows).');
+  }
+
+  finish(extra) {
+    this.session = null;
+    this.pausedNow = false;
+    const win = this.getWindow();
+    if (win && !win.isDestroyed()) win.webContents.setBackgroundThrottling(false);
+    const instanceId = this.run?.instanceId;
+    this.run = null;
+    // Les derniers logs (et ceux gardés par le mode léger) partent avant le changement d'état.
+    clearTimeout(this.flushTimer);
+    this.flushLogs();
+    this.status({ ...extra, instanceId });
+  }
+
+  stop() {
+    this.session?.stop();
+  }
+
+  state() {
+    return { run: this.run, logs: this.logs };
+  }
+}
+
+function registerIpc(getWindow) {
+  const services = createServices();
+  const { dirs, accounts, instances } = services;
+  const skins = new SkinStore(dirs);
+  const wardrobe = new Wardrobe({ accounts, store: skins });
+  const launches = new LaunchManager(services, getWindow);
+
+  const handle = (channel, fn) =>
+    ipcMain.handle(channel, (event, ...args) => {
+      if (event.sender !== getWindow()?.webContents) throw new Error('Origine refusée.');
+      return fn(...args);
+    });
+  const text = (value) => (typeof value === 'string' ? value : '');
+
+  handle('app:info', () => ({
+    version: app.getVersion(),
+    platform: process.platform,
+    root: dirs.root,
+    microsoftReady: Boolean(MICROSOFT_CLIENT_ID),
+    discordReady: Boolean(discordConfig.clientId),
+  }));
+  handle('system:memory', () => ({ totalGb: os.totalmem() / 1024 ** 3, freeGb: os.freemem() / 1024 ** 3 }));
+
+  // Raccourci bureau : « --launch=<instance> » lance directement l'instance.
+  let pendingLaunch = launchArgument(process.argv);
+  handle('ui:get', () => {
+    const ui = { ...services.settings.ui(), pendingLaunch };
+    pendingLaunch = null;
+    return ui;
+  });
+  handle('ui:set', (patch) => services.settings.setUi(patch ?? {}));
+
+  handle('versions:list', () => versions.listVersions(dirs));
+  handle('versions:details', (id) => versions.versionDetails(dirs, text(id)));
+  handle('loaders:available', (mc) => availableLoaders(text(mc)));
+  handle('notes:list', () => versions.getPatchNotes(dirs));
+  handle('notes:body', (contentPath) => versions.getPatchNoteBody(text(contentPath)));
+
+  handle('instances:list', () => instances.list());
+  handle('instances:create', (data) => instances.create(data ?? {}, services.settings.defaults()));
+  handle('instances:update', (id, patch) => {
+    if (launches.run?.instanceId === id && patch?.version) throw new Error("Impossible de changer de version pendant qu'elle tourne.");
+    return instances.update(text(id), patch ?? {});
+  });
+  const notRunning = (id, action) => {
+    if (launches.run?.instanceId === id) throw new Error(`Impossible de ${action} pendant que l'instance tourne : ferme d'abord le jeu.`);
+  };
+  handle('instances:duplicate', (id, name) => {
+    notRunning(text(id), 'dupliquer');
+    return instances.duplicate(text(id), text(name));
+  });
+  // Suppression = corbeille Windows : on peut toujours récupérer ses mondes.
+  handle('instances:delete', async (id) => {
+    notRunning(text(id), 'supprimer');
+    instances.get(text(id));
+    await shell.trashItem(instances.dir(text(id)));
+    if (services.settings.ui().selectedId === id) services.settings.setUi({ selectedId: null });
+  });
+  handle('instances:shortcut', (id) => {
+    if (process.platform !== 'win32') throw new Error('Les raccourcis bureau sont disponibles sous Windows uniquement.');
+    const instance = instances.get(text(id));
+    const safeName = instance.name.replace(/[\\/:*?"<>|]/g, '').trim() || instance.id;
+    const file = path.join(app.getPath('desktop'), `${safeName} (0Rzxn_).lnk`);
+    const options = {
+      target: process.execPath,
+      // En développement, Electron a besoin du dossier du projet avant les arguments.
+      args: app.isPackaged ? `--launch=${instance.id}` : `"${app.getAppPath()}" --launch=${instance.id}`,
+      cwd: path.dirname(process.execPath),
+      description: `Lancer ${instance.name} avec 0Rzxn_ Launcher`,
+      icon: process.execPath,
+      iconIndex: 0,
+    };
+    if (!shell.writeShortcutLink(file, fs.existsSync(file) ? 'replace' : 'create', options)) {
+      throw new Error("Windows n'a pas pu créer le raccourci.");
+    }
+    return path.basename(file);
+  });
+  // ---------- Contenu des instances (mods, packs, shaders) et Modrinth ----------
+  const contentCtx = (id, kind) => {
+    const instance = instances.get(text(id));
+    content.contentDir(instances.gameDir(instance.id), text(kind)); // valide le type
+    return { instance, gameDir: instances.gameDir(instance.id), kind: text(kind) };
+  };
+  const trash = (file) => shell.trashItem(file);
+  handle('content:list', (id, kind) => content.listContent(contentCtx(id, kind)));
+  handle('content:toggle', (id, kind, file) => {
+    notRunning(text(id), 'modifier son contenu');
+    return content.toggle({ ...contentCtx(id, kind), file: text(file) });
+  });
+  handle('content:delete', async (id, kind, file) => {
+    notRunning(text(id), 'modifier son contenu');
+    const ctx = contentCtx(id, kind);
+    await trash(content.safePath(content.contentDir(ctx.gameDir, ctx.kind), text(file)));
+  });
+  handle('content:install', (id, kind, projectId, versionId) => {
+    notRunning(text(id), 'modifier son contenu');
+    return content.install({ ...contentCtx(id, kind), projectId: text(projectId), versionId: text(versionId) || null, trash });
+  });
+  handle('content:update', (id, kind, files) => {
+    notRunning(text(id), 'mettre à jour son contenu');
+    return content.update({ ...contentCtx(id, kind), files: Array.isArray(files) ? files.map(text) : null, trash });
+  });
+  handle('content:import', (id, kind, paths) => {
+    notRunning(text(id), 'modifier son contenu');
+    return content.importFiles({ ...contentCtx(id, kind), paths: Array.isArray(paths) ? paths.map(text) : [] });
+  });
+  handle('content:openFolder', async (id, kind) => {
+    const ctx = contentCtx(id, kind);
+    const dir = content.contentDir(ctx.gameDir, ctx.kind);
+    fs.mkdirSync(dir, { recursive: true });
+    const error = await shell.openPath(dir);
+    if (error) throw new Error(error);
+  });
+  handle('modrinth:search', ({ instanceId, kind, query, sort, offset } = {}) => {
+    // Les modpacks créent une nouvelle instance : pas de filtre sur l'instance sélectionnée.
+    if (kind === 'modpacks') {
+      return modrinth.search({ query: text(query), projectType: 'modpack', sort: text(sort), offset: Number(offset) || 0 });
+    }
+    const { instance } = contentCtx(instanceId, kind);
+    return modrinth.search({
+      query: text(query),
+      projectType: content.KINDS[kind].projectType,
+      gameVersion: instance.version,
+      loaders: content.loadersFor(kind, instance),
+      sort: text(sort),
+      offset: Number(offset) || 0,
+    });
+  });
+  handle('modrinth:project', (projectId) => modrinth.project(text(projectId)));
+  handle('modrinth:versions', (projectId, instanceId, kind) => {
+    if (kind === 'modpacks') return modrinth.versions(text(projectId), {});
+    const { instance } = contentCtx(instanceId, kind);
+    return modrinth.versions(text(projectId), { loaders: content.loadersFor(kind, instance), gameVersion: instance.version });
+  });
+
+  // ---------- Modpacks ----------
+  // Une seule tâche longue à la fois (installation ou mise à jour d'un modpack), avec sa progression.
+  let task = null;
+  let taskAbort = null; // les tâches qui acceptent un signal (sauvegarde, restauration) peuvent être annulées
+  const runTask = async (label, work, { cancellable = false } = {}) => {
+    if (task) throw new Error(`Patiente : « ${task} » est en cours.`);
+    task = label;
+    taskAbort = cancellable ? new AbortController() : null;
+    const send = (payload) => {
+      const win = getWindow();
+      if (win && !win.isDestroyed()) win.webContents.send('task:progress', payload);
+    };
+    send({ label, done: 0, total: 0, cancellable });
+    try {
+      return await work((p) => send({ label, done: p.done, total: p.total, cancellable }), taskAbort?.signal);
+    } finally {
+      task = null;
+      taskAbort = null;
+      send(null);
+    }
+  };
+  handle('task:cancel', () => taskAbort?.abort());
+  const installFromBuffer = (label, buffer, source) =>
+    runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }));
+
+  handle('modpacks:install', async (projectId, versionId, meta) => {
+    const id = text(projectId);
+    const chosen = text(versionId) || (await modrinth.versions(id, {}))[0]?.id;
+    if (!chosen) throw new Error("Ce modpack n'a aucune version téléchargeable.");
+    const { buffer } = await modpacks.downloadPack(dirs, chosen);
+    return installFromBuffer(`Installation de ${text(meta?.title) || 'modpack'}`, buffer, {
+      projectId: id,
+      versionId: chosen,
+      title: text(meta?.title) || undefined,
+      icon: text(meta?.icon) || null,
+    });
+  });
+  handle('modpacks:import', async () => {
+    const result = await dialog.showOpenDialog(getWindow(), {
+      title: 'Importer un modpack',
+      properties: ['openFile'],
+      filters: [{ name: 'Modpack Modrinth', extensions: ['mrpack'] }],
+    });
+    if (result.canceled) return null;
+    const buffer = await fs.promises.readFile(result.filePaths[0]);
+    return installFromBuffer(`Import de ${path.basename(result.filePaths[0])}`, buffer, null);
+  });
+  handle('modpacks:checkUpdate', (id) => modpacks.checkUpdate(instances.get(text(id))));
+  handle('modpacks:update', async (id, versionId) => {
+    notRunning(text(id), 'mettre à jour le modpack');
+    const instance = instances.get(text(id));
+    const { buffer } = await modpacks.downloadPack(dirs, text(versionId));
+    return runTask(`Mise à jour de ${instance.name}`, (onProgress) =>
+      modpacks.updatePack({ instances, instanceId: instance.id, buffer, source: { versionId: text(versionId) }, trash, onProgress }),
+    );
+  });
+  // ---------- Import (instances d'autres launchers, mondes) ----------
+  // Seuls les dossiers trouvés par une recherche peuvent être importés ; la source est seulement lue.
+  const scanned = new Map(); // chemin → nom du launcher (instance) ou 'world'
+  const pickFolder = async (title, defaultPath) => {
+    const result = await dialog.showOpenDialog(getWindow(), { title, defaultPath, properties: ['openDirectory'] });
+    return result.canceled ? null : result.filePaths[0];
+  };
+  const instancesFrom = (dir) => {
+    const found = importer.scanInstances(dir);
+    const imported = new Set(instances.list().map((i) => i.importedFrom?.path).filter(Boolean));
+    for (const item of found.instances) {
+      scanned.set(item.path, found.launcher);
+      item.imported = imported.has(item.path);
+    }
+    return found;
+  };
+  const worldsFrom = (dirs) => ({
+    dirs,
+    worlds: dirs.flatMap((dir) =>
+      importer.scanWorlds(dir).map((world) => {
+        scanned.set(world.path, 'world');
+        return { ...world, source: dir };
+      }),
+    ),
+  });
+  handle('import:scanInstances', () => instancesFrom(importer.defaultInstancesDir(app.getPath('appData'))));
+  handle('import:pickInstances', async () => {
+    const dir = await pickFolder("Dossier d'instances d'un autre launcher, ou dossier d'une instance", importer.defaultInstancesDir(app.getPath('appData')));
+    return dir ? instancesFrom(dir) : null;
+  });
+  handle('import:instance', (dir) => {
+    const source = text(dir);
+    const launcher = scanned.get(source);
+    if (!launcher || launcher === 'world') throw new Error('Instance inconnue : relance la recherche.');
+    return runTask(`Import de ${path.basename(source)}`, (onProgress) =>
+      importer.importInstance({ instances, dir: source, defaults: services.settings.defaults(), launcher, onProgress }),
+    );
+  });
+  handle('import:scanWorlds', () => worldsFrom(importer.officialGameDirs(app.getPath('appData'))));
+  handle('import:pickWorlds', async () => {
+    const dir = await pickFolder('Dossier .minecraft, saves ou monde', path.join(app.getPath('appData'), '.minecraft'));
+    return dir ? worldsFrom([dir]) : null;
+  });
+  handle('import:world', (dir, instanceId) => {
+    const source = text(dir);
+    if (scanned.get(source) !== 'world') throw new Error('Monde inconnu : relance la recherche.');
+    const instance = instances.get(text(instanceId));
+    return runTask(`Copie de ${path.basename(source)}`, (onProgress) =>
+      importer.importWorld({ dir: source, gameDir: instances.gameDir(instance.id), onProgress }),
+    );
+  });
+
+  // ---------- Mondes et sauvegardes ----------
+  const gameDirOf = (id) => instances.gameDir(instances.get(text(id)).id);
+  const backupDirOf = (id) => path.join(dirs.backups, instances.get(text(id)).id);
+  const openDir = async (dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    const error = await shell.openPath(dir);
+    if (error) throw new Error(error);
+  };
+  const pickedZips = new Set(); // seuls les .zip choisis dans la fenêtre de Windows peuvent être restaurés
+  handle('worlds:list', async (id) => {
+    const [list, backups] = await Promise.all([worlds.listWorlds(gameDirOf(id)), worlds.listBackups(backupDirOf(id))]);
+    return { worlds: list, backups };
+  });
+  handle('worlds:backup', (id, folder) => {
+    const gameDir = gameDirOf(id);
+    worlds.worldDir(gameDir, text(folder));
+    return runTask(`Sauvegarde de ${text(folder)}`, (onProgress, signal) => worlds.backupWorld({ gameDir, folder: text(folder), backupDir: backupDirOf(id), onProgress, signal }), { cancellable: true });
+  });
+  handle('worlds:pickZip', async () => {
+    const result = await dialog.showOpenDialog(getWindow(), {
+      title: 'Restaurer un monde',
+      properties: ['openFile'],
+      filters: [{ name: 'Archive ZIP', extensions: ['zip'] }],
+    });
+    if (result.canceled) return null;
+    pickedZips.add(result.filePaths[0]);
+    return { file: result.filePaths[0], name: path.basename(result.filePaths[0]) };
+  });
+  const zipSource = (id, source) => {
+    if (source?.backup) return worlds.backupFile(backupDirOf(id), text(source.backup));
+    if (pickedZips.has(text(source?.file))) return text(source.file);
+    throw new Error('Archive inconnue : choisis-la à nouveau.');
+  };
+  handle('worlds:inspect', (id, source) => worlds.inspectArchive(zipSource(id, source), gameDirOf(id)));
+  handle('worlds:restore', (id, source, mode) => {
+    notRunning(text(id), 'restaurer un monde');
+    const zipFile = zipSource(id, source);
+    const choice = mode === 'beside' || mode === 'replace' ? mode : null;
+    return runTask(`Restauration de ${path.basename(zipFile)}`, (onProgress, signal) =>
+      worlds.restoreWorld({ zipFile, gameDir: gameDirOf(id), mode: choice, trash, onProgress, signal }), { cancellable: true },
+    );
+  });
+  handle('worlds:delete', async (id, folder) => {
+    notRunning(text(id), 'supprimer un monde');
+    await trash(worlds.worldDir(gameDirOf(id), text(folder)));
+  });
+  handle('worlds:deleteBackup', async (id, file) => {
+    const backupDir = backupDirOf(id);
+    await trash(worlds.backupFile(backupDir, text(file)));
+    await worlds.forgetBackup(backupDir, text(file));
+  });
+  handle('worlds:openFolder', (id, folder) =>
+    openDir(folder ? worlds.worldDir(gameDirOf(id), text(folder)) : path.join(gameDirOf(id), 'saves')),
+  );
+  handle('worlds:openBackups', (id) => openDir(backupDirOf(id)));
+
+  // ---------- Captures d'écran ----------
+  // Les images passent par shot://thumb|full/<instance>/<fichier> : jamais un autre fichier que ceux du dossier screenshots.
+  const thumbs = new Map(); // « chemin:date » → miniature JPEG
+  protocol.handle('shot', async (request) => {
+    try {
+      const url = new URL(request.url);
+      const [id, name] = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+      const file = screenshots.shotFile(gameDirOf(id), name);
+      if (url.hostname === 'full') {
+        return new Response(await fs.promises.readFile(file), { headers: { 'Content-Type': /\.png$/i.test(file) ? 'image/png' : 'image/jpeg' } });
+      }
+      const key = `${file}:${(await fs.promises.stat(file)).mtimeMs}`;
+      let jpeg = thumbs.get(key);
+      if (!jpeg) {
+        let image = await nativeImage.createThumbnailFromPath(file, { width: 480, height: 480 }).catch(() => null);
+        if (!image || image.isEmpty()) image = nativeImage.createFromPath(file).resize({ width: 480, quality: 'good' });
+        jpeg = image.toJPEG(82);
+        thumbs.set(key, jpeg);
+        if (thumbs.size > 400) thumbs.delete(thumbs.keys().next().value);
+      }
+      return new Response(jpeg, { headers: { 'Content-Type': 'image/jpeg' } });
+    } catch {
+      return new Response(null, { status: 404 });
+    }
+  });
+  const shotOf = (id, file) => screenshots.shotFile(gameDirOf(id), text(file));
+  handle('screenshots:list', (id) => screenshots.listScreenshots(gameDirOf(id)));
+  handle('screenshots:copy', async (id, file) => {
+    const image = nativeImage.createFromPath(shotOf(id, file));
+    if (image.isEmpty()) throw new Error("Cette image n'a pas pu être lue.");
+    // Presse-papiers façon W3C depuis Electron 45 : l'image part en PNG (les .jpg sont convertis).
+    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([image.toPNG()], { type: 'image/png' }) })]);
+  });
+  handle('screenshots:open', async (id, file) => {
+    const error = await shell.openPath(shotOf(id, file));
+    if (error) throw new Error(error);
+  });
+  handle('screenshots:show', (id, file) => shell.showItemInFolder(shotOf(id, file)));
+  handle('screenshots:delete', (id, file) => trash(shotOf(id, file)));
+  handle('screenshots:openFolder', (id) => openDir(screenshots.shotsDir(gameDirOf(id))));
+
+  // ---------- Rapports de crash ----------
+  const crashDirs = (id) => {
+    const instance = instances.get(text(id));
+    return { instance, gameDir: instances.gameDir(instance.id), instanceDir: instances.dir(instance.id) };
+  };
+  const summaries = new Map(); // « chemin:date » → type d'erreur reconnu, pour la liste
+  handle('crashes:list', async () => {
+    const all = [];
+    for (const instance of instances.list()) {
+      const found = await crashes.listCrashes(crashDirs(instance.id)).catch(() => []);
+      for (const item of found) all.push({ ...item, instanceId: instance.id, instanceName: instance.name });
+    }
+    const recent = all.sort((a, b) => b.at - a.at).slice(0, 40);
+    await Promise.all(
+      recent.map(async (item) => {
+        const file = crashes.crashFile(crashDirs(item.instanceId), item.source, item.file);
+        const key = `${file}:${item.at}`;
+        if (!summaries.has(key)) {
+          const body = await crashes.readCrashText(file).then((r) => r.text, () => '');
+          summaries.set(key, crashes.diagnose(body).problems[0]?.label ?? null);
+        }
+        item.label = summaries.get(key);
+      }),
+    );
+    return recent;
+  });
+  const crashPath = (id, source, file) => crashes.crashFile(crashDirs(id), text(source), text(file));
+  handle('crashes:read', async (id, source, file) => {
+    const { instance } = crashDirs(id);
+    const report = await crashes.readCrashText(crashPath(id, source, file));
+    const java = instance.settings.java === 'custom' ? null : await versions.versionDetails(dirs, instance.version).then((d) => d.java, () => null);
+    return { ...report, ...crashes.diagnose(report.text, { java, ram: instance.settings.ram, javaMode: instance.settings.java }) };
+  });
+  handle('crashes:share', async (id, source, file) => crashes.shareLog((await crashes.readCrashText(crashPath(id, source, file))).text));
+  handle('crashes:open', async (id, source, file) => {
+    const error = await shell.openPath(crashPath(id, source, file));
+    if (error) throw new Error(error);
+  });
+  handle('crashes:openFolder', (id) => openDir(path.join(crashDirs(id).gameDir, 'crash-reports')));
+
+  handle('instances:export', async (id, options) => {
+    const instance = instances.get(text(id));
+    const name = text(options?.name).trim() || instance.name;
+    const version = text(options?.version).trim() || '1.0.0';
+    const result = await dialog.showSaveDialog(getWindow(), {
+      title: 'Exporter en modpack',
+      defaultPath: path.join(app.getPath('desktop'), `${name.replace(/[\\/:*?"<>|]/g, '')}-${version}.mrpack`),
+      filters: [{ name: 'Modpack Modrinth', extensions: ['mrpack'] }],
+    });
+    if (result.canceled) return null;
+    const pack = await modpacks.exportPack({ instance, gameDir: instances.gameDir(instance.id), name, version, summary: text(options?.summary) });
+    await fs.promises.writeFile(result.filePath, pack.buffer);
+    return { file: result.filePath, referenced: pack.referenced, embedded: pack.embedded, size: pack.buffer.length };
+  });
+
+
+  // ---------- Serveurs (servers.dat, partagé avec le menu Multijoueur du jeu) ----------
+  // Le jeu réécrit servers.dat en quittant : on ne modifie rien pendant qu'il tourne.
+  const serversDir = (id) => instances.gameDir(instances.get(text(id)).id);
+  const serverIndex = (value) => (Number.isInteger(value) ? value : -1);
+  handle('servers:list', (id) => servers.listServers(serversDir(id)));
+  handle('servers:add', (id, data) => {
+    notRunning(text(id), 'modifier ses serveurs');
+    return servers.addServer(serversDir(id), data ?? {});
+  });
+  handle('servers:update', (id, at, data) => {
+    notRunning(text(id), 'modifier ses serveurs');
+    return servers.updateServer(serversDir(id), serverIndex(at), data ?? {});
+  });
+  handle('servers:remove', (id, at) => {
+    notRunning(text(id), 'modifier ses serveurs');
+    return servers.removeServer(serversDir(id), serverIndex(at));
+  });
+  handle('servers:move', (id, from, to) => {
+    notRunning(text(id), 'modifier ses serveurs');
+    return servers.moveServer(serversDir(id), serverIndex(from), serverIndex(to));
+  });
+  // Ping ; l'icône reçue est enregistrée dans servers.dat comme le fait le jeu.
+  handle('servers:ping', async (address, target) => {
+    const result = await servers.pingServer(text(address));
+    const id = text(target?.instanceId);
+    if (result.favicon && id && launches.run?.instanceId !== id) {
+      try {
+        result.iconSaved = servers.saveIcon(serversDir(id), serverIndex(target.index), text(address), result.favicon);
+      } catch {
+        // servers.dat illisible : le ping reste valable.
+      }
+    }
+    return result;
+  });
+  handle('instances:openFolder', async (id) => {
+    const dir = instances.gameDir(text(id));
+    fs.mkdirSync(dir, { recursive: true });
+    const error = await shell.openPath(dir);
+    if (error) throw new Error(error);
+  });
+  handle('launcher:openFolder', async () => {
+    const error = await shell.openPath(dirs.root);
+    if (error) throw new Error(error);
+  });
+
+  handle('accounts:list', () => accounts.list());
+  handle('accounts:addOffline', (name) => accounts.addOffline(text(name)));
+  handle('accounts:addMicrosoft', async () => {
+    if (!MICROSOFT_CLIENT_ID) {
+      throw new Error("La connexion Microsoft n'est pas encore activée : il manque l'identifiant de l'application Azure (voir docs/MICROSOFT.md).");
+    }
+    const { code, verifier } = await promptMicrosoftLogin(getWindow(), MICROSOFT_CLIENT_ID);
+    const session = await microsoft.signIn(MICROSOFT_CLIENT_ID, code, verifier);
+    return { ...accounts.addMicrosoft(session), name: session.name };
+  });
+  handle('accounts:remove', (id) => accounts.remove(text(id)));
+  handle('accounts:setActive', (id) => accounts.setActive(text(id)));
+  handle('accounts:refreshLooks', () => wardrobe.refresh());
+
+  // ---------- Skins et capes ----------
+  // Les images passent par skin://texture/<empreinte> et skin://library/<id> : seulement le cache et « Mes skins ».
+  protocol.handle('skin', async (request) => {
+    try {
+      const url = new URL(request.url);
+      const id = url.pathname.replace(/^\//, '');
+      const file = url.hostname === 'library' ? skins.skinFile(id) : await skins.texture(id);
+      return new Response(await fs.promises.readFile(file), { headers: { 'Content-Type': 'image/png' } });
+    } catch {
+      return new Response('', { status: 404 });
+    }
+  });
+  handle('skins:state', (id) => wardrobe.state(text(id)));
+  handle('skins:library', () => skins.list());
+  handle('skins:import', async () => {
+    const result = await dialog.showOpenDialog(getWindow(), { title: 'Importer un skin', filters: [{ name: 'Skin Minecraft (PNG)', extensions: ['png'] }], properties: ['openFile'] });
+    const file = result.filePaths?.[0];
+    if (result.canceled || !file) return null;
+    const stat = await fs.promises.stat(file);
+    if (stat.size > 2 * 1024 * 1024) throw new Error('Ce fichier est trop lourd pour un skin (2 Mo au maximum).');
+    const { item, added } = skins.add(await fs.promises.readFile(file), { name: path.basename(file), variant: 'classic' });
+    return { id: item.id, added, library: skins.list() };
+  });
+  handle('skins:copyPlayer', async (name) => {
+    const { item, added } = await wardrobe.copyPlayer(text(name));
+    return { id: item.id, name: item.name, added, library: skins.list() };
+  });
+  handle('skins:setVariant', (id, variant) => {
+    skins.setVariant(text(id), text(variant));
+    return skins.list();
+  });
+  handle('skins:remove', (id) => {
+    skins.remove(text(id));
+    return skins.list();
+  });
+  // Un refus de Mojang revient dans l'état (avec son code) : ce qui a déjà été appliqué reste à jour à l'écran.
+  const attempt = async (id, action) => {
+    try {
+      return await action();
+    } catch (error) {
+      return wardrobe.snapshot(id, error);
+    }
+  };
+  handle('skins:apply', (id, change) => attempt(text(id), () => wardrobe.apply(text(id), change ?? {})));
+  handle('skins:reset', (id) => attempt(text(id), () => wardrobe.reset(text(id))));
+
+  handle('settings:get', () => services.settings.defaults());
+  handle('settings:update', (patch) => services.settings.setDefaults(patch ?? {}));
+  handle('dialog:pickJava', async () => {
+    const result = await dialog.showOpenDialog(getWindow(), {
+      title: 'Choisir un Java',
+      properties: ['openFile'],
+      filters: process.platform === 'win32' ? [{ name: 'Java', extensions: ['exe'] }] : [],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  handle('launch:start', (id, options) =>
+    launches.start(text(id), {
+      verify: options?.verify === true,
+      prepareOnly: options?.prepareOnly === true,
+      server: options?.server ? servers.parseAddress(text(options.server)) && text(options.server).trim() : null,
+    }),
+  );
+  handle('launch:stop', () => launches.stop());
+  handle('launch:state', () => launches.state());
+
+  // ---------- Réglages du launcher : thème, Discord, zone de notification ----------
+  let quitting = false;
+  let balloonShown = false;
+  const requestLaunch = (id) => {
+    const win = getWindow();
+    if (!win || win.isDestroyed()) return;
+    tray.showWindow();
+    win.webContents.send('app:launchRequest', id);
+  };
+  const quit = async () => {
+    if (launches.run) {
+      const { response } = await dialog.showMessageBox({
+        type: 'warning',
+        title: 'Quitter 0Rzxn_ Launcher',
+        message: 'Une partie est en cours. Quitter le launcher quand même ?',
+        detail: "Le temps de jeu de cette partie ne sera pas enregistré et la console ne la suivra plus.",
+        buttons: ['Annuler', 'Quitter'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (response !== 1) return;
+    }
+    quitting = true;
+    app.quit();
+  };
+  const tray = new LauncherTray({ getWindow, instances, launches, canPlay: () => Boolean(accounts.list().activeId), onLaunch: requestLaunch, onQuit: quit });
+
+  // Discord : rien n'est envoyé tant que l'option est désactivée ; le statut suit la partie en cours.
+  const presence = new DiscordPresence({ clientId: discordConfig.clientId, pipe: discordConfig.pipe });
+  const countMods = (instance) => {
+    if (instance.loader === 'vanilla') return 0;
+    try {
+      return fs.readdirSync(path.join(instances.gameDir(instance.id), 'mods')).filter((f) => f.endsWith('.jar')).length;
+    } catch {
+      return 0;
+    }
+  };
+  const syncDiscord = async () => {
+    const prefs = services.settings.launcher();
+    const run = launches.run;
+    if (!discordConfig.clientId || !prefs.discord || run?.phase !== 'running') {
+      await presence.close();
+      return;
+    }
+    const instance = instances.get(run.instanceId);
+    await presence.setActivity(
+      gameActivity({ instance, loaderName: LOADER_NAMES[instance.loader], mods: countMods(instance), startedAt: run.startedAt, showName: prefs.discordShowName }),
+    );
+  };
+  let discordQueue = Promise.resolve();
+  const queueDiscord = () => {
+    discordQueue = discordQueue.then(syncDiscord).catch((error) => {
+      if (!app.isPackaged) console.log(`[discord] ${error.message}`);
+    });
+    return discordQueue;
+  };
+  launches.onChange = () => {
+    tray.refresh();
+    queueDiscord();
+  };
+  tray.setEnabled(services.settings.launcher().tray);
+
+  handle('launcher:get', () => services.settings.launcher());
+  handle('launcher:set', (patch) => {
+    const prefs = services.settings.setLauncher(patch ?? {});
+    tray.setEnabled(prefs.tray);
+    queueDiscord();
+    return prefs;
+  });
+  handle('discord:status', async () => ({
+    configured: Boolean(discordConfig.clientId),
+    running: await presence.isRunning(),
+    showing: Boolean(presence.socket && presence.activity),
+  }));
+
+  // ---------- Java et espace disque ----------
+  const notBusy = (action) => {
+    if (launches.session) throw new Error(`Impossible de ${action} pendant une partie ou une installation.`);
+    if (task) throw new Error(`Patiente : « ${task} » est en cours.`);
+  };
+  let systemJavas = null;
+  handle('java:runtimes', () => storage.runtimesWithUsage(dirs, instances.list()));
+  handle('java:system', async (refresh) => {
+    if (!systemJavas || refresh === true) systemJavas = await findSystemJavas(dirs);
+    return systemJavas;
+  });
+  const runtimeDir = (component) => {
+    const name = text(component);
+    if (!/^[a-z0-9-]+$/.test(name)) throw new Error('Java inconnu.');
+    return path.join(dirs.runtime, name);
+  };
+  handle('java:removeRuntime', async (component) => {
+    notBusy('supprimer un Java');
+    const runtime = (await storage.runtimesWithUsage(dirs, instances.list())).find((r) => r.component === text(component));
+    if (!runtime) throw new Error('Ce Java est déjà supprimé.');
+    if (runtime.usedBy.length) throw new Error(`Ce Java sert encore à ${runtime.usedBy.join(', ')}.`);
+    await fs.promises.rm(runtimeDir(component), { recursive: true, force: true });
+    return runtime.size;
+  });
+  handle('java:openRuntime', (component) => openDir(runtimeDir(component)));
+  // ---------- Performances ----------
+  const cpus = os.cpus().length;
+  handle('perf:preview', async (id, settings) => {
+    const instance = id ? instances.get(text(id)) : null;
+    const s = sanitizeSettings(settings ?? {}, instance?.settings ?? services.settings.defaults());
+    const javaMajor = instance ? ((await versions.versionDetails(dirs, instance.version).catch(() => null))?.java ?? null) : null;
+    const tuned = performance.jvmArguments({ preset: s.jvmPreset, javaMajor: javaMajor ?? 21, ramGb: s.ram, jvmArgs: s.jvmArgs, cpus });
+    const counts = instance ? await performance.packInstalledCount({ gameDir: instances.gameDir(instance.id), instance }) : { installed: 0, mods: 0 };
+    return {
+      javaMajor,
+      cpus,
+      gc: tuned.gc,
+      userGc: performance.userChoosesGc(s.jvmArgs),
+      args: tuned.args,
+      ram: instance ? performance.recommendedRam({ loader: instance.loader, mods: counts.mods, zgc: s.jvmPreset === 'zgc' && tuned.gc === 'zgc' }) : null,
+      mods: counts.mods,
+      packInstalled: counts.installed,
+    };
+  });
+  handle('perf:pack', (id) => {
+    const instance = instances.get(text(id));
+    return performance.packStatus({ gameDir: instances.gameDir(instance.id), instance });
+  });
+  handle('perf:installPack', async (id, slugs, options) => {
+    notRunning(text(id), 'modifier son contenu');
+    let instance = instances.get(text(id));
+    const list = Array.isArray(slugs) ? slugs.map(text) : [];
+    // Instance vanilla : passage en Fabric (mondes et réglages gardés), comme « Modifier › Loader ».
+    if (instance.loader === 'vanilla') {
+      if (options?.convert !== true) throw new Error("Cette instance est vanilla : il faut d'abord la passer en Fabric.");
+      const fabric = (await availableLoaders(instance.version)).fabric;
+      if (!fabric?.recommended) throw new Error(`Fabric n'existe pas pour Minecraft ${instance.version}.`);
+      instance = instances.update(instance.id, { loader: 'fabric', loaderVersion: fabric.recommended });
+    }
+    const result = await runTask('Pack Performances', (onProgress) =>
+      performance.installPack({ gameDir: instances.gameDir(instance.id), instance, slugs: list, trash, onProgress }),
+    );
+    return { ...result, instance };
+  });
+  // Temps processeur cumulé des processus du launcher, comparé au relevé précédent (percentCPUUsage sous-estime beaucoup).
+  let lastMetrics = null;
+  handle('perf:metrics', () => {
+    let seconds = 0;
+    let memoryKb = 0;
+    for (const p of app.getAppMetrics()) {
+      seconds += p.cpu.cumulativeCPUUsage ?? 0;
+      memoryKb += p.memory.workingSetSize;
+    }
+    const now = Date.now();
+    const elapsed = lastMetrics ? (now - lastMetrics.at) / 1000 : 0;
+    // En % du processeur entier, comme le Gestionnaire des tâches.
+    const cpu = elapsed > 0 ? Math.max(0, (100 * (seconds - lastMetrics.seconds)) / elapsed / cpus) : 0;
+    lastMetrics = { at: now, seconds };
+    return { cpu, memoryMb: memoryKb / 1024, running: launches.run?.phase === 'running' };
+  });
+  // Java du launcher (et Java personnalisés des instances) concernés par la préférence de carte graphique.
+  const javaExes = () => {
+    const found = new Set();
+    for (const name of fs.existsSync(dirs.runtime) ? fs.readdirSync(dirs.runtime) : []) {
+      const exe = path.join(dirs.runtime, name, 'bin', 'java.exe');
+      if (fs.existsSync(exe)) found.add(exe);
+    }
+    for (const i of instances.list()) if (i.settings.java === 'custom' && i.settings.javaPath && fs.existsSync(i.settings.javaPath)) found.add(i.settings.javaPath);
+    return [...found];
+  };
+  handle('gpu:status', async () => {
+    const gpus = await gpu.listGpus().catch(() => []);
+    const exes = javaExes();
+    const prefs = await Promise.all(exes.map((exe) => gpu.preference(exe)));
+    return { gpus, javas: exes.length, high: prefs.filter((p) => p === 'high').length, enabled: services.settings.launcher().gpuHighPerformance };
+  });
+  // Le réglage de Windows n'est écrit qu'après l'accord donné dans la fenêtre de confirmation.
+  handle('gpu:set', async (on) => {
+    const exes = javaExes();
+    if (on === true) await gpu.setHighPerformance(exes);
+    else await gpu.clearPreference(exes);
+    return services.settings.setLauncher({ gpuHighPerformance: on === true });
+  });
+  handle('storage:usage', () => storage.usage(dirs));
+  handle('storage:plan', async () => (await storage.cleanupPlan(dirs, instances.list())).map(({ paths, ...item }) => item));
+  handle('storage:clean', (ids) => {
+    notBusy("libérer de l'espace");
+    return storage.clean(dirs, instances.list(), Array.isArray(ids) ? ids.map(text) : []);
+  });
+
+  return {
+    /** La fenêtre réapparaît (mode léger) : les logs en attente sont envoyés. */
+    windowShown() {
+      launches.resume();
+    },
+    /** Le launcher est déjà ouvert et un raccourci a été lancé : on transmet la demande. */
+    handleArgv(argv) {
+      const id = launchArgument(argv);
+      const win = getWindow();
+      if (id && win && !win.isDestroyed()) win.webContents.send('app:launchRequest', id);
+    },
+    /** Fermer la fenêtre la cache seulement si l'icône de la zone de notification permet de la rouvrir. */
+    hideOnClose() {
+      const prefs = services.settings.launcher();
+      if (quitting || !tray.enabled || !prefs.closeToTray) return false;
+      if (!balloonShown && process.platform === 'win32') {
+        balloonShown = true;
+        tray.tray.displayBalloon({ iconType: 'info', title: '0Rzxn_ Launcher', content: 'Le launcher reste ouvert ici. Clic droit sur l’icône pour le quitter.' });
+      }
+      return true;
+    },
+    beforeQuit() {
+      quitting = true;
+      tray.setEnabled(false);
+      presence.close();
+    },
+  };
+}
+
+function launchArgument(argv) {
+  const arg = argv.find((a) => a.startsWith('--launch='));
+  const id = arg?.slice('--launch='.length) ?? '';
+  return /^[a-z0-9-]+$/.test(id) ? id : null;
+}
+
+module.exports = { registerIpc };

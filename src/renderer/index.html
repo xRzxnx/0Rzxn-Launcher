@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: shot: skin: https://launchercontent.mojang.com https://cdn.modrinth.com; connect-src 'self'">
+  <title>0Rzxn_ Launcher</title>
+  <link rel="stylesheet" href="styles/fonts.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/pages.css">
+</head>
+<body>
+  <div class="titlebar">
+    <span class="titlebar__brand"><span class="logo logo--xs" aria-hidden="true"></span>0Rzxn_ Launcher</span>
+  </div>
+  <header class="topbar">
+    <nav class="tabs" id="tabs" aria-label="Onglets"></nav>
+    <div class="topbar__right" id="topbar-right"></div>
+  </header>
+  <div class="body">
+    <aside class="sidebar" id="sidebar" aria-label="Instances"></aside>
+    <main class="main" id="main"></main>
+  </div>
+  <div id="modal-root"></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

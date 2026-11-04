@@ -1,0 +1,11 @@
+node_modules/
+dist/
+/*.exe
+*.log
+
+# Images de référence UX (privées, hors du dépôt public)
+/Exemple Ux design Launcher *
+
+# Notes de travail (privées, hors du dépôt public)
+/docs/PLAN.md
+/docs/PLAN-V2.md

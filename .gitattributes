@@ -1,0 +1,6 @@
+# Fins de ligne identiques partout (LF), quel que soit le réglage de Git sur le PC.
+* text=auto eol=lf
+
+*.woff2 binary
+*.png binary
+*.webp binary
