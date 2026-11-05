@@ -1,10 +1,7 @@
 // Fenêtres modales (nouvelle instance, comptes, RAM faible), écran de bienvenue et notifications.
-import { importInstance, importWorld, openImport, pickImportFolder, setImportTarget, showImportTab } from '../import-actions.js';
+import { importInstance, openImport, pickImportFolder } from '../import-actions.js';
 import { exportInstance } from '../mods-actions.js';
-import { saveServer } from '../servers-actions.js';
-import { deleteWorld, runRestore } from '../worlds-actions.js';
 import { shareCrash } from '../crash-actions.js';
-import { screenshotViewer } from './screenshots.js';
 import { cleanDialog, removeRuntimeDialog, shortcutsDialog, stopGameDialog } from './launcher-settings.js';
 import { addMicrosoftAccount, addOfflineAccount, createInstance, deleteInstance, disableLowRamWarning, editInstance, loaderOptions, removeAccount, setActiveAccount, startLaunch, versionDetails } from '../actions.js';
 import { bannerUrl } from '../banner.js';
@@ -110,7 +107,7 @@ function loaderField(draft) {
         const count = versionsOf(loader).length;
         const available = loader === 'vanilla' || count > 0;
         let note = null;
-        if (loader !== 'vanilla') note = !options ? (failed ? 'ERREUR' : 'CHARGEMENT…') : count ? `${count} VERSIONS` : 'INDISPONIBLE';
+        if (loader !== 'vanilla') note = !options ? (failed ? 'Erreur' : 'Chargement…') : count ? `${count} versions` : 'Indisponible';
         return h(
           'button',
           { role: 'radio', 'aria-checked': draft.loader === loader ? 'true' : 'false', disabled: !available, onClick: () => pick(loader) },
@@ -148,28 +145,6 @@ function loaderField(draft) {
 }
 
 /** Fenêtre « Nouvelle instance », ou « Modifier l'instance » si modal.instanceId est présent. */
-/** Groupe de la barre latérale : texte libre, avec les groupes existants proposés. */
-function groupField(draft) {
-  const groups = [...new Set(state.instances.map((i) => i.group).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-  return h(
-    'div',
-    { class: 'field' },
-    h('label', { class: 'label', for: 'instance-group' }, 'Groupe'),
-    h('input', {
-      id: 'instance-group',
-      class: 'input',
-      type: 'text',
-      maxlength: 30,
-      list: 'instance-groups',
-      placeholder: groups[0] ? `Aucun · ex. ${groups[0]}` : 'Aucun · ex. Moddées, Vanilla, PvP',
-      value: draft.group ?? '',
-      onInput: (e) => { draft.group = e.target.value; },
-    }),
-    h('datalist', { id: 'instance-groups' }, groups.map((g) => h('option', { value: g }))),
-    h('p', { class: 'hint' }, 'Les instances d’un même groupe sont rangées ensemble dans la barre latérale.'),
-  );
-}
-
 function instanceDialog(modal) {
   const draft = modal.draft;
   const editing = Boolean(modal.instanceId);
@@ -266,7 +241,6 @@ function instanceDialog(modal) {
           ),
       ),
       loaderField(draft),
-      groupField(draft),
       accountField(draft),
       h('p', { class: 'path-preview' }, '~\\AppData\\Roaming\\.0rzxn\\instances\\', editing ? h('strong', null, original.id) : preview),
       error,
@@ -276,7 +250,7 @@ function instanceDialog(modal) {
         ? h('span', { class: 'spacer' })
         : h(
             'button',
-            { class: 'btn btn--ghost spacer', onClick: () => openImport('instances') },
+            { class: 'btn btn--ghost spacer', onClick: openImport },
             'Importer depuis un autre launcher…',
           ),
       h('button', { class: 'btn btn--lg', onClick: close }, 'Annuler'),
@@ -394,7 +368,7 @@ function accountsDialog() {
               a.needsLogin
                 ? h('button', { class: 'btn', disabled: state.signingIn, onClick: addMicrosoftAccount }, 'Se reconnecter')
                 : active
-                  ? h('span', { class: 'tag tag--ok' }, 'ACTIF')
+                  ? h('span', { class: 'tag tag--ok' }, 'Actif')
                   : h('button', { class: 'btn', disabled: Boolean(state.run), onClick: () => setActiveAccount(a.id) }, 'Utiliser'),
               h('button', { class: 'btn', onClick: () => openSkins(a.id) }, 'Skin et cape'),
               h(
@@ -458,12 +432,8 @@ export function renderModal() {
   if (modal.type === 'skins') return skinsDialog(modal);
   if (modal.type === 'low-ram') return lowRamDialog(modal);
   if (modal.type === 'export') return exportDialog(modal);
-  if (modal.type === 'server') return serverDialog(modal);
   if (modal.type === 'import') return importDialog(modal);
-  if (modal.type === 'restore-world') return restoreDialog(modal);
-  if (modal.type === 'delete-world') return deleteWorldDialog(modal);
   if (modal.type === 'share-crash') return shareDialog(modal);
-  if (modal.type === 'screenshot') return screenshotViewer(modal);
   if (modal.type === 'shortcuts') return shortcutsDialog();
   if (modal.type === 'stop-game') return stopGameDialog();
   if (modal.type === 'remove-runtime') return removeRuntimeDialog(modal);
@@ -471,58 +441,6 @@ export function renderModal() {
   if (modal.type === 'perf-pack') return packDialog(modal);
   if (modal.type === 'gpu-confirm') return gpuConfirmDialog(modal);
   return null;
-}
-
-/** Un monde du même nom existe déjà : restaurer à côté, ou remplacer (l'actuel part à la corbeille). */
-function restoreDialog(modal) {
-  const instance = state.instances.find((i) => i.id === modal.instanceId);
-  if (!instance) return null;
-  return dialog({
-    title: 'Ce monde existe déjà',
-    size: 'dialog--small',
-    labelId: 'restore-title',
-    body: [
-      h('p', { style: 'margin:0;font-size:14px;line-height:1.6;color:var(--text-3)' }, `« ${modal.folder} » est déjà dans ${instance.name}. Que veux-tu faire de la sauvegarde ?`),
-      h('p', { class: 'hint' }, 'À côté : la sauvegarde devient un nouveau monde, l’actuel ne bouge pas. Remplacer : l’actuel part dans la corbeille de Windows.'),
-    ],
-    foot: [
-      h('span', { class: 'spacer' }),
-      h('button', { class: 'btn btn--lg', onClick: close }, 'Annuler'),
-      h('button', { class: 'btn btn--lg', onClick: () => runRestore(instance, modal.source, 'replace') }, 'Remplacer'),
-      h('button', { class: 'btn btn--lg btn--primary', onClick: () => runRestore(instance, modal.source, 'beside') }, 'Restaurer à côté'),
-    ],
-  });
-}
-
-function deleteWorldDialog(modal) {
-  const instance = state.instances.find((i) => i.id === modal.instanceId);
-  if (!instance) return null;
-  const error = h('p', { class: 'hint hint--error', role: 'alert' });
-  const confirm = async () => {
-    if (modal.busy) return;
-    modal.busy = true;
-    try {
-      await deleteWorld(instance, modal.folder, modal.name);
-    } catch (e) {
-      modal.busy = false;
-      error.textContent = e.message;
-    }
-  };
-  return dialog({
-    title: 'Supprimer ce monde ?',
-    size: 'dialog--small',
-    labelId: 'delete-world-title',
-    body: [
-      h('p', { style: 'margin:0;font-size:14px;line-height:1.6;color:var(--text-3)' }, `« ${modal.name} » (saves\\${modal.folder}) va dans la corbeille de Windows. Tu pourras le restaurer depuis la corbeille.`),
-      h('p', { class: 'hint' }, 'Ses sauvegardes .zip sont gardées.'),
-      error,
-    ],
-    foot: [
-      h('span', { class: 'spacer' }),
-      h('button', { class: 'btn btn--lg', onClick: close }, 'Annuler'),
-      h('button', { class: 'btn btn--lg btn--danger', onClick: confirm }, 'Mettre à la corbeille'),
-    ],
-  });
 }
 
 /** Le rapport devient public sur mclo.gs : on le dit avant l'envoi. */
@@ -649,16 +567,6 @@ export function renderToasts() {
   return state.task ? [taskCard(state.task), ...toasts] : toasts;
 }
 
-const GAME_TYPES = ['Survie', 'Créatif', 'Aventure', 'Spectateur'];
-
-/** Le monde a été ouvert dans une version plus récente que l'instance (la liste des versions va de la plus récente à la plus ancienne). */
-function worldIsNewer(world, instance) {
-  const order = (id) => state.versions.list.findIndex((v) => v.id === id);
-  const w = order(world.version);
-  const i = order(instance?.version);
-  return w >= 0 && i >= 0 && w < i;
-}
-
 function importRows(items, row) {
   return h('ul', { class: 'import-list' }, items.map(row));
 }
@@ -677,7 +585,7 @@ function importInstancesTab(modal) {
       'div',
       { class: 'import-source' },
       h('span', { class: 'hint' }, result?.dir ? [`${result.launcher ?? 'Dossier'} · `, h('span', { class: 'import-source__path' }, result.dir)] : 'Dossier par défaut'),
-      h('button', { class: 'btn', onClick: () => pickImportFolder('instances') }, icon('folder'), 'Autre dossier…'),
+      h('button', { class: 'btn', onClick: pickImportFolder }, icon('folder'), 'Autre dossier…'),
     ),
     items.length
       ? importRows(items, (item) =>
@@ -688,7 +596,7 @@ function importInstancesTab(modal) {
             h(
               'span',
               { class: 'import-row__body' },
-              h('span', { class: 'import-row__name' }, item.name, item.imported && h('span', { class: 'tag tag--ok' }, 'DÉJÀ IMPORTÉE')),
+              h('span', { class: 'import-row__name' }, item.name, item.imported && h('span', { class: 'tag tag--ok' }, 'Déjà importée')),
               h(
                 'span',
                 { class: 'import-row__meta' },
@@ -719,143 +627,12 @@ function importInstancesTab(modal) {
   ];
 }
 
-function importWorldsTab(modal) {
-  const result = modal.worlds;
-  const items = result?.worlds ?? [];
-  const target = state.instances.find((i) => i.id === modal.targetId);
-  const several = (result?.dirs?.length ?? 0) > 1;
-  return [
-    h(
-      'div',
-      { class: 'import-source' },
-      h('span', { class: 'hint' }, result?.dirs?.length ? h('span', { class: 'import-source__path' }, result.dirs[0]) : '.minecraft', several && ` et ${result.dirs.length - 1} autre${result.dirs.length > 2 ? 's' : ''}`),
-      h('button', { class: 'btn', onClick: () => pickImportFolder('worlds') }, icon('folder'), 'Autre dossier…'),
-    ),
-    h(
-      'div',
-      { class: 'field' },
-      h('label', { class: 'label', for: 'import-target' }, "Copier dans l'instance"),
-      state.instances.length
-        ? h(
-            'select',
-            { id: 'import-target', class: 'select', onChange: (e) => setImportTarget(e.target.value) },
-            state.instances.map((i) => h('option', { value: i.id, selected: i.id === modal.targetId }, `${i.name} · ${i.version}${i.loader !== 'vanilla' ? ` · ${LOADER_NAMES[i.loader]}` : ''}`)),
-          )
-        : h('p', { class: 'hint hint--warn' }, "Crée d'abord une instance pour y copier tes mondes."),
-    ),
-    items.length
-      ? importRows(items, (world) => {
-          const copiedTo = modal.copied[world.path];
-          return h(
-            'li',
-            { class: 'import-row' },
-            world.icon ? h('img', { class: 'import-row__icon', src: world.icon, alt: '' }) : blockIcon('grass', 'block--md'),
-            h(
-              'span',
-              { class: 'import-row__body' },
-              h('span', { class: 'import-row__name' }, world.name, world.hardcore && h('span', { class: 'tag tag--bad' }, 'HARDCORE')),
-              h(
-                'span',
-                { class: 'import-row__meta' },
-                [
-                  world.version,
-                  !world.hardcore && GAME_TYPES[world.gameType],
-                  world.lastPlayed && `joué le ${new Date(world.lastPlayed).toLocaleDateString('fr-FR')}`,
-                  several && world.source,
-                ].filter(Boolean).join(' · '),
-              ),
-              target && worldIsNewer(world, target) &&
-                h('span', { class: 'import-row__meta hint--warn' }, `Ouvert en ${world.version} : « ${target.name} » (${target.version}) est plus ancienne et peut l'abîmer.`),
-              copiedTo && h('span', { class: 'import-row__meta hint--ok' }, `Copié dans « ${copiedTo} »`),
-            ),
-            h('button', { class: 'btn btn--primary', disabled: !target || Boolean(state.task), onClick: () => importWorld(world) }, icon('copy'), 'Copier'),
-          );
-        })
-      : importStatus(result, 'Aucun monde trouvé', "Choisis un dossier .minecraft, un dossier saves ou le dossier d'un monde (par exemple celui d'une instance d'un autre launcher)."),
-    h('p', { class: 'hint' }, "Le monde est copié dans le dossier saves de l'instance ; l'original reste intact. Si un monde porte déjà ce nom, la copie est renommée."),
-  ];
-}
-
 function importDialog(modal) {
-  const tabs = [
-    ['instances', "Instances d'autres launchers"],
-    ['worlds', 'Mondes'],
-  ];
   return dialog({
     title: 'Importer',
     size: 'dialog--wide',
     labelId: 'import-title',
-    body: [
-      h(
-        'div',
-        { class: 'segmented', role: 'tablist', 'aria-label': "Type d'import" },
-        tabs.map(([value, label]) => h('button', { role: 'tab', 'aria-selected': modal.tab === value ? 'true' : 'false', onClick: () => showImportTab(value) }, label)),
-      ),
-      modal.tab === 'worlds' ? importWorldsTab(modal) : importInstancesTab(modal),
-    ],
+    body: importInstancesTab(modal),
   });
 }
 
-function serverDialog(modal) {
-  const draft = modal.draft;
-  const editing = modal.index !== null;
-  const error = h('p', { class: 'hint hint--error', role: 'alert' });
-  const submit = async () => {
-    if (modal.busy) return;
-    modal.busy = true;
-    try {
-      await saveServer(modal);
-    } catch (e) {
-      error.textContent = e.message;
-    } finally {
-      modal.busy = false;
-    }
-  };
-  const input = (id, label, key, placeholder, extra = {}) =>
-    h(
-      'div',
-      { class: 'field' },
-      h('label', { class: 'label', for: id }, label),
-      h('input', {
-        id,
-        class: `input${key === 'address' ? ' mono' : ' input--pixel'}`,
-        type: 'text',
-        maxlength: key === 'name' ? 64 : 255,
-        placeholder,
-        value: draft[key],
-        spellcheck: 'false',
-        onInput: (e) => {
-          draft[key] = e.target.value;
-          error.textContent = '';
-        },
-        onKeydown: (e) => e.key === 'Enter' && submit(),
-        ...extra,
-      }),
-    );
-  return dialog({
-    title: editing ? 'Modifier le serveur' : 'Ajouter un serveur',
-    size: 'dialog--small',
-    labelId: 'server-title',
-    body: [
-      input('server-name', 'Nom', 'name', 'Serveur Minecraft'),
-      input('server-address', 'Adresse', 'address', 'play.exemple.fr ou 192.168.1.20:25565'),
-      h(
-        'div',
-        { class: 'field' },
-        h('label', { class: 'label', for: 'server-packs' }, 'Packs de ressources du serveur'),
-        h(
-          'select',
-          { id: 'server-packs', class: 'select', onChange: (e) => { draft.resourcePacks = e.target.value; } },
-          [['prompt', 'Demander'], ['enabled', 'Accepter'], ['disabled', 'Refuser']].map(([value, label]) => h('option', { value, selected: draft.resourcePacks === value }, label)),
-        ),
-      ),
-      h('p', { class: 'hint' }, 'Enregistré dans servers.dat : le serveur apparaît aussi dans le menu Multijoueur du jeu.'),
-      error,
-    ],
-    foot: [
-      h('span', { class: 'spacer' }),
-      h('button', { class: 'btn btn--lg', onClick: close }, 'Annuler'),
-      h('button', { class: 'btn btn--primary btn--lg', onClick: submit }, editing ? 'Enregistrer' : 'Ajouter'),
-    ],
-  });
-}

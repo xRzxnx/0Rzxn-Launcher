@@ -2,7 +2,7 @@
 import { openLauncherFolder } from '../actions.js';
 import { api } from '../api.js';
 import { unseenCrashes } from '../crash-actions.js';
-import { LOADER_NAMES } from '../data.js';
+import { LOADER_NAMES, LOADERS } from '../data.js';
 import { blockIcon, h, icon } from '../dom.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceStatus, state, update } from '../state.js';
@@ -10,15 +10,10 @@ import { activeAccount, instanceStatus, state, update } from '../state.js';
 export const TABS = [
   { id: 'home', label: 'Accueil', icon: 'home' },
   { id: 'mods', label: 'Mods', icon: 'mods' },
-  { id: 'worlds', label: 'Mondes', icon: 'worlds' },
-  { id: 'servers', label: 'Serveurs', icon: 'servers' },
-  { id: 'screenshots', label: 'Captures', icon: 'screenshots' },
   { id: 'versions', label: 'Versions', icon: 'versions' },
-  { id: 'notes', label: 'Notes', icon: 'notes' },
 ];
 // Onglets propres à une instance : on y reste quand on change d'instance dans la barre latérale.
-const INSTANCE_VIEWS = new Set(['mods', 'worlds', 'servers', 'screenshots']);
-const NO_GROUP = 'Sans groupe';
+const INSTANCE_VIEWS = new Set(['mods']);
 
 export function go(view) {
   update((s) => {
@@ -93,7 +88,7 @@ function instanceItem(instance) {
       h(
         'span',
         { class: `instance-item__status instance-item__status--${status.kind}` },
-        status.kind === 'busy' || status.kind === 'running' ? status.label : `${instance.version}${instance.loader && instance.loader !== 'vanilla' ? ` · ${LOADER_NAMES[instance.loader]}` : ''} · ${status.label}`,
+        status.kind === 'busy' || status.kind === 'running' ? status.label : `${instance.version} · ${status.label}`,
       ),
     ),
   );
@@ -115,22 +110,32 @@ function toggleGroup(name) {
   api.saveUi({ collapsedGroups: state.sidebar.collapsed }).catch(() => {});
 }
 
+const loaderOf = (instance) => (LOADERS.includes(instance.loader) ? instance.loader : 'vanilla');
+
 /**
- * Groupes par ordre alphabétique, « Sans groupe » à la fin : [{ name, items }].
- * Un seul groupe sans nom pendant une recherche, ou tant qu'aucune instance n'a de groupe.
+ * Du plus récent au plus ancien : ordre officiel de Mojang (snapshots compris), sinon numéros
+ * comparés (version personnalisée, liste pas encore chargée). À version égale, dernière partie d'abord.
+ */
+function newestFirst(instances) {
+  const rank = new Map(state.versions.list.map((v, i) => [v.id, i]));
+  return [...instances].sort((a, b) => {
+    const order = rank.has(a.version) && rank.has(b.version)
+      ? rank.get(a.version) - rank.get(b.version)
+      : String(b.version).localeCompare(String(a.version), 'en', { numeric: true });
+    return order || (b.lastPlayedAt ?? 0) - (a.lastPlayedAt ?? 0) || a.name.localeCompare(b.name, 'fr');
+  });
+}
+
+/**
+ * Une catégorie par loader, vides masquées : [{ name, loader, items }].
+ * Une seule liste sans nom pendant une recherche.
  */
 function sidebarGroups() {
   const query = state.sidebar.query.trim();
-  if (query) return [{ name: null, items: state.instances.filter((i) => matches(i, query)) }];
-  if (!state.instances.some((i) => i.group)) return [{ name: null, items: state.instances }];
-  const groups = new Map();
-  for (const instance of state.instances) {
-    const name = instance.group ?? NO_GROUP;
-    if (!groups.has(name)) groups.set(name, []);
-    groups.get(name).push(instance);
-  }
-  const names = [...groups.keys()].sort((a, b) => (a === NO_GROUP) - (b === NO_GROUP) || a.localeCompare(b, 'fr'));
-  return names.map((name) => ({ name, items: groups.get(name) }));
+  if (query) return [{ name: null, items: newestFirst(state.instances.filter((i) => matches(i, query))) }];
+  return LOADERS
+    .map((loader) => ({ name: LOADER_NAMES[loader], loader, items: newestFirst(state.instances.filter((i) => loaderOf(i) === loader)) }))
+    .filter((group) => group.items.length > 0);
 }
 
 /** Instances visibles dans la barre latérale, dans l'ordre (Alt+↑ / Alt+↓). */
@@ -150,17 +155,20 @@ function instanceList() {
     const found = groups[0].items;
     return found.length ? found.map(instanceItem) : h('p', { class: 'hint', style: 'padding:6px 10px' }, `Aucune instance ne correspond à « ${query} ».`);
   }
-  return groups.map(({ name, items }) => {
+  return groups.map(({ name, loader, items }) => {
     const open = !state.sidebar.collapsed.includes(name);
+    const holdsSelected = !open && items.some((i) => i.id === state.selectedId);
     return h(
       'div',
       { class: 'sidebar__group', role: 'group', 'aria-label': name },
       h(
         'button',
         { class: 'group-head', 'aria-expanded': open ? 'true' : 'false', onClick: () => toggleGroup(name) },
-        icon('chevron'),
+        h('span', { class: `group-head__pip loader--${loader}`, 'aria-hidden': 'true' }),
         h('span', { class: 'group-head__name' }, name),
+        holdsSelected && h('span', { class: 'group-head__mark', title: 'Instance sélectionnée', 'aria-label': 'Contient l’instance sélectionnée' }),
         h('span', { class: 'group-head__count' }, items.length),
+        icon('chevron'),
       ),
       open && items.map(instanceItem),
     );
@@ -180,7 +188,7 @@ export function renderSidebar() {
     h(
       'div',
       { class: 'sidebar__head' },
-      h('h2', { class: 'label', style: 'margin:0;font-size:12px' }, 'Instances'),
+      h('h2', { class: 'sidebar__title' }, 'Instances'),
       h('button', { class: 'sidebar__add', 'aria-label': 'Nouvelle instance', onClick: openNewInstance }, icon('plus')),
     ),
     state.instances.length > 1 &&
@@ -219,6 +227,6 @@ export function renderSidebar() {
       ),
       h('button', { class: 'side-link', onClick: openLauncherFolder }, icon('folder'), 'Dossier du launcher'),
     ),
-    h('p', { class: 'sidebar__version' }, `LAUNCHER ${state.appVersion ?? ''}`),
+    h('p', { class: 'sidebar__version' }, `Version ${state.appVersion ?? ''}`),
   ];
 }

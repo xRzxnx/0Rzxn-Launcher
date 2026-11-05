@@ -22,28 +22,19 @@ function splitUserArgs(text) {
   return (text ?? '').match(/"[^"]*"|\S+/g)?.map((a) => a.replace(/^"|"$/g, '')) ?? [];
 }
 
-/** La version gère-t-elle Quick Play (1.20+) pour rejoindre un serveur au démarrage ? */
-function supportsQuickPlay(version) {
-  return (version.arguments?.game ?? []).some((item) => item?.rules?.some((rule) => rule.features?.is_quick_play_multiplayer));
-}
-
 /**
- * `server` : { address, host, port } à rejoindre dès le démarrage. Quick Play (1.20+) reçoit l'adresse telle quelle
- * (le jeu résout lui-même le SRV) ; avant, --server/--port reçoivent l'hôte et le port déjà résolus.
  * `javaMajor` : version de Java qui lance le jeu (choix du ramasse-miettes, voir performance.js).
  * @returns {{ jvm: string[], game: string[], librarySearchPath: string, gc: string }}
  */
-function buildArguments({ version, vars, settings, loggingConfig, server = null, javaMajor = version.javaVersion?.majorVersion ?? 8 }) {
-  const quickPlay = Boolean(server) && supportsQuickPlay(version);
+function buildArguments({ version, vars, settings, loggingConfig, javaMajor = version.javaVersion?.majorVersion ?? 8 }) {
   const features = {
     is_demo_user: false,
     has_custom_resolution: !settings.fullscreen,
     has_quick_plays_support: false,
     is_quick_play_singleplayer: false,
-    is_quick_play_multiplayer: quickPlay,
+    is_quick_play_multiplayer: false,
     is_quick_play_realms: false,
   };
-  if (quickPlay) vars = { ...vars, quickPlayMultiplayer: server.address };
   const tuned = jvmArguments({ preset: settings.jvmPreset, javaMajor, ramGb: settings.ram, jvmArgs: settings.jvmArgs });
   const jvm = [...tuned.args, ...splitUserArgs(settings.jvmArgs)];
 
@@ -77,7 +68,6 @@ function buildArguments({ version, vars, settings, loggingConfig, server = null,
     if (!settings.fullscreen) game.push('--width', String(vars.resolution_width), '--height', String(vars.resolution_height));
   }
   if (settings.fullscreen) game.push('--fullscreen');
-  if (server && !quickPlay) game.push('--server', server.host, '--port', String(server.port));
 
   const libraryArg = jvm.find((arg) => arg.startsWith('-Djava.library.path='));
   const librarySearchPath = libraryArg ? path.normalize(libraryArg.slice('-Djava.library.path='.length)) : vars.natives_directory;
@@ -85,4 +75,4 @@ function buildArguments({ version, vars, settings, loggingConfig, server = null,
   return { jvm, game, librarySearchPath, gc: tuned.gc };
 }
 
-module.exports = { buildArguments, splitUserArgs, supportsQuickPlay };
+module.exports = { buildArguments, splitUserArgs };

@@ -1,6 +1,5 @@
 // Raccourcis clavier du launcher. Les chiffres sont lus par position (Digit1…) pour marcher en AZERTY.
 import { requestLaunch } from './actions.js';
-import { viewerKeys } from './screenshots-actions.js';
 import { activeAccount, selectedInstance, state, update } from './state.js';
 import { focusSearch, go, openNewInstance, selectInstance, TABS, visibleInstances } from './views/chrome.js';
 
@@ -23,7 +22,7 @@ export const SHORTCUTS = [
   {
     title: 'Navigation',
     rows: [
-      { label: 'Onglets Accueil à Notes', keys: ['Ctrl', '1…7'] },
+      { label: 'Onglets Accueil à Versions', keys: ['Ctrl', '1…3'] },
       { label: 'Console', keys: ['Ctrl', 'L'] },
       { label: 'Paramètres', keys: ['Ctrl', ','] },
     ],
@@ -63,7 +62,6 @@ function stepInstance(delta) {
 const isHelp = (e) => e.key === 'F1' || ((e.ctrlKey || e.metaKey) && (e.key === '/' || e.code === 'NumpadDivide'));
 
 export function handleShortcut(e) {
-  viewerKeys(e);
   const ctrl = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
 
@@ -98,7 +96,7 @@ export function handleShortcut(e) {
   } else if (ctrl && !e.shiftKey && key === 'n') {
     e.preventDefault();
     openNewInstance();
-  } else if (ctrl && !e.shiftKey && /^Digit[1-7]$/.test(e.code)) {
+  } else if (ctrl && !e.shiftKey && /^Digit[1-3]$/.test(e.code)) {
     e.preventDefault();
     go(TABS[Number(e.code.slice(5)) - 1].id);
   } else if (ctrl && !e.shiftKey && key === 'l') {

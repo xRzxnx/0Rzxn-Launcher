@@ -1,7 +1,6 @@
 // Actions de l'interface : elles appellent le processus principal puis mettent l'état à jour.
 import { api } from './api.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
-import { forgetWorlds } from './worlds-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
 import { activeAccount, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
 
@@ -47,22 +46,6 @@ async function loadVersions() {
   }
 }
 
-async function loadNotes() {
-  try {
-    const data = await api.notes();
-    update((s) => {
-      s.notes.list = data.entries;
-      s.notes.selected ??= data.entries.find((e) => e.type === 'release')?.id ?? data.entries[0]?.id ?? null;
-      s.notes.loading = false;
-    });
-  } catch (error) {
-    update((s) => {
-      s.notes.loading = false;
-      s.notes.error = error.message;
-    });
-  }
-}
-
 export async function init() {
   let ui;
   try {
@@ -95,7 +78,6 @@ export async function init() {
   if (ui.pendingLaunch) launchFromShortcut(ui.pendingLaunch);
   if (ui.crashesSeenAt == null) api.saveUi({ crashesSeenAt: state.crashes.seenAt }).catch(() => {});
   loadVersions();
-  loadNotes();
   loadCrashes();
 }
 
@@ -144,17 +126,6 @@ export function loaderOptions(mc) {
   api.loaders(mc).then(
     (data) => update((s) => { s.loaders[mc] = data; }),
     (error) => update((s) => { s.loaders[mc] = { error: error.message }; }),
-  );
-  return null;
-}
-
-export function noteBody(entry) {
-  const body = state.notes.bodies[entry.id];
-  if (body !== undefined) return body;
-  state.notes.bodies[entry.id] = null; // en cours
-  api.noteBody(entry.contentPath).then(
-    (html) => update((s) => { s.notes.bodies[entry.id] = { html }; }),
-    (error) => update((s) => { s.notes.bodies[entry.id] = { error: error.message }; }),
   );
   return null;
 }
@@ -302,7 +273,6 @@ export function setActiveAccount(id) {
 
 // ---------- Lancement ----------
 
-/** `options.server` : adresse d'un serveur à rejoindre dès le démarrage. */
 export async function requestLaunch(options = {}) {
   const instance = selectedInstance();
   if (!instance || !activeAccount() || state.run) return;
@@ -378,10 +348,7 @@ function listenToLaunches() {
       });
     }
     if (status.exited) {
-      // Le jeu a pu créer des mondes, des captures ou un rapport de crash.
-      forgetWorlds(status.instanceId);
-      delete state.screenshots.lists[status.instanceId];
-      loadCrashes();
+      loadCrashes(); // le jeu a pu laisser un rapport de crash
     }
     if (status.run?.phase === 'running' && instance && !instance.installed) {
       toast({ kind: 'success', title: `${name} est prête`, text: `Minecraft ${instance.version} installé.` });

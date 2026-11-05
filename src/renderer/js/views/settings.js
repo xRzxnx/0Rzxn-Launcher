@@ -53,8 +53,8 @@ function memorySection({ settings, save }) {
     h(
       'div',
       { class: 'scale' },
-      h('span', null, '1 GO'),
-      h('span', null, `${formatGo(Math.round(state.memory.totalGb))} SUR CE PC · ${formatGo(state.memory.freeGb.toFixed(1))} LIBRES`.toUpperCase()),
+      h('span', null, '1 Go'),
+      h('span', null, `${formatGo(Math.round(state.memory.totalGb))} sur ce PC · ${formatGo(state.memory.freeGb.toFixed(1))} libres`),
     ),
     hintEl,
   );
@@ -88,15 +88,15 @@ function javaSection({ settings, save }, version) {
           'span',
           { class: 'option__body' },
           h('span', { class: 'option__title' }, 'Automatique'),
-          h('span', { class: 'option__detail' }, details ? `JAVA ${details.java} · RUNTIME MOJANG POUR ${version}` : 'LE BON JAVA POUR CHAQUE VERSION, TÉLÉCHARGÉ PAR LE LAUNCHER'),
+          h('span', { class: 'option__detail' }, details ? `Java ${details.java} · runtime Mojang pour ${version}` : 'Le bon Java pour chaque version, téléchargé par le launcher'),
         ),
-        h('span', { class: 'tag tag--ok' }, 'RECOMMANDÉ'),
+        h('span', { class: 'tag tag--ok' }, 'Recommandé'),
       ),
       h(
         'button',
         { class: 'option', role: 'radio', 'aria-checked': custom ? 'true' : 'false', onClick: () => choose('custom') },
         h('span', { class: 'option__dot', 'aria-hidden': 'true' }),
-        h('span', { class: 'option__body' }, h('span', { class: 'option__title' }, 'Personnalisé'), h('span', { class: 'option__detail' }, 'UN JAVA DÉJÀ INSTALLÉ SUR TON PC')),
+        h('span', { class: 'option__body' }, h('span', { class: 'option__title' }, 'Personnalisé'), h('span', { class: 'option__detail' }, 'Un Java déjà installé sur ton PC')),
       ),
     ),
     custom &&

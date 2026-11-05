@@ -13,14 +13,15 @@ export const ACCENTS = [
 
 // Valeurs de base.css, gardées telles quelles pour le violet.
 const VIOLET = {
-  '--accent': '#6246ea',
-  '--accent-2': '#7c5cff',
-  '--accent-3': '#9d86ff',
-  '--accent-text': '#b9a8ff',
-  '--accent-bg': '#1c1745',
-  '--accent-line': '#4a3bb0',
+  '--accent': '#6d4ff0',
+  '--accent-2': '#7f64f5',
+  '--accent-3': '#a892ff',
+  '--accent-text': '#d6cbff',
+  '--accent-bg': 'rgba(109, 79, 240, 0.3)',
+  '--accent-line': '#6d5bd0',
 };
-const PANEL = '#12152a';
+// Teinte la plus claire mesurée sous le verre.
+const PANEL = '#442148';
 
 const toLinear = (v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 const toGamma = (v) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);

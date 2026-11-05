@@ -43,8 +43,6 @@ const DATE_LONG = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'lon
 const DATE_SHORT = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
 export const formatDate = (iso) => (iso ? DATE.format(new Date(iso)) : '—');
-export const formatDateLong = (iso) => (iso ? DATE_LONG.format(new Date(iso)) : '');
-export const formatDateShort = (iso) => (iso ? DATE_SHORT.format(new Date(iso)) : '');
 
 /** « aujourd'hui », « hier », « il y a 3 jours »… */
 export function formatLastPlayed(timestamp) {

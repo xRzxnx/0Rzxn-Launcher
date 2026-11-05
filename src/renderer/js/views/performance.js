@@ -10,15 +10,15 @@ const GC_LABELS = { zgc: 'ZGC générationnel', g1: 'G1 réglé pour le jeu', no
 function presetDetail(id, preview, settings) {
   const java = preview?.javaMajor;
   if (id === 'auto') {
-    if (!java) return 'ZGC AVEC JAVA 21+, 8 THREADS ET 6 GO · SINON G1 RÉGLÉ';
-    if (preview.gc === 'zgc') return `JAVA ${java} · ${java >= 25 ? 'ZGC + EN-TÊTES COMPACTS' : 'ZGC GÉNÉRATIONNEL'}`;
+    if (!java) return 'ZGC avec Java 21+, 8 threads et 6 Go · sinon G1 réglé';
+    if (preview.gc === 'zgc') return `Java ${java} · ${java >= 25 ? 'ZGC + en-têtes compacts' : 'ZGC générationnel'}`;
     // Pourquoi pas ZGC : le premier critère manquant.
-    const why = java < 21 ? '' : preview.cpus < 8 ? ` (ZGC DEMANDE 8 THREADS, ICI ${preview.cpus})` : settings.ram < 6 ? ' (ZGC À PARTIR DE 6 GO)' : '';
-    return `JAVA ${java} · G1 RÉGLÉ POUR LE JEU${why}`;
+    const why = java < 21 ? '' : preview.cpus < 8 ? ` (ZGC demande 8 threads, ici ${preview.cpus})` : settings.ram < 6 ? ' (ZGC à partir de 6 Go)' : '';
+    return `Java ${java} · G1 réglé pour le jeu${why}`;
   }
-  if (id === 'g1') return 'PAUSES COURTES, PEU DE PROCESSEUR · TOUS LES JAVA';
-  if (id === 'zgc') return java && java < 21 ? `DEMANDE JAVA 21 OU PLUS (ICI JAVA ${java}) : G1 SERA UTILISÉ` : 'PAUSES QUASI NULLES, UN PEU PLUS DE RAM ET DE PROCESSEUR';
-  return java === 8 ? 'COMME AVANT · JAVA 8 UTILISE PARALLEL GC : SACCADES' : 'COMME AVANT · AUCUN RÉGLAGE AJOUTÉ';
+  if (id === 'g1') return 'Pauses courtes, peu de processeur · tous les Java';
+  if (id === 'zgc') return java && java < 21 ? `Demande Java 21 ou plus (ici Java ${java}) : G1 sera utilisé` : 'Pauses quasi nulles, un peu plus de RAM et de processeur';
+  return java === 8 ? 'Comme avant · Java 8 utilise Parallel GC : saccades' : 'Comme avant · aucun réglage ajouté';
 }
 
 function gcHint(settings, preview) {

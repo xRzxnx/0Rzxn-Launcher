@@ -3,7 +3,7 @@ import { versionDetails } from '../actions.js';
 import { VERSION_TYPES, formatDate } from '../data.js';
 import { h, icon } from '../dom.js';
 import { state, update } from '../state.js';
-import { go, openNewInstance } from './chrome.js';
+import { openNewInstance } from './chrome.js';
 
 const FILTERS = ['release', 'snapshot', 'beta', 'alpha'];
 const FILTER_LABELS = { release: 'Releases', snapshot: 'Snapshots', beta: 'Bêta', alpha: 'Alpha' };
@@ -32,7 +32,7 @@ function table() {
     h(
       'div',
       { class: 'vtable__row vtable__head', role: 'row' },
-      ['Version', 'Type', 'Sortie', 'Installée', 'Instance'].map((label) => h('span', { role: 'columnheader' }, label.toUpperCase())),
+      ['Version', 'Type', 'Sortie', 'Installée', 'Instance'].map((label) => h('span', { role: 'columnheader' }, label)),
     ),
     h(
       'div',
@@ -81,7 +81,7 @@ function detail() {
       h('dt', null, 'Sortie'),
       h('dd', null, formatDate(v.releaseTime)),
       h('dt', null, 'Java requis'),
-      h('dd', { class: 'mono' }, details ? `Java ${details.java} (auto)` : errored ? 'inconnu' : '…'),
+      h('dd', null, details ? `Java ${details.java} (auto)` : errored ? 'inconnu' : '…'),
       h('dt', null, 'Installée'),
       h('dd', null, v.installed ? 'Oui' : 'Non'),
       h('dt', null, 'Instance'),
@@ -89,7 +89,6 @@ function detail() {
     ),
     h('div', { class: 'detail__spacer' }),
     h('button', { class: 'btn btn--primary btn--lg', onClick: () => openNewInstance(v.id) }, icon('plus'), 'Créer une instance'),
-    h('button', { class: 'btn btn--lg', onClick: () => go('notes') }, 'Notes de version'),
   );
 }
 
@@ -106,7 +105,7 @@ export function renderVersions() {
         'div',
         { class: 'page__head' },
         h('h1', { class: 'page__title' }, 'Versions'),
-        h('span', { class: 'page__meta' }, `${list.length} VERSIONS · LISTE OFFICIELLE MOJANG${offline ? ' · HORS CONNEXION (CACHE)' : ''}`),
+        h('span', { class: 'page__meta' }, `${list.length} versions · liste officielle Mojang${offline ? ' · hors connexion (cache)' : ''}`),
       ),
       h(
         'div',

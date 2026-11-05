@@ -5,7 +5,7 @@ export const state = {
   appVersion: null,
   microsoftReady: false, // client ID Azure configuré (src/main/microsoft-config.js)
   signingIn: false, // fenêtre de connexion Microsoft ouverte
-  view: 'home', // home | mods | worlds | servers | screenshots | versions | notes | console | settings
+  view: 'home', // home | mods | versions | console | settings
   instances: [],
   selectedId: null,
   accounts: [],
@@ -37,15 +37,8 @@ export const state = {
   },
   versionDetails: {}, // id → { java, ... } | { loading } | { error }
   loaders: {}, // version de Minecraft → { fabric: { versions, recommended }, … } | { loading } | { error }
-  notes: { list: [], loading: true, error: null, filter: 'all', selected: null, bodies: {} },
   console: { filter: 'all', autoscroll: true, tab: 'logs' }, // tab : logs | crashes
   sidebar: { query: '', collapsed: [] }, // recherche et groupes repliés de la barre des instances
-  home: { statsRange: 14 }, // jours affichés dans « Temps de jeu »
-  worlds: {
-    lists: {}, // instance → { loading, worlds, backups, error }
-    busy: {}, // « instance:dossier » → 'backup'
-  },
-  screenshots: { lists: {} }, // instance → { loading, items, error }
   crashes: {
     list: null, // rapports de toutes les instances, du plus récent au plus ancien
     loading: false,
@@ -67,10 +60,6 @@ export const state = {
     versions: {}, // « projet:instance:type » → liste | { loading } | { error }
     busy: {}, // projet ou fichier en cours de traitement → true
   },
-  servers: {
-    lists: {}, // instance → { loading, items, error }
-    pings: {}, // adresse → { loading } | { online, motd, players, version, favicon, latency, at } | { online: false, error, at }
-  },
   perf: {
     previews: {}, // « instance|préréglage|ram|arguments » → aperçu des arguments Java | { loading } | { error }
     last: {}, // instance → dernier aperçu (affiché pendant le calcul du suivant)
@@ -78,7 +67,7 @@ export const state = {
     gpu: null, // { gpus, javas, high, enabled }
   },
   logs: [],
-  run: null, // { instanceId, phase: 'preparing' | 'running', step, done, total, prepareOnly, server }
+  run: null, // { instanceId, phase: 'preparing' | 'running', step, done, total, prepareOnly }
   task: null, // tâche longue en cours (modpack) : { label, done, total }
   modpackUpdates: {}, // instance → { checking } | { none } | { versionId, number }
   modal: null, // { type: 'new-instance' | 'accounts' | 'low-ram', ... }

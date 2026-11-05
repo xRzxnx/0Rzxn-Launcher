@@ -13,7 +13,6 @@ const install = require('./install');
 const { ensureRuntime, probeJava } = require('./java');
 const { GameLogParser, censor, clock } = require('./logs');
 const { LOADER_NAMES, installLoader } = require('./loaders');
-const { resolveTarget } = require('./servers');
 const { getVersionJson } = require('./versions');
 
 const STEPS = ['account', 'components', 'files', 'java', 'loader', 'javaCheck', 'memory', 'natives', 'launch'];
@@ -35,11 +34,10 @@ class LaunchSession extends EventEmitter {
    * `account` : compte prêt à l'emploi, ou `getAccount(log)` : fonction asynchrone appelée à l'étape
    * « Compte » (renouvellement de la session Microsoft).
    */
-  constructor({ dirs, instance, instanceDir, account, getAccount, launcherVersion = '0.1.0', verify = false, prepareOnly = false, server = null, prepareJava = null }) {
+  constructor({ dirs, instance, instanceDir, account, getAccount, launcherVersion = '0.1.0', verify = false, prepareOnly = false, prepareJava = null }) {
     super();
     this.prepareJava = prepareJava; // ex. préférence de carte graphique pour ce java.exe
     this.prepareOnly = prepareOnly;
-    this.server = server; // adresse d'un serveur à rejoindre dès le démarrage
     this.getAccount = getAccount ?? (async () => account);
     this.dirs = dirs;
     this.instance = instance;
@@ -196,13 +194,7 @@ class LaunchSession extends EventEmitter {
       resolution_height: settings.height,
     };
     const loggingConfig = install.loggingTask(game, dirs)?.path;
-    const server = this.server ? { address: this.server, ...(await resolveTarget(this.server)) } : null;
-    if (server) {
-      this.log(`Connexion directe à ${this.server} au démarrage`);
-      // Premier lancement : l'écran d'accessibilité du jeu bloque Quick Play, on le passe.
-      if (skipOnboarding(this.gameDir)) this.log("Écran d'accessibilité du premier lancement passé pour rejoindre le serveur.");
-    }
-    const { jvm, game: gameArgs, librarySearchPath, gc } = buildArguments({ version: game, vars, settings, loggingConfig, server, javaMajor: this.javaMajor });
+    const { jvm, game: gameArgs, librarySearchPath, gc } = buildArguments({ version: game, vars, settings, loggingConfig, javaMajor: this.javaMajor });
     this.log(`Ramasse-miettes : ${GC_NAMES[gc]}${settings.jvmPreset === 'auto' ? ' (automatique)' : ''}`);
     const extracted = await install.extractNatives(gameLibraries.natives, librarySearchPath);
     this.log(`${extracted} natives extraites`);
@@ -261,18 +253,6 @@ class LaunchSession extends EventEmitter {
       this.emit('exit', { code, crashed, minutes });
     });
   }
-}
-
-/** Met « onboardAccessibility » à false dans options.txt (créé si besoin). Renvoie true si quelque chose a changé. */
-function skipOnboarding(gameDir) {
-  const file = path.join(gameDir, 'options.txt');
-  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  if (/^onboardAccessibility:false\s*$/m.test(text)) return false;
-  const next = /^onboardAccessibility:/m.test(text)
-    ? text.replace(/^onboardAccessibility:.*$/m, 'onboardAccessibility:false')
-    : `${text}${text && !text.endsWith('\n') ? '\n' : ''}onboardAccessibility:false\n`;
-  fs.writeFileSync(file, next);
-  return true;
 }
 
 module.exports = { LaunchSession, STEPS };

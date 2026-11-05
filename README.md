@@ -29,7 +29,7 @@
 - Every vanilla release and snapshot from Mojang's official version manifest, including the new `26.x` numbering.
 - Verified downloads (SHA-1 and size checks, retries, parallel downloads), shared between instances.
 - Automatic Java: Mojang's official runtimes (Java 8, 17, 21, 25), or any Java installed on the PC.
-- Separate instances with their own settings, groups, search and playtime statistics.
+- Separate instances with their own settings and playtime statistics, sorted by loader then newest version, with search.
 
 **Mods**
 - Mod loaders installed automatically: **Fabric**, **Quilt**, **Forge** and **NeoForge**.
@@ -38,9 +38,6 @@
 - Import instances from other launchers that keep each instance in its own folder with an `instance.cfg` file (the source is only read, never modified).
 
 **Content**
-- Worlds: list, `.zip` backups, restore, delete to the Recycle Bin.
-- Screenshot gallery with a viewer.
-- Server list with live ping (MOTD, players, latency) and one-click join.
 - Crash reports explained in plain language, with one-click fixes for common problems (wrong Java, missing or incompatible mods, low memory).
 
 **Performance**

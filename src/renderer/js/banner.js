@@ -112,3 +112,6 @@ export function bannerUrl(seed, width = 1600, height = 330) {
   if (!cache.has(key)) cache.set(key, draw(seed, width, height));
   return cache.get(key);
 }
+
+/** Décor de toute la fenêtre : calé en haut, le fond de la scène prolonge le bas. Hauteur choisie pour que le soleil se lève à droite des boutons de l'accueil. */
+export const sceneUrl = (seed) => bannerUrl(seed, 1600, 760);

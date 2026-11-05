@@ -4,16 +4,14 @@ const { app, BrowserWindow, Menu, protocol, shell } = require('electron');
 const path = require('node:path');
 const { registerIpc } = require('./ipc');
 
-// Captures d'écran affichées dans l'interface (servies par ipc.js, dossier screenshots uniquement).
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'shot', privileges: { standard: true, secure: true } },
   { scheme: 'skin', privileges: { standard: true, secure: true } },
 ]);
 
 const COLORS = {
-  background: '#0d0f1a',
-  titlebar: '#0a0c15',
-  symbols: '#a3a7c2',
+  background: '#140c22',
+  titlebar: '#00000000', // transparent : le décor passe sous les boutons de la fenêtre
+  symbols: '#ffffff',
 };
 
 let mainWindow = null;

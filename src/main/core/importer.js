@@ -1,12 +1,10 @@
 'use strict';
 
 // Import depuis d'autres launchers : instances rangées dans un dossier avec instance.cfg et mmc-pack.json
-// (copie du dossier du jeu, loader,
-// réglages, temps de jeu) et mondes d'un dossier .minecraft. La source est seulement lue, jamais modifiée.
+// (copie du dossier du jeu, loader, réglages, temps de jeu). La source est seulement lue, jamais modifiée.
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
-const nbt = require('./nbt');
 const { exists, readJson } = require('./store');
 const { resolveLoaderVersion } = require('./loaders');
 
@@ -256,105 +254,12 @@ async function importInstance({ instances, dir, defaults, launcher = 'Autre laun
   return { instance: instances.get(instance.id), files, warnings: source.warnings };
 }
 
-// ---------- Mondes ----------
-
-const stripFormatting = (value) => String(value ?? '').replace(/§./g, '');
-
-/** Lit un monde (dossier avec level.dat). Renvoie null si ce n'est pas un monde lisible. */
-function readWorld(dir) {
-  let data;
-  try {
-    data = nbt.get(nbt.parse(fs.readFileSync(path.join(dir, 'level.dat'))).value, 'Data');
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(data)) return null;
-  const version = nbt.get(data, 'Version');
-  const lastPlayed = nbt.get(data, 'LastPlayed');
-  let icon = null;
-  try {
-    const png = fs.readFileSync(path.join(dir, 'icon.png'));
-    if (png.length < 256 * 1024) icon = `data:image/png;base64,${png.toString('base64')}`;
-  } catch {
-    // pas d'icône
-  }
-  return {
-    path: dir,
-    folder: path.basename(dir),
-    name: stripFormatting(nbt.get(data, 'LevelName')) || path.basename(dir),
-    version: Array.isArray(version) ? nbt.get(version, 'Name') ?? null : null,
-    lastPlayed: typeof lastPlayed === 'bigint' ? Number(lastPlayed) : null,
-    hardcore: nbt.get(data, 'hardcore') === 1,
-    gameType: nbt.get(data, 'GameType') ?? null,
-    icon,
-  };
-}
-
-/** Mondes d'un dossier : un dossier du jeu (avec saves), un dossier saves, ou un seul monde. */
-function scanWorlds(dir) {
-  if (exists(path.join(dir, 'level.dat'))) return [readWorld(dir)].filter(Boolean);
-  const saves = exists(path.join(dir, 'saves')) ? path.join(dir, 'saves') : dir;
-  let entries = [];
-  try {
-    entries = fs.readdirSync(saves, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
-    .filter((e) => e.isDirectory())
-    .map((e) => readWorld(path.join(saves, e.name)))
-    .filter(Boolean)
-    .sort((a, b) => (b.lastPlayed ?? 0) - (a.lastPlayed ?? 0));
-}
-
-/** Dossiers du jeu du launcher officiel : .minecraft et les dossiers propres à chaque profil. */
-function officialGameDirs(appData) {
-  const root = path.join(appData, '.minecraft');
-  const dirs = [root];
-  const profiles = readJson(path.join(root, 'launcher_profiles.json'), null)?.profiles ?? {};
-  for (const profile of Object.values(profiles)) {
-    if (typeof profile?.gameDir !== 'string' || !profile.gameDir.trim()) continue;
-    const dir = path.resolve(root, profile.gameDir);
-    if (!dirs.includes(dir)) dirs.push(dir);
-  }
-  return dirs;
-}
-
-/** Nom de dossier libre dans saves (« Survie », « Survie (2) »…), comme le fait le jeu. */
-function freeWorldFolder(saves, folder) {
-  let name = folder;
-  for (let n = 2; fs.existsSync(path.join(saves, name)); n++) name = `${folder} (${n})`;
-  return name;
-}
-
-/** Copie un monde dans le dossier saves d'une instance. Renvoie le nom du dossier créé. */
-async function importWorld({ dir, gameDir, signal, onProgress }) {
-  const world = readWorld(dir);
-  if (!world) throw new Error("Ce dossier n'est pas un monde Minecraft (level.dat illisible).");
-  const saves = path.join(gameDir, 'saves');
-  await fsp.mkdir(saves, { recursive: true });
-  const folder = freeWorldFolder(saves, world.folder);
-  const target = path.join(saves, folder);
-  try {
-    await copyTree(dir, target, { signal, onProgress, skip: (rel) => rel === 'session.lock' });
-  } catch (error) {
-    await fsp.rm(target, { recursive: true, force: true }).catch(() => {});
-    throw error;
-  }
-  return { world, folder };
-}
-
 module.exports = {
   parseCfg,
   readInstance,
   scanInstances,
   defaultInstancesDir,
   importInstance,
-  readWorld,
-  scanWorlds,
-  officialGameDirs,
-  importWorld,
-  freeWorldFolder,
   listFiles,
   copyTree,
 };

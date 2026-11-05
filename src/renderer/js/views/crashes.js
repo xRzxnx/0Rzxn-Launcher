@@ -12,7 +12,7 @@ function when(timestamp) {
   const today = new Date();
   const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
   const day = d.toDateString() === today.toDateString() ? 'Aujourd’hui' : d.toDateString() === yesterday.toDateString() ? 'Hier' : DAY.format(d);
-  return `${day} · ${TIME.format(d)}`.toUpperCase();
+  return `${day} · ${TIME.format(d)}`;
 }
 
 function reportItem(item) {

@@ -34,10 +34,8 @@ Les icônes sont générées depuis `src/renderer/assets/logo-mark.svg` par `npm
 - **Loaders de mods** : Fabric, Quilt, Forge (toutes époques) et NeoForge, installés automatiquement au premier lancement.
 - **Onglet Mods** : recherche Modrinth (mods, packs de ressources, shaders) filtrée sur l'instance, installation avec dépendances, mises à jour, activer / désactiver, glisser-déposer de fichiers.
 - **Modpacks** : installer depuis Modrinth ou importer un `.mrpack` (nouvelle instance), mettre à jour (réglages et mondes conservés), exporter une instance en `.mrpack`.
-- **Onglet Serveurs** : la liste du menu Multijoueur de l'instance (`servers.dat`), ping en direct (MOTD en couleurs, joueurs, latence, icône), ajouter / modifier / réordonner / supprimer, et **Rejoindre** en un clic (Quick Play en 1.20+, `--server` avant).
 - Comptes **Microsoft** et **hors-ligne**. Un nouveau compte hors-ligne demande d'abord un compte Microsoft qui possède le jeu. La connexion Microsoft attend l'accord de Mojang : voir [docs/MICROSOFT.md](docs/MICROSOFT.md).
 - Console en direct (logs XML de Minecraft convertis, jeton masqué), arrêt du jeu, détection des crashs.
-- Notes de version officielles (texte de Mojang nettoyé avant affichage).
 - **Confort** : couleur d'accent au choix, statut Discord pendant une partie (désactivé par défaut, voir [docs/DISCORD.md](docs/DISCORD.md)), icône dans la zone de notification, raccourcis clavier (Ctrl+/ pour l'aide), gestion des Java et nettoyage de l'espace disque (Paramètres › Java et stockage).
 
 Testé en vrai : 1.8.9 (Java 8), 1.12.2 (Java 8), 1.21.11 (Java 21) et 26.3 (Java 25).
@@ -59,14 +57,12 @@ src/
 │  ├─ microsoft-login.js   fenêtre de connexion Microsoft
 │  └─ core/          cœur en Node pur (testable sans Electron)
 │     ├─ download.js   téléchargements vérifiés
-│     ├─ versions.js   manifeste Mojang, fichiers de version, notes de version
+│     ├─ versions.js   manifeste Mojang, fichiers de version
 │     ├─ install.js    bibliothèques, natives, assets, config des logs
 │     ├─ loaders.js    Fabric, Quilt, Forge, NeoForge (versions + installation)
 │     ├─ modrinth.js   API Modrinth (recherche, versions, empreintes)
 │     ├─ content.js    mods, packs et shaders d'une instance
 │     ├─ modpacks.js   .mrpack : installation, mise à jour, export
-│     ├─ servers.js    servers.dat et ping des serveurs (protocoles moderne et ancien)
-│     ├─ nbt.js        format NBT de Minecraft (lecture et écriture sans perte)
 │     ├─ java.js       runtimes Java de Mojang
 │     ├─ args.js       ligne de commande (formats moderne et ancien)
 │     ├─ launch.js     pipeline de lancement en 9 étapes
@@ -84,7 +80,6 @@ src/
       ├─ state.js     état de l'interface
       ├─ actions.js   appels au cœur
       ├─ api.js       accès à l'API du preload
-      ├─ sanitize.js  nettoyage du HTML des notes de version
       ├─ banner.js    bannière pixel art générée
       └─ views/       un fichier par écran
 ```

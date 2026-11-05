@@ -5,12 +5,8 @@ const svg = (body, extra = '') =>
 export const ICONS = {
   home: svg('<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>', 'stroke-linejoin="round"'),
   mods: svg('<path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/>', 'stroke-linejoin="round"'),
-  servers: svg('<rect x="3" y="4" width="18" height="7"/><rect x="3" y="13" width="18" height="7"/><path d="M7 7.5h2M7 16.5h2"/>'),
   versions: svg('<rect x="3" y="4" width="18" height="5"/><path d="M5 9v11h14V9M10 13h4"/>'),
-  notes: svg('<path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h7M9 7h4"/>'),
   settings: svg('<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><rect x="13" y="4" width="4" height="4"/><rect x="7" y="10" width="4" height="4"/><rect x="15" y="16" width="4" height="4"/>', 'stroke-linecap="square"'),
-  worlds: svg('<path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z"/><path d="M3 12h18M12 3c3.5 3.5 3.5 14.5 0 18M12 3c-3.5 3.5-3.5 14.5 0 18"/>'),
-  screenshots: svg('<path d="M3 5h18v14H3z"/><path d="M3 16l5-5 4 4 3-3 6 6M15 9h1"/>'),
   archive: svg('<path d="M4 8h16v12H4zM3 4h18v4H3zM10 12h4"/>'),
   restore: svg('<path d="M4 4v6h6"/><path d="M4.5 15a8 8 0 1 0 1.5-8.5L4 10"/>'),
   next: svg('<path d="M9 5l7 7-7 7"/>', 'stroke-width="2.5"'),
@@ -34,6 +30,9 @@ export const ICONS = {
   external: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>'),
   upload: svg('<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>', 'stroke-width="2.5"'),
   lock: svg('<rect x="5" y="11" width="14" height="10"/><path d="M8 11V7h8v4"/>'),
+  edit: svg('<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>', 'stroke-linejoin="round"'),
+  link: svg('<path d="M10 14l-2 2a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0M14 10l2-2a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0"/>', 'stroke-linecap="round"'),
+  shield: svg('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>', 'stroke-linejoin="round"'),
   offline: svg('<path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 5-2.7M19 12.5a10 10 0 0 0-2.2-1.6M12 20h.01"/>'),
   microsoft:
     '<svg viewBox="0 0 18 18"><rect x="0" y="0" width="8.5" height="8.5" fill="#f25022"/><rect x="9.5" y="0" width="8.5" height="8.5" fill="#7fba00"/><rect x="0" y="9.5" width="8.5" height="8.5" fill="#00a4ef"/><rect x="9.5" y="9.5" width="8.5" height="8.5" fill="#ffb900"/></svg>',

@@ -4,32 +4,25 @@ import { renderModal, renderToasts, renderWelcome } from './views/modals.js';
 import { renderSidebar, renderTabs, renderTopbarRight } from './views/chrome.js';
 import { renderConsole } from './views/console.js';
 import { renderHome } from './views/home.js';
-import { renderNotes } from './views/notes.js';
 import { renderSettings } from './views/settings.js';
 import { renderMods } from './views/mods.js';
-import { renderServers } from './views/servers.js';
 import { renderVersions } from './views/versions.js';
-import { renderWorlds } from './views/worlds.js';
-import { renderScreenshots } from './views/screenshots.js';
 import { handleShortcut } from './shortcuts.js';
 import { init } from './actions.js';
+import { sceneUrl } from './banner.js';
 import { h } from './dom.js';
-import { state, subscribe } from './state.js';
+import { selectedInstance, state, subscribe } from './state.js';
 
 const $ = (id) => document.getElementById(id);
 
 const VIEWS = {
   home: renderHome,
   mods: renderMods,
-  worlds: renderWorlds,
-  servers: renderServers,
-  screenshots: renderScreenshots,
   versions: renderVersions,
-  notes: renderNotes,
   console: renderConsole,
   settings: renderSettings,
 };
-const FLUSH_VIEWS = new Set(['versions', 'notes', 'console', 'mods', 'servers', 'worlds', 'screenshots']);
+const FLUSH_VIEWS = new Set(['versions', 'console', 'mods']);
 
 let lastView = null;
 
@@ -89,11 +82,24 @@ function restore(snap, sameView) {
   }
 }
 
+const DEFAULT_SEED = 120;
+let sceneSeed = null;
+
+/** Le décor suit l'instance sélectionnée. */
+function renderScene() {
+  if (!state.ready) return;
+  const seed = selectedInstance()?.seed ?? DEFAULT_SEED;
+  if (seed === sceneSeed) return;
+  sceneSeed = seed;
+  $('scene-art').src = sceneUrl(seed);
+}
+
 function render() {
   const snap = snapshot();
   const sameView = lastView === state.view;
   lastView = state.view;
 
+  renderScene();
   $('tabs').replaceChildren(...renderTabs());
   $('topbar-right').replaceChildren(...renderTopbarRight());
   $('sidebar').replaceChildren(...renderSidebar().filter(Boolean));

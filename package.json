@@ -9,6 +9,7 @@
   "author": "0Rzxn_",
   "scripts": {
     "start": "electron .",
+    "apercu": "electron scripts/apercu.js",
     "dist": "electron-builder --win",
     "icon": "electron scripts/make-icon.js"
   },

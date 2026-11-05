@@ -89,7 +89,7 @@ function skinsSection(modal) {
       skinTile({
         selected: modal.pick?.kind === 'current',
         name: 'Sur ce compte',
-        tag: 'ACTUEL',
+        tag: 'Actuel',
         preview: skinFront(textureUrl(current.hash), { slim: current.variant === 'slim', legacy: current.legacy }),
         onPick: () => pickSkin(modal, { kind: 'current' }),
       }),
@@ -101,7 +101,7 @@ function skinsSection(modal) {
       skinTile({
         selected: modal.pick?.kind === 'library' && modal.pick.id === skin.id,
         name: skin.name,
-        tag: isCurrent ? 'ACTUEL' : null,
+        tag: isCurrent ? 'Actuel' : null,
         preview: skinFront(libraryUrl(skin.id), { slim: skin.variant === 'slim', legacy: skin.legacy }),
         onPick: () => pickSkin(modal, { kind: 'library', id: skin.id }),
         onRemove: isCurrent ? null : () => removeLibrarySkin(modal, skin.id),

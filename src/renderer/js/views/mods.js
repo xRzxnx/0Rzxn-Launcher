@@ -85,7 +85,7 @@ function installedView(instance, running) {
         h('div', { class: 'content-row__title' }, h('span', null, item.title ?? item.name), item.version && h('span', { class: 'content-row__version' }, item.version)),
         h('div', { class: 'content-row__meta' }, h('span', { class: 'mono' }, item.file), item.description && h('span', { class: 'content-row__desc' }, item.description)),
       ),
-      h('span', { class: `tag ${item.projectId ? 'tag--release' : 'tag--beta'}` }, item.projectId ? 'MODRINTH' : item.isFolder ? 'DOSSIER' : 'LOCAL'),
+      h('span', { class: `tag ${item.projectId ? 'tag--release' : 'tag--beta'}` }, item.projectId ? 'Modrinth' : item.isFolder ? 'Dossier' : 'Local'),
       item.update &&
         h(
           'button',
@@ -170,7 +170,7 @@ function discoverView(instance, running) {
         ),
       ),
       installedIds.has(hit.id) && !modpacks
-        ? h('span', { class: 'tag tag--ok' }, 'INSTALLÉ')
+        ? h('span', { class: 'tag tag--ok' }, 'Installé')
         : h(
             'button',
             {
@@ -216,7 +216,7 @@ function discoverView(instance, running) {
       ),
       modpacks && h('button', { class: 'btn btn--lg', disabled: Boolean(state.task), onClick: importModpack }, icon('upload'), 'Importer un .mrpack…'),
     ),
-    h('p', { class: 'page__meta', style: 'margin:12px 0 0' }, search.loading && !search.hits.length ? 'RECHERCHE…' : `${compact.format(search.total)} RÉSULTATS · MODRINTH`),
+    h('p', { class: 'page__meta', style: 'margin:12px 0 0' }, search.loading && !search.hits.length ? 'Recherche…' : `${compact.format(search.total)} résultats · Modrinth`),
     h(
       'div',
       { class: 'content-list', 'data-scroll-key': `discover-${state.mods.kind}` },
@@ -252,7 +252,7 @@ function detailPanel(instance, running) {
       h('dt', null, 'Abonnés'),
       h('dd', null, compact.format(hit.follows)),
       project?.license && [h('dt', null, 'Licence'), h('dd', null, project.license)],
-      installed && [h('dt', null, 'Installé'), h('dd', { class: 'mono' }, installed.version ?? installed.file)],
+      installed && [h('dt', null, 'Installé'), h('dd', null, installed.version ?? installed.file)],
     ),
     project?.gallery?.[0] && h('img', { class: 'mod-detail__shot', src: project.gallery[0].url, alt: project.gallery[0].title ?? '' }),
     h('div', { class: 'detail__spacer' }),

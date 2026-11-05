@@ -1,7 +1,7 @@
 'use strict';
 
 // Pont entre l'interface et le cœur : chaque canal valide ses entrées avant d'agir.
-const { app, clipboard, ClipboardItem, dialog, ipcMain, nativeImage, protocol, safeStorage, shell } = require('electron');
+const { app, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -16,10 +16,7 @@ const { availableLoaders } = require('./core/loaders');
 const content = require('./core/content');
 const modrinth = require('./core/modrinth');
 const modpacks = require('./core/modpacks');
-const servers = require('./core/servers');
 const importer = require('./core/importer');
-const worlds = require('./core/worlds');
-const screenshots = require('./core/screenshots');
 const crashes = require('./core/crashes');
 const storage = require('./core/storage');
 const performance = require('./core/performance');
@@ -171,7 +168,7 @@ class LaunchManager {
     this.onChange?.();
   }
 
-  start(instanceId, { verify = false, prepareOnly = false, server = null } = {}) {
+  start(instanceId, { verify = false, prepareOnly = false } = {}) {
     if (this.session) throw new Error('Une partie ou une installation est déjà en cours.');
     const { dirs, instances, accounts } = this.services;
     const instance = instances.get(instanceId);
@@ -189,7 +186,6 @@ class LaunchManager {
       launcherVersion: app.getVersion(),
       verify,
       prepareOnly,
-      server,
       prepareJava: (exe, log) => this.prepareJava(exe, log),
     });
     this.session = session;
@@ -197,7 +193,7 @@ class LaunchManager {
     this.pendingLogs = [];
     this.pausedNow = false;
     this.resync = false;
-    this.run = { instanceId, phase: 'preparing', step: 0, done: 0, total: 0, prepareOnly, server };
+    this.run = { instanceId, phase: 'preparing', step: 0, done: 0, total: 0, prepareOnly };
     this.send('launch:reset');
     this.status();
 
@@ -310,8 +306,6 @@ function registerIpc(getWindow) {
   handle('versions:list', () => versions.listVersions(dirs));
   handle('versions:details', (id) => versions.versionDetails(dirs, text(id)));
   handle('loaders:available', (mc) => availableLoaders(text(mc)));
-  handle('notes:list', () => versions.getPatchNotes(dirs));
-  handle('notes:body', (contentPath) => versions.getPatchNoteBody(text(contentPath)));
 
   handle('instances:list', () => instances.list());
   handle('instances:create', (data) => instances.create(data ?? {}, services.settings.defaults()));
@@ -482,15 +476,6 @@ function registerIpc(getWindow) {
     }
     return found;
   };
-  const worldsFrom = (dirs) => ({
-    dirs,
-    worlds: dirs.flatMap((dir) =>
-      importer.scanWorlds(dir).map((world) => {
-        scanned.set(world.path, 'world');
-        return { ...world, source: dir };
-      }),
-    ),
-  });
   handle('import:scanInstances', () => instancesFrom(importer.defaultInstancesDir(app.getPath('appData'))));
   handle('import:pickInstances', async () => {
     const dir = await pickFolder("Dossier d'instances d'un autre launcher, ou dossier d'une instance", importer.defaultInstancesDir(app.getPath('appData')));
@@ -499,121 +484,16 @@ function registerIpc(getWindow) {
   handle('import:instance', (dir) => {
     const source = text(dir);
     const launcher = scanned.get(source);
-    if (!launcher || launcher === 'world') throw new Error('Instance inconnue : relance la recherche.');
+    if (!launcher) throw new Error('Instance inconnue : relance la recherche.');
     return runTask(`Import de ${path.basename(source)}`, (onProgress) =>
       importer.importInstance({ instances, dir: source, defaults: services.settings.defaults(), launcher, onProgress }),
     );
   });
-  handle('import:scanWorlds', () => worldsFrom(importer.officialGameDirs(app.getPath('appData'))));
-  handle('import:pickWorlds', async () => {
-    const dir = await pickFolder('Dossier .minecraft, saves ou monde', path.join(app.getPath('appData'), '.minecraft'));
-    return dir ? worldsFrom([dir]) : null;
-  });
-  handle('import:world', (dir, instanceId) => {
-    const source = text(dir);
-    if (scanned.get(source) !== 'world') throw new Error('Monde inconnu : relance la recherche.');
-    const instance = instances.get(text(instanceId));
-    return runTask(`Copie de ${path.basename(source)}`, (onProgress) =>
-      importer.importWorld({ dir: source, gameDir: instances.gameDir(instance.id), onProgress }),
-    );
-  });
-
-  // ---------- Mondes et sauvegardes ----------
-  const gameDirOf = (id) => instances.gameDir(instances.get(text(id)).id);
-  const backupDirOf = (id) => path.join(dirs.backups, instances.get(text(id)).id);
   const openDir = async (dir) => {
     fs.mkdirSync(dir, { recursive: true });
     const error = await shell.openPath(dir);
     if (error) throw new Error(error);
   };
-  const pickedZips = new Set(); // seuls les .zip choisis dans la fenêtre de Windows peuvent être restaurés
-  handle('worlds:list', async (id) => {
-    const [list, backups] = await Promise.all([worlds.listWorlds(gameDirOf(id)), worlds.listBackups(backupDirOf(id))]);
-    return { worlds: list, backups };
-  });
-  handle('worlds:backup', (id, folder) => {
-    const gameDir = gameDirOf(id);
-    worlds.worldDir(gameDir, text(folder));
-    return runTask(`Sauvegarde de ${text(folder)}`, (onProgress, signal) => worlds.backupWorld({ gameDir, folder: text(folder), backupDir: backupDirOf(id), onProgress, signal }), { cancellable: true });
-  });
-  handle('worlds:pickZip', async () => {
-    const result = await dialog.showOpenDialog(getWindow(), {
-      title: 'Restaurer un monde',
-      properties: ['openFile'],
-      filters: [{ name: 'Archive ZIP', extensions: ['zip'] }],
-    });
-    if (result.canceled) return null;
-    pickedZips.add(result.filePaths[0]);
-    return { file: result.filePaths[0], name: path.basename(result.filePaths[0]) };
-  });
-  const zipSource = (id, source) => {
-    if (source?.backup) return worlds.backupFile(backupDirOf(id), text(source.backup));
-    if (pickedZips.has(text(source?.file))) return text(source.file);
-    throw new Error('Archive inconnue : choisis-la à nouveau.');
-  };
-  handle('worlds:inspect', (id, source) => worlds.inspectArchive(zipSource(id, source), gameDirOf(id)));
-  handle('worlds:restore', (id, source, mode) => {
-    notRunning(text(id), 'restaurer un monde');
-    const zipFile = zipSource(id, source);
-    const choice = mode === 'beside' || mode === 'replace' ? mode : null;
-    return runTask(`Restauration de ${path.basename(zipFile)}`, (onProgress, signal) =>
-      worlds.restoreWorld({ zipFile, gameDir: gameDirOf(id), mode: choice, trash, onProgress, signal }), { cancellable: true },
-    );
-  });
-  handle('worlds:delete', async (id, folder) => {
-    notRunning(text(id), 'supprimer un monde');
-    await trash(worlds.worldDir(gameDirOf(id), text(folder)));
-  });
-  handle('worlds:deleteBackup', async (id, file) => {
-    const backupDir = backupDirOf(id);
-    await trash(worlds.backupFile(backupDir, text(file)));
-    await worlds.forgetBackup(backupDir, text(file));
-  });
-  handle('worlds:openFolder', (id, folder) =>
-    openDir(folder ? worlds.worldDir(gameDirOf(id), text(folder)) : path.join(gameDirOf(id), 'saves')),
-  );
-  handle('worlds:openBackups', (id) => openDir(backupDirOf(id)));
-
-  // ---------- Captures d'écran ----------
-  // Les images passent par shot://thumb|full/<instance>/<fichier> : jamais un autre fichier que ceux du dossier screenshots.
-  const thumbs = new Map(); // « chemin:date » → miniature JPEG
-  protocol.handle('shot', async (request) => {
-    try {
-      const url = new URL(request.url);
-      const [id, name] = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
-      const file = screenshots.shotFile(gameDirOf(id), name);
-      if (url.hostname === 'full') {
-        return new Response(await fs.promises.readFile(file), { headers: { 'Content-Type': /\.png$/i.test(file) ? 'image/png' : 'image/jpeg' } });
-      }
-      const key = `${file}:${(await fs.promises.stat(file)).mtimeMs}`;
-      let jpeg = thumbs.get(key);
-      if (!jpeg) {
-        let image = await nativeImage.createThumbnailFromPath(file, { width: 480, height: 480 }).catch(() => null);
-        if (!image || image.isEmpty()) image = nativeImage.createFromPath(file).resize({ width: 480, quality: 'good' });
-        jpeg = image.toJPEG(82);
-        thumbs.set(key, jpeg);
-        if (thumbs.size > 400) thumbs.delete(thumbs.keys().next().value);
-      }
-      return new Response(jpeg, { headers: { 'Content-Type': 'image/jpeg' } });
-    } catch {
-      return new Response(null, { status: 404 });
-    }
-  });
-  const shotOf = (id, file) => screenshots.shotFile(gameDirOf(id), text(file));
-  handle('screenshots:list', (id) => screenshots.listScreenshots(gameDirOf(id)));
-  handle('screenshots:copy', async (id, file) => {
-    const image = nativeImage.createFromPath(shotOf(id, file));
-    if (image.isEmpty()) throw new Error("Cette image n'a pas pu être lue.");
-    // Presse-papiers façon W3C depuis Electron 45 : l'image part en PNG (les .jpg sont convertis).
-    await clipboard.write([new ClipboardItem({ 'image/png': new Blob([image.toPNG()], { type: 'image/png' }) })]);
-  });
-  handle('screenshots:open', async (id, file) => {
-    const error = await shell.openPath(shotOf(id, file));
-    if (error) throw new Error(error);
-  });
-  handle('screenshots:show', (id, file) => shell.showItemInFolder(shotOf(id, file)));
-  handle('screenshots:delete', (id, file) => trash(shotOf(id, file)));
-  handle('screenshots:openFolder', (id) => openDir(screenshots.shotsDir(gameDirOf(id))));
 
   // ---------- Rapports de crash ----------
   const crashDirs = (id) => {
@@ -671,40 +551,6 @@ function registerIpc(getWindow) {
   });
 
 
-  // ---------- Serveurs (servers.dat, partagé avec le menu Multijoueur du jeu) ----------
-  // Le jeu réécrit servers.dat en quittant : on ne modifie rien pendant qu'il tourne.
-  const serversDir = (id) => instances.gameDir(instances.get(text(id)).id);
-  const serverIndex = (value) => (Number.isInteger(value) ? value : -1);
-  handle('servers:list', (id) => servers.listServers(serversDir(id)));
-  handle('servers:add', (id, data) => {
-    notRunning(text(id), 'modifier ses serveurs');
-    return servers.addServer(serversDir(id), data ?? {});
-  });
-  handle('servers:update', (id, at, data) => {
-    notRunning(text(id), 'modifier ses serveurs');
-    return servers.updateServer(serversDir(id), serverIndex(at), data ?? {});
-  });
-  handle('servers:remove', (id, at) => {
-    notRunning(text(id), 'modifier ses serveurs');
-    return servers.removeServer(serversDir(id), serverIndex(at));
-  });
-  handle('servers:move', (id, from, to) => {
-    notRunning(text(id), 'modifier ses serveurs');
-    return servers.moveServer(serversDir(id), serverIndex(from), serverIndex(to));
-  });
-  // Ping ; l'icône reçue est enregistrée dans servers.dat comme le fait le jeu.
-  handle('servers:ping', async (address, target) => {
-    const result = await servers.pingServer(text(address));
-    const id = text(target?.instanceId);
-    if (result.favicon && id && launches.run?.instanceId !== id) {
-      try {
-        result.iconSaved = servers.saveIcon(serversDir(id), serverIndex(target.index), text(address), result.favicon);
-      } catch {
-        // servers.dat illisible : le ping reste valable.
-      }
-    }
-    return result;
-  });
   handle('instances:openFolder', async (id) => {
     const dir = instances.gameDir(text(id));
     fs.mkdirSync(dir, { recursive: true });
@@ -791,7 +637,6 @@ function registerIpc(getWindow) {
     launches.start(text(id), {
       verify: options?.verify === true,
       prepareOnly: options?.prepareOnly === true,
-      server: options?.server ? servers.parseAddress(text(options.server)) && text(options.server).trim() : null,
     }),
   );
   handle('launch:stop', () => launches.stop());

@@ -1,14 +1,12 @@
 'use strict';
 
-// Versions de Minecraft (manifeste officiel Mojang) et notes de version.
+// Versions de Minecraft (manifeste officiel Mojang).
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { downloadFile, fetchJson } = require('./download');
 const { exists, readJson, writeJson } = require('./store');
 
 const MANIFEST_URL = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json';
-const CONTENT_ORIGIN = 'https://launchercontent.mojang.com';
-const PATCH_NOTES_URL = `${CONTENT_ORIGIN}/v2/javaPatchNotes.json`;
 
 const TYPES = { release: 'release', snapshot: 'snapshot', old_beta: 'beta', old_alpha: 'alpha' };
 
@@ -115,39 +113,6 @@ async function versionDetails(dirs, id) {
   };
 }
 
-async function getPatchNotes(dirs) {
-  const cacheFile = path.join(dirs.cache, 'java_patch_notes.json');
-  let data;
-  let offline = false;
-  try {
-    data = await fetchJson(PATCH_NOTES_URL);
-    writeJson(cacheFile, data);
-  } catch (error) {
-    data = readJson(cacheFile, null);
-    offline = true;
-    if (!data) throw new Error(`Impossible de récupérer les notes de version (${error.message}).`);
-  }
-  return {
-    offline,
-    entries: (data.entries ?? []).map((e) => ({
-      id: e.id,
-      version: e.version,
-      type: e.type === 'release' ? 'release' : 'snapshot',
-      title: e.title,
-      date: e.date,
-      image: e.image?.url ? new URL(e.image.url, CONTENT_ORIGIN).href : null,
-      contentPath: e.contentPath,
-    })),
-  };
-}
-
-/** Corps HTML d'une note (texte officiel de Mojang, nettoyé ensuite par l'interface). */
-async function getPatchNoteBody(contentPath) {
-  if (!/^[\w./-]+\.json$/.test(contentPath) || contentPath.includes('..')) throw new Error('Note de version invalide.');
-  const data = await fetchJson(`${CONTENT_ORIGIN}/v2/${contentPath}`);
-  return typeof data.body === 'string' ? data.body : '';
-}
-
 module.exports = {
   getManifest,
   listVersions,
@@ -155,7 +120,4 @@ module.exports = {
   versionDetails,
   versionFiles,
   isInstalled,
-  getPatchNotes,
-  getPatchNoteBody,
-  CONTENT_ORIGIN,
 };

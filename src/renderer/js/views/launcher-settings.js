@@ -166,7 +166,7 @@ function runtimeRow(r) {
     'div',
     { class: 'java-row' },
     h('span', { class: 'java-row__major' }, r.major ?? '?'),
-    h('span', { class: 'java-row__body' }, h('span', { class: 'java-row__name' }, name), h('span', { class: 'java-row__detail' }, `${r.component} · ${r.version ?? 'version inconnue'} · ${formatSize(r.size)}`.toUpperCase())),
+    h('span', { class: 'java-row__body' }, h('span', { class: 'java-row__name' }, name), h('span', { class: 'java-row__detail' }, `${r.component} · ${r.version ?? 'version inconnue'} · ${formatSize(r.size)}`)),
     h('span', { class: `java-row__use${used ? '' : ' java-row__use--none'}` }, used ? r.usedBy.join(', ') : 'Aucune instance'),
     h('button', { class: 'icon-btn', 'aria-label': `Ouvrir le dossier de ${name}`, onClick: () => api.openRuntime(r.component).catch((e) => toastError('Dossier introuvable', e)) }, icon('folder')),
     h(

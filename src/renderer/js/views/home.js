@@ -1,8 +1,6 @@
 // Onglet Accueil : bannière de l'instance, bouton Jouer, cartes d'informations ou progression.
-import { createShortcut, duplicateInstance, openInstanceFolder, requestLaunch, stopGame, verifyInstance, versionDetails } from '../actions.js';
-import { openImport } from '../import-actions.js';
-import { checkModpackUpdate, updateModpack } from '../mods-actions.js';
-import { bannerUrl } from '../banner.js';
+import { createShortcut, duplicateInstance, openInstanceFolder, requestLaunch, saveSettings, stopGame, verifyInstance, versionDetails } from '../actions.js';
+import { checkModpackUpdate, installedContent, updateModpack } from '../mods-actions.js';
 import { FILES_STEP, JAVA_STEP, LAUNCH_STEPS, LOADER_NAMES, LOADER_STEP, MEMORY_STEP, formatLastPlayed, loaderLabel } from '../data.js';
 import { formatGo, formatPlaytime, h, icon } from '../dom.js';
 import { skinHead } from '../skin-view.js';
@@ -43,22 +41,20 @@ function hero(instance, status, details) {
   return h(
     'section',
     { class: 'hero', 'aria-label': `Instance ${instance.name}` },
-    h('img', { class: 'hero__art', src: bannerUrl(instance.seed), alt: '' }),
     h(
       'div',
       { class: 'hero__info' },
       h(
         'div',
         { class: 'hero__meta' },
+        h('span', { class: 'status-pill' }, `Minecraft ${instance.version}${instance.loader !== 'vanilla' ? ` · ${LOADER_NAMES[instance.loader]}` : ''}`),
         h(
           'span',
           { class: `status-pill status-pill--${status.kind}` },
           h('span', { class: 'status-pill__dot', 'aria-hidden': 'true' }),
-          `Minecraft ${instance.version}${instance.loader !== 'vanilla' ? ` · ${LOADER_NAMES[instance.loader]}` : ''}`,
-          h('span', { class: 'status-pill__sep', 'aria-hidden': 'true' }, '■'),
           h('span', { class: 'status-pill__state' }, pillState),
         ),
-        lastPlayed && h('span', { class: 'hero__when' }, `Dernière partie ${lastPlayed}`),
+        lastPlayed && h('span', { class: 'status-pill' }, `Dernière partie ${lastPlayed}`),
       ),
       h('h1', { class: 'hero__title' }, instance.name),
       h('p', { class: 'hero__sub' }, sub),
@@ -66,7 +62,7 @@ function hero(instance, status, details) {
     h(
       'div',
       { class: 'hero__bar' },
-      h('button', { class: 'btn btn--ghost', onClick: () => openInstanceFolder(instance.id) }, 'Ouvrir le dossier'),
+      playButton(instance, status),
       h(
         'button',
         { class: 'version-box', disabled: locked, onClick: () => go('versions'), title: 'Voir les versions' },
@@ -74,7 +70,7 @@ function hero(instance, status, details) {
         !locked && icon('chevron'),
       ),
       fixedAccount(instance),
-      playButton(instance, status),
+      h('button', { class: 'btn btn--ghost', onClick: () => openInstanceFolder(instance.id) }, icon('folder'), 'Ouvrir le dossier'),
     ),
   );
 }
@@ -104,85 +100,187 @@ function modpackCard(instance, busy) {
   );
 }
 
-const RANGES = [7, 14, 30];
-const DAY_SHORT = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
-const DAY_LONG = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 const pad = (n) => String(n).padStart(2, '0');
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const shortTime = (minutes) => (minutes ? formatPlaytime(Math.round(minutes)).replace(' min', '').replace(/^(\d+)$/, '$1 min') : '0 min');
+const SINCE = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 
-/** Temps de jeu : chiffres clés, minutes par jour, et part de l'instance parmi toutes. */
-function statsCard(instance) {
-  const range = state.home.statsRange;
+function statTile(label, value, foot, extra) {
+  return h('div', { class: 'stat-tile' }, h('span', { class: 'stat-tile__label' }, label), h('span', { class: 'stat-tile__value' }, value), foot, extra);
+}
+
+/** Temps de jeu : quatre tuiles compactes (total, semaine, parties, record). */
+function statsTiles(instance) {
   const stats = instance.stats ?? { days: {}, sessions: 0, longest: 0 };
   const today = new Date();
-  const days = Array.from({ length: range }, (_, i) => {
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (range - 1 - i));
-    return { date, minutes: stats.days[dayKey(date)] ?? 0 };
-  });
-  const week = Array.from({ length: 7 }, (_, i) => stats.days[dayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - i))] ?? 0).reduce((a, b) => a + b, 0);
-  const max = Math.max(30, ...days.map((d) => d.minutes));
+  const week = Array.from({ length: 7 }, (_, i) => stats.days[dayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - (6 - i)))] ?? 0);
+  const weekTotal = week.reduce((a, b) => a + b, 0);
+  const peak = Math.max(30, ...week);
   const tracked = Object.values(stats.days).reduce((a, b) => a + b, 0);
   const untracked = Math.max(0, Math.round(instance.playtime - tracked));
   const total = state.instances.reduce((sum, i) => sum + (i.playtime ?? 0), 0);
-  const top = [...state.instances].sort((a, b) => (b.playtime ?? 0) - (a.playtime ?? 0))[0];
-  const figures = [
-    [formatPlaytime(instance.playtime).replace('jamais lancée', '0 min'), 'AU TOTAL'],
-    [shortTime(week), '7 DERNIERS JOURS'],
-    [String(stats.sessions), stats.sessions > 1 ? 'PARTIES' : 'PARTIE'],
-    [shortTime(stats.longest), 'PLUS LONGUE'],
-  ];
-  const label = (d, i) => (i === range - 1 ? 'AUJ.' : DAY_SHORT.format(d.date).replace('.', '').toUpperCase());
-  const ticks = [0, Math.floor((range - 1) / 2), range - 1];
+  const share = total ? Math.round((instance.playtime / total) * 100) : 0;
+  const alone = state.instances.filter((i) => i.playtime > 0).length < 2;
+  const note = (text) => h('span', { class: 'stat-tile__foot' }, text);
 
   return h(
     'section',
-    { class: 'card stats', 'aria-label': 'Temps de jeu' },
+    { class: 'stat-tiles', 'aria-label': 'Temps de jeu' },
     h(
       'div',
-      { class: 'stats__head' },
-      h('h3', { class: 'card__title' }, 'Temps de jeu'),
+      { class: 'stat-tile', title: untracked > 0 ? `Dont ${formatPlaytime(untracked)} ${instance.importedFrom ? 'reprises d’un autre launcher ou ' : ''}d’avant le suivi par jour` : null },
+      h('span', { class: 'stat-tile__label' }, 'Temps de jeu au total'),
+      h('span', { class: 'stat-tile__row' }, h('span', { class: 'stat-tile__value' }, shortTime(instance.playtime)), !alone && h('span', { class: 'stat-tile__share' }, `${share} %`)),
+      alone
+        ? note('Sur cette instance')
+        : h('span', { class: 'stat-tile__meter', role: 'img', 'aria-label': `${share} % de ton temps total` }, h('i', { style: `width:${share}%` })),
+    ),
+    statTile(
+      '7 derniers jours',
+      shortTime(weekTotal),
+      note('Par jour'),
       h(
-        'div',
-        { class: 'segmented segmented--sm', role: 'tablist', 'aria-label': 'Période' },
-        RANGES.map((n) => h('button', { role: 'tab', 'aria-selected': n === range ? 'true' : 'false', onClick: () => update((s) => { s.home.statsRange = n; }) }, `${n} J`)),
+        'span',
+        { class: 'stat-tile__bars', 'aria-hidden': 'true' },
+        week.map((minutes, i) => h('span', { class: `stat-tile__bar${minutes ? '' : ' stat-tile__bar--empty'}${i === 6 ? ' stat-tile__bar--today' : ''}`, style: `height:${Math.max(8, Math.round((minutes / peak) * 100))}%` })),
       ),
+    ),
+    statTile(stats.sessions > 1 ? 'Parties' : 'Partie', String(stats.sessions), note(stats.since ? `depuis le ${SINCE.format(new Date(stats.since))}` : stats.sessions ? 'Au total' : 'Aucune suivie')),
+    statTile('Plus longue partie', shortTime(stats.longest), note(stats.sessions ? `moyenne ${shortTime(tracked / stats.sessions)}` : 'Pas encore de moyenne')),
+  );
+}
+
+const CUBE_FACES = ['front', 'back', 'left', 'right', 'top', 'bottom'];
+const SPIN_MS = 950;
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Gardée entre deux rendus, pour que le bloc ne saute pas quand l'accueil se redessine.
+const pose = { x: 0, y: 0, turns: 0 };
+
+/** Bloc de l'instance en 3D : suit la souris, tourne au clic. Hors du verre flou, seul le cube bouge. */
+function blockCube(instance, still) {
+  const cube = h('span', { class: `cube cube--${instance.icon}` }, CUBE_FACES.map((face) => h('i', { class: `cube__face cube__face--${face}` })));
+  const paint = () => {
+    cube.style.transform = `rotateX(${-24 - pose.y * 14}deg) rotateY(${-38 + pose.x * 22 + pose.turns * 360}deg)`;
+  };
+  paint();
+  let frame = 0;
+  const aim = (x, y) => {
+    pose.x = x;
+    pose.y = y;
+    frame ||= requestAnimationFrame(() => {
+      frame = 0;
+      paint();
+    });
+  };
+  const stage = h(
+    'button',
+    {
+      class: `cube-stage loader--${instance.loader ?? 'vanilla'}`,
+      'aria-label': 'Faire tourner le bloc',
+      onClick: () => {
+        if (reducedMotion()) return;
+        pose.turns += 1;
+        cube.classList.add('cube--spin');
+        paint();
+        setTimeout(() => cube.classList.remove('cube--spin'), SPIN_MS);
+      },
+    },
+    h('span', { class: 'cube-stage__halo', 'aria-hidden': 'true' }),
+    h('span', { class: `cube-stage__float${still ? ' cube-stage__float--still' : ''}` }, cube),
+  );
+  return { stage, aim };
+}
+
+function ramTile(instance, busy) {
+  const settings = instance.settings;
+  const value = h('span', { class: 'spec-tile__value' }, formatGo(settings.ram));
+  return h(
+    'div',
+    { class: 'spec-tile' },
+    h('label', { class: 'spec-tile__label', for: 'home-ram' }, 'Mémoire'),
+    value,
+    h('input', {
+      id: 'home-ram',
+      class: 'range-thin',
+      type: 'range',
+      min: 1,
+      max: Math.max(2, settings.ram, Math.floor(state.memory.totalGb * 2) / 2),
+      step: 0.5,
+      value: settings.ram,
+      disabled: busy,
+      // Sans redessin, pour garder le curseur en main.
+      onInput: (e) => {
+        settings.ram = Number(e.target.value);
+        value.textContent = formatGo(settings.ram);
+        saveSettings('instance', instance.id);
+      },
+    }),
+  );
+}
+
+function modsValue(instance) {
+  if (!instance.loader || instance.loader === 'vanilla') return 'Aucun';
+  const content = installedContent(instance, 'mods');
+  if (!content?.items) return '…';
+  const active = content.items.filter((item) => item.enabled).length;
+  return active ? `${active} actif${active > 1 ? 's' : ''}` : 'Aucun';
+}
+
+function blockAction(iconName, label, props) {
+  return h('button', { class: 'block-action', ...props }, icon(iconName), label);
+}
+
+/** Bloc Instance : le cube, les quatre infos clés et les actions. */
+function instanceBlock(instance, status, details) {
+  const busy = state.run?.instanceId === instance.id;
+  const { stage, aim } = blockCube(instance, status.kind === 'running');
+  const follow = !reducedMotion();
+  const custom = instance.settings.java === 'custom' && instance.settings.javaPath;
+  return h(
+    'section',
+    {
+      class: 'instance-block',
+      'aria-label': 'Instance',
+      onPointermove: follow
+        ? (e) => {
+            const box = e.currentTarget.getBoundingClientRect();
+            aim(((e.clientX - box.left) / box.width) * 2 - 1, ((e.clientY - box.top) / box.height) * 2 - 1);
+          }
+        : null,
+      onPointerleave: follow ? () => aim(0, 0) : null,
+    },
+    stage,
+    h(
+      'div',
+      { class: 'instance-block__specs' },
+      h('button', { class: 'spec-tile', onClick: () => go('mods') }, h('span', { class: 'spec-tile__label' }, 'Mods'), h('span', { class: 'spec-tile__value' }, modsValue(instance))),
+      ramTile(instance, busy),
+      h('button', { class: 'spec-tile', onClick: () => go('settings') }, h('span', { class: 'spec-tile__label' }, 'Java'), h('span', { class: 'spec-tile__value' }, custom ? 'Personnalisé' : javaLabel(details))),
+      h('div', { class: 'spec-tile' }, h('span', { class: 'spec-tile__label' }, 'Fichiers du jeu'), h('span', { class: 'spec-tile__value' }, instance.installed ? 'Prêts' : 'À installer')),
     ),
     h(
       'div',
-      { class: 'stats__body' },
-      h('div', { class: 'stats__figures' }, figures.map(([value, name]) => h('div', { class: 'stats__figure' }, h('span', { class: 'stats__value' }, value), h('span', { class: 'stats__name' }, name)))),
-      h(
-        'div',
-        { class: 'stats__chart' },
-        h(
-          'div',
-          { class: 'stats__bars', role: 'img', 'aria-label': `Minutes de jeu par jour sur ${range} jours` },
-          days.map((d, i) =>
-            h('span', {
-              class: `stats__bar${d.minutes ? '' : ' stats__bar--empty'}${i === range - 1 ? ' stats__bar--today' : ''}`,
-              style: `height:${d.minutes ? Math.max(4, Math.round((d.minutes / max) * 100)) : 2}%`,
-              title: `${DAY_LONG.format(d.date)} · ${shortTime(d.minutes)}`,
-            }),
-          ),
-        ),
-        h('div', { class: 'stats__axis' }, ticks.map((i) => h('span', null, label(days[i], i)))),
-      ),
-    ),
-    h(
-      'p',
-      { class: 'stats__foot' },
-      'Toutes tes instances : ',
-      h('strong', null, formatPlaytime(total).replace('jamais lancée', '0 min')),
-      top?.playtime && state.instances.length > 1 ? ` · ${top.name} en tête (${Math.round((top.playtime / total) * 100)} %)` : '',
-      untracked > 0 ? ` · ${formatPlaytime(untracked)} ${instance.importedFrom ? 'reprises d’un autre launcher ou ' : ''}d’avant le suivi par jour.` : '',
+      { class: 'instance-block__actions' },
+      blockAction('edit', 'Modifier', {
+        disabled: busy,
+        onClick: () => update((s) => { s.modal = { type: 'edit-instance', instanceId: instance.id, draft: { name: instance.name, icon: instance.icon, version: instance.version, loader: instance.loader, loaderVersion: instance.loaderVersion, group: instance.group ?? '', accountId: instance.accountId ?? null } }; }),
+      }),
+      blockAction('copy', 'Dupliquer', { disabled: busy, onClick: () => duplicateInstance(instance.id) }),
+      blockAction('upload', 'Exporter', {
+        onClick: () => update((s) => { s.modal = { type: 'export', instanceId: instance.id, draft: { name: instance.modpack?.name ?? instance.name, version: '1.0.0', summary: '' } }; }),
+      }),
+      blockAction('link', 'Raccourci', { onClick: () => createShortcut(instance.id) }),
+      blockAction('shield', 'Vérifier', { disabled: !instance.installed || Boolean(state.run), onClick: () => verifyInstance(instance.id) }),
+      blockAction('trash', 'Supprimer', {
+        class: 'block-action block-action--danger',
+        disabled: busy,
+        onClick: () => update((s) => { s.modal = { type: 'delete-instance', instanceId: instance.id }; }),
+      }),
     ),
   );
 }
 
-function infoCards(instance, details) {
-  const s = instance.settings;
-  const lastPlayed = formatLastPlayed(instance.lastPlayedAt);
+function infoCards(instance, status, details) {
   const busy = state.run?.instanceId === instance.id;
   return [
     state.versions.offline &&
@@ -197,93 +295,9 @@ function infoCards(instance, details) {
           'Seules les instances déjà installées peuvent être lancées. En solo, un compte Microsoft fonctionne avec la dernière session.',
         ),
       ),
-    h('h2', { class: 'home__heading' }, icon(instance.installed ? 'check' : 'download'), instance.installed ? 'Prête à jouer' : 'Pas encore installée'),
-    instance.playtime > 0 && statsCard(instance),
-    h(
-      'section',
-      { class: 'card' },
-      h('h3', { class: 'card__title' }, 'Instance'),
-      h(
-        'p',
-        { class: 'card__text', style: 'margin-top:6px' },
-        `${instance.name}${instance.group ? ` · groupe ${instance.group}` : ''} · ${formatPlaytime(instance.playtime)}${instance.playtime ? ' au total' : ''}${lastPlayed ? ` · dernière partie ${lastPlayed}` : ''}`,
-      ),
-      h(
-        'div',
-        { class: 'card__actions' },
-        h(
-          'button',
-          {
-            class: 'btn btn--ghost',
-            disabled: busy,
-            onClick: () => update((s) => { s.modal = { type: 'edit-instance', instanceId: instance.id, draft: { name: instance.name, icon: instance.icon, version: instance.version, loader: instance.loader, loaderVersion: instance.loaderVersion, group: instance.group ?? '', accountId: instance.accountId ?? null } }; }),
-          },
-          'Modifier…',
-        ),
-        h('button', { class: 'btn btn--ghost', disabled: busy, onClick: () => duplicateInstance(instance.id) }, 'Dupliquer'),
-        h(
-          'button',
-          {
-            class: 'btn btn--ghost',
-            onClick: () => update((s) => { s.modal = { type: 'export', instanceId: instance.id, draft: { name: instance.modpack?.name ?? instance.name, version: '1.0.0', summary: '' } }; }),
-          },
-          'Exporter…',
-        ),
-        h('button', { class: 'btn btn--ghost', onClick: () => openImport('worlds') }, 'Importer des mondes…'),
-        h('button', { class: 'btn btn--ghost', onClick: () => createShortcut(instance.id) }, 'Raccourci bureau'),
-        h('button', { class: 'btn btn--ghost', onClick: () => openInstanceFolder(instance.id) }, 'Ouvrir le dossier'),
-        h(
-          'button',
-          { class: 'btn btn--ghost btn--ghost-danger', disabled: busy, onClick: () => update((s) => { s.modal = { type: 'delete-instance', instanceId: instance.id }; }) },
-          'Supprimer…',
-        ),
-      ),
-    ),
+    instanceBlock(instance, status, details),
+    instance.playtime > 0 && statsTiles(instance),
     instance.modpack && modpackCard(instance, busy),
-    h(
-      'section',
-      { class: 'card card__row' },
-      h(
-        'div',
-        { class: 'card__body' },
-        h('h3', { class: 'card__title' }, 'Ressources'),
-        h(
-          'p',
-          { class: 'card__text' },
-          instance.installed
-            ? `Préparées pour Minecraft ${instance.version} · ${javaLabel(details)} · fichiers partagés entre instances`
-            : `Téléchargées au premier lancement · ${javaLabel(details)} inclus`,
-        ),
-      ),
-      instance.installed &&
-        h('button', { class: 'btn btn--ghost', disabled: Boolean(state.run), onClick: () => verifyInstance(instance.id) }, 'Vérifier à nouveau'),
-    ),
-    h(
-      'section',
-      { class: 'card card__row' },
-      h(
-        'div',
-        { class: 'card__body' },
-        h('h3', { class: 'card__title' }, 'Mémoire et Java'),
-        h(
-          'p',
-          { class: 'card__text' },
-          `${formatGo(s.ram)} alloués · ${s.java === 'custom' && s.javaPath ? 'Java personnalisé' : `${javaLabel(details)} automatique (runtime Mojang)`}`,
-        ),
-      ),
-      h('button', { class: 'btn btn--ghost', onClick: () => go('settings') }, 'Modifier…'),
-    ),
-    h(
-      'section',
-      { class: 'card card__row' },
-      h(
-        'div',
-        { class: 'card__body' },
-        h('h3', { class: 'card__title' }, 'Dossier du jeu'),
-        h('p', { class: 'card__text mono' }, `~\\AppData\\Roaming\\.0rzxn\\instances\\${instance.id}\\minecraft`),
-      ),
-      h('button', { class: 'btn btn--ghost', onClick: () => openInstanceFolder(instance.id) }, 'Ouvrir…'),
-    ),
   ];
 }
 
@@ -347,6 +361,8 @@ export function renderHome() {
     'div',
     null,
     hero(instance, status, details),
-    h('div', { class: 'home__content' }, status.kind === 'busy' ? progressPanel(instance, details) : infoCards(instance, details)),
+    status.kind === 'busy'
+      ? h('div', { class: 'home__content' }, h('section', { class: 'card' }, h('div', { class: 'stats' }, progressPanel(instance, details))))
+      : h('div', { class: 'home__content' }, infoCards(instance, status, details)),
   );
 }

@@ -1,9 +1,8 @@
-// Actions de la fenêtre « Importer » : instances d'autres launchers et mondes du .minecraft.
+// Actions de la fenêtre « Importer » : instances d'autres launchers.
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { LOADER_NAMES } from './data.js';
-import { selectedInstance, state, toast, toastError, update } from './state.js';
-import { forgetWorlds } from './worlds-actions.js';
+import { toast, toastError, update } from './state.js';
 
 /** Modifie la fenêtre d'import si elle est toujours ouverte (les recherches sont asynchrones). */
 function patch(mutate) {
@@ -12,35 +11,22 @@ function patch(mutate) {
   });
 }
 
-export function openImport(tab = 'instances') {
-  update((s) => {
-    s.modal = { type: 'import', tab, instances: null, worlds: null, targetId: selectedInstance()?.id ?? null, copied: {} };
-  });
-  loadTab(tab);
+export function openImport() {
+  update((s) => { s.modal = { type: 'import', instances: null }; });
+  scan(api.scanDefaultInstances());
 }
 
-export function showImportTab(tab) {
-  patch((m) => { m.tab = tab; });
-  loadTab(tab);
-}
-
-function loadTab(tab) {
-  const modal = state.modal;
-  if (modal?.type !== 'import' || modal[tab]) return;
-  scan(tab, tab === 'instances' ? api.scanDefaultInstances() : api.scanWorlds());
-}
-
-async function scan(tab, promise) {
+async function scan(promise) {
   try {
     const result = await promise;
-    if (result) patch((m) => { m[tab] = result; });
+    if (result) patch((m) => { m.instances = result; });
   } catch (error) {
-    patch((m) => { m[tab] = { error: error.message }; });
+    patch((m) => { m.instances = { error: error.message }; });
   }
 }
 
-export function pickImportFolder(tab) {
-  scan(tab, tab === 'instances' ? api.pickInstances() : api.pickWorlds());
+export function pickImportFolder() {
+  scan(api.pickInstances());
 }
 
 export async function importInstance(item) {
@@ -60,26 +46,5 @@ export async function importInstance(item) {
     });
   } catch (error) {
     toastError('Import impossible', error);
-  }
-}
-
-export function setImportTarget(id) {
-  patch((m) => { m.targetId = id; });
-}
-
-export async function importWorld(world) {
-  const target = state.instances.find((i) => i.id === state.modal?.targetId);
-  if (!target) return;
-  try {
-    const { folder } = await api.importWorld(world.path, target.id);
-    patch((m) => { m.copied[world.path] = target.name; });
-    forgetWorlds(target.id);
-    toast({
-      kind: 'success',
-      title: `${world.name} copié`,
-      text: `Dans « ${target.name} »${folder !== world.folder ? `, sous le nom ${folder}` : ''}. Il apparaît dans la liste des mondes du jeu.`,
-    });
-  } catch (error) {
-    toastError('Copie impossible', error);
   }
 }
