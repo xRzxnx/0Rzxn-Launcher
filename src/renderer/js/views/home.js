@@ -36,7 +36,6 @@ function hero(instance, status, details) {
     status.kind === 'busy' && !instance.installed
       ? 'Première installation : quelques centaines de Mo, partagés ensuite entre tes instances.'
       : `${loaderLabel(instance)} · ${javaLabel(details)} · ${formatPlaytime(instance.playtime)}${instance.playtime ? ' de jeu' : ''}`;
-  const locked = status.kind === 'busy' || status.kind === 'running';
 
   return h(
     'section',
@@ -64,10 +63,9 @@ function hero(instance, status, details) {
       { class: 'hero__bar' },
       playButton(instance, status),
       h(
-        'button',
-        { class: 'version-box', disabled: locked, onClick: () => go('versions'), title: 'Voir les versions' },
+        'div',
+        { class: 'version-box' },
         h('span', { class: 'version-box__body' }, h('span', { class: 'label' }, 'Version'), h('span', { class: 'version-box__value' }, instance.version)),
-        !locked && icon('chevron'),
       ),
       fixedAccount(instance),
       h('button', { class: 'btn btn--ghost', onClick: () => openInstanceFolder(instance.id) }, icon('folder'), 'Ouvrir le dossier'),

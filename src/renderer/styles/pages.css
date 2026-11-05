@@ -52,19 +52,14 @@
 }
 
 .version-box {
-  width: 220px;
+  min-width: 130px;
   height: 60px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  padding: 0 14px 0 16px;
+  padding: 0 18px;
   border-radius: 17px;
   color: var(--text);
-  text-align: left;
-}
-
-.version-box:disabled {
-  color: var(--dim);
 }
 
 .version-box__body {
@@ -78,8 +73,6 @@
   font-size: 16px;
   font-weight: 600;
 }
-
-.version-box .icon { width: 18px; height: 18px; color: var(--muted); }
 
 .play {
   min-width: 190px;
