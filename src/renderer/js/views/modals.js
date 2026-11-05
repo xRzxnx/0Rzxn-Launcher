@@ -3,7 +3,7 @@ import { importInstance, openImport, pickImportFolder } from '../import-actions.
 import { exportInstance } from '../mods-actions.js';
 import { shareCrash } from '../crash-actions.js';
 import { cleanDialog, removeRuntimeDialog, shortcutsDialog, stopGameDialog } from './launcher-settings.js';
-import { addMicrosoftAccount, addOfflineAccount, createInstance, deleteInstance, disableLowRamWarning, editInstance, loaderOptions, removeAccount, setActiveAccount, startLaunch, versionDetails } from '../actions.js';
+import { addMicrosoftAccount, addOfflineAccount, createInstance, deleteInstance, disableLowRamWarning, editInstance, fixAllAndLaunch, fixModProblem, launchAnyway, loaderOptions, removeAccount, setActiveAccount, startLaunch, versionDetails } from '../actions.js';
 import { bannerUrl } from '../banner.js';
 import { LOADER_NAMES, LOADERS, loaderLabel, VERSION_TYPES } from '../data.js';
 import { blockIcon, formatGo, formatPlaytime, h, icon, slugify } from '../dom.js';
@@ -12,8 +12,14 @@ import { skinHead } from '../skin-view.js';
 import { dismissToast, state, update } from '../state.js';
 import { gpuConfirmDialog, packDialog } from './performance.js';
 import { skinsDialog } from './skins.js';
+import { openBackground } from '../background-actions.js';
+import { backgroundDialog } from './background.js';
+import { recapDialog } from './recap.js';
+import { paletteDialog } from './palette.js';
+import { wizardDialog } from './wizard.js';
+import { modSetDeleteDialog, modSetDialog } from './mod-sets.js';
 
-const BLOCKS = [
+export const BLOCKS = [
   ['grass', 'Herbe'], ['diamond', 'Diamant'], ['stone', 'Pierre'],
   ['netherrack', 'Netherrack'], ['sand', 'Sable'], ['end', 'End'],
 ];
@@ -25,10 +31,10 @@ export function close() {
   });
 }
 
-export function dialog({ title, size = '', body, foot, labelId }) {
+export function dialog({ title, size = '', body, foot, labelId, onClose = close }) {
   return h(
     'div',
-    { class: 'overlay', onClick: (e) => e.target === e.currentTarget && close() },
+    { class: 'overlay', onClick: (e) => e.target === e.currentTarget && onClose() },
     h(
       'section',
       { class: `dialog ${size}`.trim(), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': labelId },
@@ -36,7 +42,7 @@ export function dialog({ title, size = '', body, foot, labelId }) {
         'div',
         { class: 'dialog__head' },
         h('h1', { class: 'dialog__title', id: labelId }, title),
-        h('button', { class: 'dialog__close', 'aria-label': 'Fermer', onClick: close }, icon('close')),
+        h('button', { class: 'dialog__close', 'aria-label': 'Fermer', onClick: onClose }, icon('close')),
       ),
       h('div', { class: 'dialog__body' }, body),
       foot && h('div', { class: 'dialog__foot' }, foot),
@@ -146,6 +152,7 @@ function loaderField(draft) {
 
 /** Fenêtre « Nouvelle instance », ou « Modifier l'instance » si modal.instanceId est présent. */
 function instanceDialog(modal) {
+  if (modal.wizard) return wizardDialog(modal);
   const draft = modal.draft;
   const editing = Boolean(modal.instanceId);
   const original = editing ? state.instances.find((i) => i.id === modal.instanceId) : null;
@@ -247,7 +254,7 @@ function instanceDialog(modal) {
     ],
     foot: [
       editing
-        ? h('span', { class: 'spacer' })
+        ? h('button', { class: 'btn btn--ghost spacer', onClick: () => openBackground(original) }, 'Fond…')
         : h(
             'button',
             { class: 'btn btn--ghost spacer', onClick: openImport },
@@ -423,14 +430,52 @@ function lowRamDialog(modal) {
   });
 }
 
+function modCheckDialog(modal) {
+  const instance = state.instances.find((i) => i.id === modal.instanceId);
+  if (!instance) return null;
+  const canFixAll = modal.problems.every((p) => p.action);
+  return dialog({
+    title: `Avant de lancer ${instance.name}`,
+    size: 'dialog--wide',
+    labelId: 'modcheck-title',
+    body: [
+      h('p', { class: 'hint', style: 'margin:0 0 4px' }, 'Le launcher a lu les mods de l’instance et repéré de quoi faire planter le jeu ou le ralentir.'),
+      h(
+        'ul',
+        { class: 'diag' },
+        modal.problems.map((p) =>
+          h(
+            'li',
+            { class: 'diag__row' },
+            h('span', { class: `diag__tag diag__tag--${p.severity}` }, p.severity === 'blocking' ? 'Bloquant' : 'Risque'),
+            h('div', { class: 'diag__text' }, h('b', {}, p.title), h('span', {}, p.text)),
+            p.action && h('button', { class: 'btn btn--sm', onClick: () => fixModProblem(p) }, p.action.label),
+          ),
+        ),
+      ),
+    ],
+    foot: [
+      h('button', { class: 'btn btn--lg spacer', onClick: close }, 'Annuler'),
+      h('button', { class: 'btn btn--lg', onClick: launchAnyway }, 'Lancer quand même'),
+      canFixAll && h('button', { class: 'btn btn--primary btn--lg', onClick: fixAllAndLaunch }, 'Corriger et jouer'),
+    ],
+  });
+}
+
 export function renderModal() {
   const modal = state.modal;
   if (!modal) return null;
   if (modal.type === 'new-instance' || modal.type === 'edit-instance') return instanceDialog(modal);
+  if (modal.type === 'background') return backgroundDialog(modal);
+  if (modal.type === 'recap') return recapDialog(modal);
+  if (modal.type === 'palette') return paletteDialog(modal);
+  if (modal.type === 'mod-set') return modSetDialog(modal);
+  if (modal.type === 'mod-set-delete') return modSetDeleteDialog(modal);
   if (modal.type === 'delete-instance') return deleteDialog(modal);
   if (modal.type === 'accounts') return accountsDialog();
   if (modal.type === 'skins') return skinsDialog(modal);
   if (modal.type === 'low-ram') return lowRamDialog(modal);
+  if (modal.type === 'mod-check') return modCheckDialog(modal);
   if (modal.type === 'export') return exportDialog(modal);
   if (modal.type === 'import') return importDialog(modal);
   if (modal.type === 'share-crash') return shareDialog(modal);

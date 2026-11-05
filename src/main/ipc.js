@@ -14,8 +14,11 @@ const { gameDirs, readJson, writeJson } = require('./core/store');
 const versions = require('./core/versions');
 const { availableLoaders } = require('./core/loaders');
 const content = require('./core/content');
+const modCheck = require('./core/mod-check');
+const modSets = require('./core/mod-sets');
 const modrinth = require('./core/modrinth');
 const modpacks = require('./core/modpacks');
+const profiles = require('./core/profiles');
 const importer = require('./core/importer');
 const crashes = require('./core/crashes');
 const storage = require('./core/storage');
@@ -321,6 +324,27 @@ function registerIpc(getWindow) {
     notRunning(text(id), 'dupliquer');
     return instances.duplicate(text(id), text(name));
   });
+  handle('instances:pickBackground', async (id) => {
+    instances.get(text(id));
+    const result = await dialog.showOpenDialog(getWindow(), { title: 'Choisir une image de fond', filters: [{ name: 'Image (PNG, JPEG, WebP)', extensions: ['png', 'jpg', 'jpeg', 'webp'] }], properties: ['openFile'] });
+    const file = result.filePaths?.[0];
+    if (result.canceled || !file) return null;
+    return instances.importBackground(text(id), file);
+  });
+  handle('instances:cleanBackground', (id) => instances.cleanBackgroundFiles(text(id)));
+  // Fonds d'instance : fond://<instance>/<fichier>, seulement les images « fond-… » du dossier de l'instance.
+  protocol.handle('fond', async (request) => {
+    try {
+      const url = new URL(request.url);
+      const name = url.pathname.replace(/^\//, '');
+      const file = instances.backgroundFile(url.hostname, name);
+      if (!file) return new Response('', { status: 404 });
+      const type = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }[path.extname(name).slice(1)];
+      return new Response(await fs.promises.readFile(file), { headers: { 'Content-Type': type, 'Access-Control-Allow-Origin': '*' } });
+    } catch {
+      return new Response('', { status: 404 });
+    }
+  });
   // Suppression = corbeille Windows : on peut toujours récupérer ses mondes.
   handle('instances:delete', async (id) => {
     notRunning(text(id), 'supprimer');
@@ -355,26 +379,51 @@ function registerIpc(getWindow) {
   };
   const trash = (file) => shell.trashItem(file);
   handle('content:list', (id, kind) => content.listContent(contentCtx(id, kind)));
-  handle('content:toggle', (id, kind, file) => {
+  // Après un changement du dossier des mods, l'ensemble actif suit (nouveau mod, interrupteur, suppression).
+  const setsCtx = (id) => {
+    const instance = instances.get(text(id));
+    return { store: instances, instance, gameDir: instances.gameDir(instance.id) };
+  };
+  const syncSets = (id) => modSets.sync(setsCtx(id)).catch(() => {});
+  handle('content:toggle', async (id, kind, file) => {
     notRunning(text(id), 'modifier son contenu');
-    return content.toggle({ ...contentCtx(id, kind), file: text(file) });
+    await content.toggle({ ...contentCtx(id, kind), file: text(file) });
+    if (text(kind) === 'mods') await syncSets(id);
+  });
+  handle('modsets:create', (id, name) => modSets.create({ ...setsCtx(id), name: text(name) }));
+  handle('modsets:rename', (id, setId, name) => modSets.rename({ ...setsCtx(id), setId: text(setId), name: text(name) }));
+  handle('modsets:delete', (id, setId) => modSets.remove({ ...setsCtx(id), setId: text(setId) }));
+  handle('modsets:apply', (id, setId) => {
+    notRunning(text(id), "changer d'ensemble de mods");
+    return modSets.apply({ ...setsCtx(id), setId: setId == null ? null : text(setId) });
+  });
+  handle('modcheck:run', (id) => {
+    const ctx = contentCtx(id, 'mods');
+    return modCheck.check({ gameDir: ctx.gameDir, instance: ctx.instance });
   });
   handle('content:delete', async (id, kind, file) => {
     notRunning(text(id), 'modifier son contenu');
     const ctx = contentCtx(id, kind);
     await trash(content.safePath(content.contentDir(ctx.gameDir, ctx.kind), text(file)));
+    if (ctx.kind === 'mods') await syncSets(id);
   });
-  handle('content:install', (id, kind, projectId, versionId) => {
+  handle('content:install', async (id, kind, projectId, versionId) => {
     notRunning(text(id), 'modifier son contenu');
-    return content.install({ ...contentCtx(id, kind), projectId: text(projectId), versionId: text(versionId) || null, trash });
+    const result = await content.install({ ...contentCtx(id, kind), projectId: text(projectId), versionId: text(versionId) || null, trash });
+    if (text(kind) === 'mods') await syncSets(id);
+    return result;
   });
-  handle('content:update', (id, kind, files) => {
+  handle('content:update', async (id, kind, files) => {
     notRunning(text(id), 'mettre à jour son contenu');
-    return content.update({ ...contentCtx(id, kind), files: Array.isArray(files) ? files.map(text) : null, trash });
+    const result = await content.update({ ...contentCtx(id, kind), files: Array.isArray(files) ? files.map(text) : null, trash });
+    if (text(kind) === 'mods') await syncSets(id);
+    return result;
   });
-  handle('content:import', (id, kind, paths) => {
+  handle('content:import', async (id, kind, paths) => {
     notRunning(text(id), 'modifier son contenu');
-    return content.importFiles({ ...contentCtx(id, kind), paths: Array.isArray(paths) ? paths.map(text) : [] });
+    const result = await content.importFiles({ ...contentCtx(id, kind), paths: Array.isArray(paths) ? paths.map(text) : [] });
+    if (text(kind) === 'mods') await syncSets(id);
+    return result;
   });
   handle('content:openFolder', async (id, kind) => {
     const ctx = contentCtx(id, kind);
@@ -551,6 +600,26 @@ function registerIpc(getWindow) {
     return { file: result.filePath, referenced: pack.referenced, embedded: pack.embedded, size: pack.buffer.length };
   });
 
+
+  // Bilan mensuel : le processus principal vérifie que le contenu reçu est bien un PNG de taille raisonnable.
+  const RECAP_MAX_BYTES = 4 * 1024 * 1024;
+  const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  handle('stats:saveRecapImage', async (month, bytes) => {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text(month))) throw new Error('Mois invalide.');
+    if (!(bytes instanceof Uint8Array) || bytes.length < 33 || bytes.length > RECAP_MAX_BYTES) throw new Error("Image refusée : taille inattendue.");
+    const png = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length);
+    const header = png.subarray(12, 16).toString('latin1') === 'IHDR';
+    const tooBig = png.readUInt32BE(16) > 4096 || png.readUInt32BE(20) > 4096;
+    if (!png.subarray(0, 8).equals(PNG_SIGNATURE) || !header || tooBig) throw new Error('Image refusée : ce n’est pas un PNG valide.');
+    const result = await dialog.showSaveDialog(getWindow(), {
+      title: 'Enregistrer le bilan du mois',
+      defaultPath: path.join(app.getPath('pictures'), `bilan-${month}.png`),
+      filters: [{ name: 'Image PNG', extensions: ['png'] }],
+    });
+    if (result.canceled || !result.filePath) return null;
+    await fs.promises.writeFile(result.filePath, png);
+    return result.filePath;
+  });
 
   handle('instances:openFolder', async (id) => {
     const dir = instances.gameDir(text(id));
@@ -797,6 +866,40 @@ function registerIpc(getWindow) {
       performance.installPack({ gameDir: instances.gameDir(instance.id), instance, slugs: list, trash, onProgress }),
     );
     return { ...result, instance };
+  });
+  // ---------- Assistant de création : profils prêts à jouer ----------
+  const hasFabric = (mc) => availableLoaders(mc).then((l) => Boolean(l.fabric?.recommended), () => false);
+  const profileRam = async (p, version) => {
+    const pc = await readHardware();
+    return performance.ramGuide({ loader: p.loader, version, mods: p.mods.length, shaders: p.shaders ? 1 : 0, totalGb: pc.totalGb, integrated: pc.integrated });
+  };
+  handle('profiles:plan', async (profileId, version) => {
+    const p = profiles.profile(text(profileId));
+    const listed = await versions.listVersions(dirs);
+    const releases = listed.versions.filter((v) => v.type === 'release').map((v) => v.id);
+    const result = await profiles.plan({ profileId: p.id, version: text(version) || null, releases, hasLoader: hasFabric });
+    const guide = await profileRam(p, result.version);
+    return { ...result, ram: { ideal: guide.ideal, low: guide.low, high: guide.high, limited: guide.limited } };
+  });
+  handle('profiles:create', async (data) => {
+    const p = profiles.profile(text(data?.profile));
+    const version = text(data?.version);
+    let loaderVersion = null;
+    if (p.loader !== 'vanilla') {
+      loaderVersion = (await availableLoaders(version)).fabric?.recommended;
+      if (!loaderVersion) throw new Error(`Fabric n'existe pas pour Minecraft ${version} : choisis une autre version.`);
+    }
+    const created = instances.create({ ...data, version, loader: p.loader, loaderVersion }, services.settings.defaults());
+    const guide = await profileRam(p, version);
+    return instances.update(created.id, { settings: { ...created.settings, ram: guide.ideal } });
+  });
+  handle('profiles:installMods', (id, profileId) => {
+    notRunning(text(id), 'modifier son contenu');
+    const instance = instances.get(text(id));
+    const p = profiles.profile(text(profileId));
+    return runTask(`Mods du profil ${p.title}`, (onProgress) =>
+      profiles.installMods({ profileId: p.id, gameDir: instances.gameDir(instance.id), instance, trash, onProgress }),
+    );
   });
   // Temps processeur cumulé des processus du launcher, comparé au relevé précédent (percentCPUUsage sous-estime beaucoup).
   let lastMetrics = null;

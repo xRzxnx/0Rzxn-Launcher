@@ -1,9 +1,11 @@
 // Éléments toujours visibles : onglets, compte, barre des instances.
-import { openLauncherFolder } from '../actions.js';
+import { openLauncherFolder, requestLaunch } from '../actions.js';
 import { api } from '../api.js';
 import { unseenCrashes } from '../crash-actions.js';
+import { pendingModUpdates } from '../mods-actions.js';
 import { LOADER_NAMES, LOADERS } from '../data.js';
 import { blockIcon, h, icon } from '../dom.js';
+import { openWizard } from '../wizard-actions.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceStatus, state, update } from '../state.js';
 
@@ -64,33 +66,58 @@ export function renderTopbarRight() {
 }
 
 export function openNewInstance(version) {
-  const fallback = state.versions.latest?.release ?? state.versions.list.find((v) => v.type === 'release')?.id ?? '';
-  update((s) => {
-    s.modal = { type: 'new-instance', draft: { icon: 'grass', name: '', version: typeof version === 'string' ? version : fallback, loader: 'vanilla', loaderVersion: null, group: '', accountId: null } };
-  });
+  openWizard(version);
 }
 
 function instanceItem(instance) {
   const status = instanceStatus(instance);
+  const updates = pendingModUpdates(instance).length;
   const current = instance.id === state.selectedId && (state.view === 'home' || INSTANCE_VIEWS.has(state.view));
+  // Lancer depuis la barre : seulement s'il y a un compte et qu'aucune partie ne tourne.
+  const canPlay = Boolean(activeAccount()) && !state.run;
+  const select = (s) => { s.selectedId = instance.id; s.view = INSTANCE_VIEWS.has(s.view) ? s.view : 'home'; };
   return h(
-    'button',
-    {
-      class: 'instance-item',
-      'aria-current': current ? 'true' : null,
-      onClick: () => update((s) => { s.selectedId = instance.id; s.view = INSTANCE_VIEWS.has(s.view) ? s.view : 'home'; }),
-    },
-    blockIcon(instance.icon, '', status.kind === 'idle' ? null : status.kind),
+    'div',
+    { class: 'instance-row' },
     h(
-      'span',
-      { style: 'min-width:0' },
-      h('span', { class: 'instance-item__name' }, instance.name),
+      'button',
+      {
+        class: 'instance-item',
+        'aria-current': current ? 'true' : null,
+        onClick: () => update(select),
+      },
+      blockIcon(instance.icon, '', status.kind === 'idle' ? null : status.kind),
       h(
         'span',
-        { class: `instance-item__status instance-item__status--${status.kind}` },
-        status.kind === 'busy' || status.kind === 'running' ? status.label : `${instance.version} · ${status.label}`,
+        { style: 'min-width:0' },
+        h(
+          'span',
+          { class: 'instance-item__line' },
+          h('span', { class: 'instance-item__name' }, instance.name),
+          updates > 0 &&
+            h('span', { class: 'up-count', 'aria-label': `${updates} mise${updates > 1 ? 's' : ''} à jour de mods disponible${updates > 1 ? 's' : ''}`, title: `${updates} mise${updates > 1 ? 's' : ''} à jour de mods` }, updates),
+        ),
+        h(
+          'span',
+          { class: `instance-item__status instance-item__status--${status.kind}` },
+          status.kind === 'busy' || status.kind === 'running' ? status.label : `${instance.version} · ${status.label}`,
+        ),
       ),
     ),
+    canPlay &&
+      h(
+        'button',
+        {
+          class: 'instance-play',
+          'aria-label': `Jouer à ${instance.name}`,
+          title: instance.installed ? 'Jouer' : `Installer ${instance.version} puis jouer`,
+          onClick: () => {
+            update(select);
+            requestLaunch();
+          },
+        },
+        icon('play'),
+      ),
   );
 }
 

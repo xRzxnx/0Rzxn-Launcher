@@ -1,7 +1,8 @@
 // Onglet Accueil : bannière de l'instance, bouton Jouer, cartes d'informations ou progression.
 import { createShortcut, duplicateInstance, openInstanceFolder, requestLaunch, saveSettings, stopGame, verifyInstance, versionDetails } from '../actions.js';
-import { checkModpackUpdate, updateModpack } from '../mods-actions.js';
-import { ramGuide, refreshFreeRam } from '../perf-actions.js';
+import { checkModpackUpdate, installedContent, pendingModUpdates, updateItems, updateModpack } from '../mods-actions.js';
+import { openRecap } from '../recap-actions.js';
+import { ramGuide,refreshFreeRam } from '../perf-actions.js';
 import { FILES_STEP, JAVA_STEP, LAUNCH_STEPS, LOADER_NAMES, LOADER_STEP, MEMORY_STEP, formatLastPlayed, loaderLabel, ramRange, ramVerdict, ramZones } from '../data.js';
 import { formatGo, formatPlaytime, h, icon } from '../dom.js';
 import { skinHead } from '../skin-view.js';
@@ -30,7 +31,28 @@ function fixedAccount(instance) {
   return h('span', { class: 'hero__account' }, skinHead(account, 28), h('span', null, `Toujours avec ${account.name}`));
 }
 
-function hero(instance, status, details) {
+const UPDATE_ROWS = 3;
+
+/** Carte en haut à droite : mods à mettre à jour, sans ouvrir l'onglet Mods. */
+function updatesCard(instance) {
+  const items = pendingModUpdates(instance);
+  if (!items.length) return null;
+  const shown = items.slice(0, UPDATE_ROWS);
+  const more = items.length - shown.length;
+  const busy = state.mods.busy['*update-all*'];
+  return h(
+    'section',
+    { class: 'upcard', 'aria-label': 'Mises à jour de mods' },
+    h('h3', { class: 'upcard__title' }, `${items.length} mise${items.length > 1 ? 's' : ''} à jour`),
+    shown.map((item) =>
+      h('div', { class: 'kv' }, h('span', { class: 'kv__name' }, item.title ?? item.name), h('b', { class: 'kv__ver' }, `${item.version ?? '?'} → ${item.update.number}`)),
+    ),
+    more > 0 && h('p', { class: 'upcard__more' }, `et ${more} autre${more > 1 ? 's' : ''}`),
+    h('button', { class: 'btn btn--primary', disabled: busy, onClick: () => updateItems(instance, null, 'mods') }, icon('download'), busy ? 'Mise à jour…' : 'Tout mettre à jour'),
+  );
+}
+
+function hero(instance, status, details, card) {
   const pillState = { ready: 'Prête', busy: status.label.split(' ·')[0], running: 'En jeu', idle: 'À installer' }[status.kind];
   const lastPlayed = formatLastPlayed(instance.lastPlayedAt);
   const sub =
@@ -40,7 +62,8 @@ function hero(instance, status, details) {
 
   return h(
     'section',
-    { class: 'hero', 'aria-label': `Instance ${instance.name}` },
+    { class: `hero${card ? ' hero--updates' : ''}`, 'aria-label': `Instance ${instance.name}` },
+    card,
     h(
       'div',
       { class: 'hero__info' },
@@ -101,7 +124,7 @@ function modpackCard(instance, busy) {
 
 const pad = (n) => String(n).padStart(2, '0');
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const shortTime = (minutes) => (minutes ? formatPlaytime(Math.round(minutes)).replace(' min', '').replace(/^(\d+)$/, '$1 min') : '0 min');
+export const shortTime = (minutes) => (minutes ? formatPlaytime(Math.round(minutes)).replace(' min', '').replace(/^(\d+)$/, '$1 min') : '0 min');
 const SINCE = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 
 function statTile(label, value, foot, extra) {
@@ -129,6 +152,7 @@ function statsTiles(instance) {
       'div',
       { class: 'stat-tile', title: untracked > 0 ? `Dont ${formatPlaytime(untracked)} ${instance.importedFrom ? 'reprises d’un autre launcher ou ' : ''}d’avant le suivi par jour` : null },
       h('span', { class: 'stat-tile__label' }, 'Temps de jeu au total'),
+      h('button', { class: 'stat-tile__link', title: 'Voir le bilan du mois', onClick: openRecap }, 'Bilan du mois'),
       h('span', { class: 'stat-tile__row' }, h('span', { class: 'stat-tile__value' }, shortTime(instance.playtime)), !alone && h('span', { class: 'stat-tile__share' }, `${share} %`)),
       alone
         ? note('Sur cette instance')
@@ -391,10 +415,12 @@ export function renderHome() {
   }
   const status = instanceStatus(instance);
   const details = versionDetails(instance.version);
+  const quiet = status.kind === 'running' || status.kind === 'busy' || instance.loader === 'vanilla';
+  if (!quiet) installedContent(instance, 'mods'); // contrôle à l'ouverture, ensuite gardé en mémoire
   return h(
     'div',
     null,
-    hero(instance, status, details),
+    hero(instance, status, details, quiet ? null : updatesCard(instance)),
     status.kind === 'busy'
       ? h('div', { class: 'home__content' }, h('section', { class: 'card' }, h('div', { class: 'stats' }, progressPanel(instance, details))))
       : h('div', { class: 'home__content' }, infoCards(instance, status, details)),

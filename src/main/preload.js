@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('launcher', {
   memory: invoke('system:memory'),
   openLauncherFolder: invoke('launcher:openFolder'),
   pickJava: invoke('dialog:pickJava'),
+  saveRecapImage: invoke('stats:saveRecapImage'),
   // Chemin d'un fichier glissé-déposé dans la fenêtre
   filePath: (file) => webUtils.getPathForFile(file),
   content: {
@@ -25,6 +26,13 @@ contextBridge.exposeInMainWorld('launcher', {
     update: invoke('content:update'),
     import: invoke('content:import'),
     openFolder: invoke('content:openFolder'),
+    check: invoke('modcheck:run'),
+  },
+  modSets: {
+    create: invoke('modsets:create'),
+    rename: invoke('modsets:rename'),
+    remove: invoke('modsets:delete'),
+    apply: invoke('modsets:apply'),
   },
   modrinth: { search: invoke('modrinth:search'), project: invoke('modrinth:project'), versions: invoke('modrinth:versions') },
   modpacks: {
@@ -55,6 +63,8 @@ contextBridge.exposeInMainWorld('launcher', {
     create: invoke('instances:create'),
     update: invoke('instances:update'),
     duplicate: invoke('instances:duplicate'),
+    pickBackground: invoke('instances:pickBackground'),
+    cleanBackground: invoke('instances:cleanBackground'),
     remove: invoke('instances:delete'),
     shortcut: invoke('instances:shortcut'),
     openFolder: invoke('instances:openFolder'),
@@ -94,6 +104,7 @@ contextBridge.exposeInMainWorld('launcher', {
     gpuStatus: invoke('gpu:status'),
     setGpu: invoke('gpu:set'),
   },
+  profiles: { plan: invoke('profiles:plan'), create: invoke('profiles:create'), installMods: invoke('profiles:installMods') },
   storage: { usage: invoke('storage:usage'), plan: invoke('storage:plan'), clean: invoke('storage:clean') },
   launch: {
     start: invoke('launch:start'),

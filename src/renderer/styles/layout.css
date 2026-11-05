@@ -17,6 +17,23 @@
 
 .scene__art[src] { opacity: 1; }
 
+.scene::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgb(12, 9, 26);
+  opacity: var(--scene-dim, 0);
+  transition: opacity 0.15s;
+}
+
+/* Image perso : remplit la fenêtre au lieu du dessin pixel calé en haut */
+.scene__art--photo {
+  height: 100%;
+  object-fit: cover;
+  image-rendering: auto;
+}
+
 .scene::after {
   content: '';
   position: absolute;
@@ -265,8 +282,61 @@
   text-align: left;
 }
 
-.instance-item:hover {
+.instance-item:hover,
+.instance-row:hover .instance-item {
   background: var(--panel-2);
+}
+
+.instance-row {
+  position: relative;
+}
+
+.instance-play {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-top: -16px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: #6d4ff0;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+
+.instance-row:hover .instance-play,
+.instance-row:focus-within .instance-play,
+.instance-row:has(.instance-item[aria-current='true']) .instance-play {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.instance-play:hover {
+  background: #7d62f5;
+}
+
+.instance-play svg {
+  width: 16px;
+  height: 16px;
+}
+
+.instance-row:hover .instance-item,
+.instance-row:focus-within .instance-item,
+.instance-row:has(.instance-play) .instance-item[aria-current='true'] {
+  padding-right: 48px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .instance-play {
+    transition: none;
+  }
 }
 
 .instance-item[aria-current='true'] {
@@ -430,3 +500,22 @@
 
 .side-link__dot + .count-badge { margin-left: 8px; }
 .count-badge--danger { border-radius: 6px; background: var(--danger-bg); border: 1px solid var(--danger-line); color: var(--danger); }
+
+/* Compteur de mises a jour de mods sur la ligne d une instance (Jouer garde sa place a droite) */
+.instance-item__line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.instance-item__line .instance-item__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-count {
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent-3);
+  color: #14102a;
+  font-size: 12px;
+  font-weight: 700;
+}

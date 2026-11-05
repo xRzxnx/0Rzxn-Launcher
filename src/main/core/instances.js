@@ -6,6 +6,7 @@ const fsp = fs.promises;
 const path = require('node:path');
 const { exists, readJson, writeJson } = require('./store');
 const { isInstalled } = require('./versions');
+const modSets = require('./mod-sets');
 
 const DEFAULT_SETTINGS = {
   ram: 4,
@@ -38,6 +39,18 @@ function cleanGroup(value) {
 
 /** Compte propre à l'instance ; vide = le compte actif du launcher. */
 const cleanAccount = (value) => (typeof value === 'string' && value ? value.slice(0, 80) : null);
+
+const BACKGROUNDS = new Set(['sunset', 'night', 'forest', 'image']);
+const BACKGROUND_FILE = /^fond-\d+\.(png|jpg|webp)$/;
+const BACKGROUND_MAX = 10 * 1024 * 1024;
+
+/** Vérifie les premiers octets : l'extension seule ne prouve rien. */
+function imageExtension(head) {
+  if (head.length >= 8 && head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'jpg';
+  if (head.length >= 12 && head.toString('latin1', 0, 4) === 'RIFF' && head.toString('latin1', 8, 12) === 'WEBP') return 'webp';
+  return null;
+}
 
 const pad = (n) => String(n).padStart(2, '0');
 /** Clé « 2026-11-03 » dans le fuseau local. */
@@ -103,8 +116,17 @@ class InstanceStore {
       loader,
       loaderVersion: loader === 'vanilla' ? null : data.loaderVersion,
       settings: sanitizeSettings(data.settings),
+      ...modSets.sanitize(data.modSets, data.activeModSet),
       installed: isInstalled(this.dirs, data.version) && loaderReady,
     };
+  }
+
+  /** Ensembles de mods (validés) et ensemble actif. */
+  saveModSets(id, sets, active) {
+    const current = readJson(this.file(id), null);
+    if (!current) throw new Error('Instance introuvable.');
+    Object.assign(current, modSets.sanitize(sets, active));
+    writeJson(this.file(id), current);
   }
 
   /** Modpack d'origine : { projectId, versionId, name, version, icon, files } (null pour l'effacer). */
@@ -188,9 +210,61 @@ class InstanceStore {
     if (patch.loader !== undefined) Object.assign(next, checkLoader(patch.loader, patch.loaderVersion));
     if (patch.group !== undefined) next.group = cleanGroup(patch.group);
     if (patch.accountId !== undefined) next.accountId = cleanAccount(patch.accountId);
+    if (patch.background !== undefined) next.background = this.cleanBackground(id, patch.background);
     if (patch.settings) next.settings = sanitizeSettings(patch.settings, sanitizeSettings(current.settings));
     writeJson(this.file(id), next);
+    if (patch.background !== undefined) this.cleanBackgroundFiles(id);
     return this.get(id);
+  }
+
+  /** Fond de l'instance : { kind, dim, image? } ; null = décor par défaut. */
+  cleanBackground(id, value) {
+    if (value == null) return null;
+    if (!BACKGROUNDS.has(value.kind)) throw new Error('Fond inconnu.');
+    const dim = Number.isFinite(value.dim) ? Math.min(100, Math.max(0, Math.round(value.dim))) : 0;
+    if (value.kind !== 'image') return { kind: value.kind, dim };
+    if (typeof value.image !== 'string' || !BACKGROUND_FILE.test(value.image) || !exists(path.join(this.dir(id), value.image))) throw new Error('Image de fond introuvable.');
+    return { kind: 'image', dim, image: value.image };
+  }
+
+  /** Copie une image choisie dans le dossier de l'instance (png, jpeg ou webp, 10 Mo au maximum). Renvoie le nom du fichier. */
+  async importBackground(id, file) {
+    if (typeof file !== 'string' || !path.isAbsolute(file)) throw new Error('Fichier invalide.');
+    if (!/\.(png|jpe?g|webp)$/i.test(file)) throw new Error('Choisis une image PNG, JPEG ou WebP.');
+    const stat = await fsp.stat(file);
+    if (!stat.isFile()) throw new Error('Fichier invalide.');
+    if (stat.size > BACKGROUND_MAX) throw new Error('Cette image est trop lourde (10 Mo au maximum).');
+    const handle = await fsp.open(file, 'r');
+    let head;
+    try {
+      const buffer = Buffer.alloc(16);
+      const { bytesRead } = await handle.read(buffer, 0, 16, 0);
+      head = buffer.subarray(0, bytesRead);
+    } finally {
+      await handle.close();
+    }
+    const ext = imageExtension(head);
+    if (!ext) throw new Error("Ce fichier n'est pas une image PNG, JPEG ou WebP valide.");
+    const name = `fond-${Date.now()}.${ext}`;
+    await fsp.copyFile(file, path.join(this.dir(id), name));
+    return name;
+  }
+
+  /** Chemin d'une image de fond de l'instance, ou null si le nom n'est pas valable. */
+  backgroundFile(id, name) {
+    return BACKGROUND_FILE.test(name) ? path.join(this.dir(id), name) : null;
+  }
+
+  /** Supprime les images de fond qui ne sont plus utilisées (remplacées, annulées ou fond retiré). */
+  cleanBackgroundFiles(id) {
+    const used = readJson(this.file(id), null)?.background?.image;
+    try {
+      for (const name of fs.readdirSync(this.dir(id))) {
+        if (BACKGROUND_FILE.test(name) && name !== used) fs.rmSync(path.join(this.dir(id), name), { force: true });
+      }
+    } catch {
+      // dossier illisible : rien à nettoyer
+    }
   }
 
   /** Fin d'une partie : temps total, minutes par jour (une partie à cheval sur minuit compte sur les deux jours), record. */

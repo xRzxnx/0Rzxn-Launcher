@@ -1,5 +1,6 @@
 // Raccourcis clavier du launcher. Les chiffres sont lus par position (Digit1…) pour marcher en AZERTY.
 import { requestLaunch } from './actions.js';
+import { togglePalette } from './palette-actions.js';
 import { activeAccount, selectedInstance, state, update } from './state.js';
 import { focusSearch, go, openNewInstance, selectInstance, TABS, visibleInstances } from './views/chrome.js';
 
@@ -14,7 +15,8 @@ export const SHORTCUTS = [
   {
     title: 'Instances',
     rows: [
-      { label: 'Rechercher', keys: ['Ctrl', 'F'] },
+      { label: 'Recherche globale', keys: ['Ctrl', 'K'] },
+      { label: 'Rechercher dans les instances', keys: ['Ctrl', 'F'] },
       { label: 'Précédente / suivante', keys: ['Alt', '↑', '↓'] },
       { label: 'Nouvelle instance', keys: ['Ctrl', 'N'] },
     ],
@@ -73,6 +75,12 @@ export function handleShortcut(e) {
     e.preventDefault();
     if (state.modal?.type === 'shortcuts') update((s) => { s.modal = null; });
     else if (!state.modal) update((s) => { s.modal = { type: 'shortcuts' }; });
+    return;
+  }
+  // Ctrl+K : recherche globale, depuis n'importe où sauf une autre fenêtre modale.
+  if (ctrl && !e.shiftKey && !e.altKey && key === 'k' && (!state.modal || state.modal.type === 'palette')) {
+    e.preventDefault();
+    togglePalette();
     return;
   }
   if (state.modal || !state.ready) return;

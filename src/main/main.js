@@ -6,6 +6,7 @@ const { registerIpc } = require('./ipc');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'skin', privileges: { standard: true, secure: true } },
+  { scheme: 'fond', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 
 const COLORS = {

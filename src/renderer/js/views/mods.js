@@ -21,6 +21,7 @@ import {
   updateItems,
 } from '../mods-actions.js';
 import { selectedInstance, state, update } from '../state.js';
+import { modSetsBar } from './mod-sets.js';
 
 const compact = new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 });
 const SORTS = [
@@ -131,6 +132,7 @@ function installedView(instance, running) {
       h('button', { class: 'btn btn--lg', onClick: () => refreshInstalled(instance), 'aria-label': 'Actualiser' }, icon('refresh')),
       h('button', { class: 'btn btn--lg', onClick: () => openContentFolder(instance) }, icon('folder'), 'Dossier'),
     ),
+    kind === 'mods' && instance.loader !== 'vanilla' && data?.items && modSetsBar(instance, data.items, running),
     data && !data.online && data.items?.length > 0 && h('p', { class: 'hint', style: 'margin:10px 0 0' }, 'Modrinth injoignable : mises à jour indisponibles, informations locales affichées.'),
     h(
       'div',

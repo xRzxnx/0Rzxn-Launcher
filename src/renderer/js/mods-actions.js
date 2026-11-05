@@ -29,6 +29,25 @@ export async function refreshInstalled(instance = selectedInstance(), kind = sta
   }
 }
 
+/** Mods dont une version plus récente existe (d'après le dernier contrôle, sans rien charger). */
+export function pendingModUpdates(instance) {
+  if (!instance || instance.loader === 'vanilla') return [];
+  return (state.mods.installed[keyOf(instance, 'mods')]?.items ?? []).filter((item) => item.update);
+}
+
+let backgroundDone = false;
+
+/** Une fois par démarrage : vérifie les autres instances moddées, une à la fois, sans bruit. */
+export async function checkOtherInstances() {
+  if (backgroundDone) return;
+  backgroundDone = true;
+  for (const instance of [...state.instances]) {
+    if (state.versions.offline) return;
+    if (instance.id === state.selectedId || instance.loader === 'vanilla' || state.mods.installed[keyOf(instance, 'mods')]) continue;
+    await refreshInstalled(instance, 'mods').catch(() => {});
+  }
+}
+
 function setBusy(id, value) {
   update((s) => {
     if (value) s.mods.busy[id] = true;
@@ -154,12 +173,12 @@ export async function deleteItem(instance, item) {
   }
 }
 
-export async function updateItems(instance, files = null) {
+export async function updateItems(instance, files = null, kind = state.mods.kind) {
   const id = files ? files[0] : '*update-all*';
   setBusy(id, true);
   try {
-    const updated = await api.updateContent(instance.id, state.mods.kind, files);
-    await refreshInstalled(instance);
+    const updated = await api.updateContent(instance.id, kind, files);
+    await refreshInstalled(instance, kind);
     toast({ kind: 'success', title: updated.length > 1 ? `${updated.length} mises à jour installées` : 'Mise à jour installée', text: updated.map((u) => `${u.title} ${u.version}`).join(', ') });
   } catch (error) {
     toastError('Mise à jour impossible', error);
@@ -261,4 +280,63 @@ export async function exportInstance(instance, options) {
     timeout: 10000,
   });
   return true;
+}
+
+// ---------- Ensembles de mods ----------
+
+/** Même identifiant stable que dans le processus principal (src/main/core/mod-sets.js). */
+export const modStableId = (item) => (item.modId ? `m:${String(item.modId).toLowerCase()}` : `f:${item.file.replace(/\.disabled$/, '').toLowerCase()}`);
+
+/** Mods d'un ensemble qui sont encore installés. */
+export function modSetCount(set, items) {
+  const ids = new Set(set.mods);
+  return items.filter((i) => ids.has(modStableId(i))).length;
+}
+
+export function openModSetDialog(instance, set = null) {
+  update((s) => { s.modal = { type: 'mod-set', instanceId: instance.id, setId: set?.id ?? null, name: set?.name ?? '' }; });
+}
+
+export function openModSetDelete(instance, set) {
+  update((s) => { s.modal = { type: 'mod-set-delete', instanceId: instance.id, setId: set.id }; });
+}
+
+async function afterSetChange(instance) {
+  await refreshInstances();
+  await refreshInstalled(instance, 'mods');
+}
+
+export async function saveModSet(instance, setId, name) {
+  if (setId) await api.renameModSet(instance.id, setId, name);
+  else await api.createModSet(instance.id, name);
+  await afterSetChange(instance);
+  update((s) => { s.modal = null; });
+}
+
+export async function removeModSet(instance, setId) {
+  await api.deleteModSet(instance.id, setId);
+  await afterSetChange(instance);
+  update((s) => { s.modal = null; });
+}
+
+/** Active un ensemble (ou tous les mods avec setId nul). Les échecs partiels sont signalés, l'état affiché est relu. */
+export async function selectModSet(instance, setId) {
+  if (state.mods.busy['*sets*']) return;
+  setBusy('*sets*', true);
+  try {
+    const result = await api.applyModSet(instance.id, setId);
+    if (result.failed.length) {
+      toast({
+        kind: 'error',
+        title: 'Bascule incomplète',
+        text: `${result.failed.length} mod${result.failed.length > 1 ? 's' : ''} n'ont pas pu changer d'état (${result.failed.slice(0, 3).map((f) => f.file).join(', ')}). Ferme ce qui les utilise et réessaie.`,
+        timeout: 12000,
+      });
+    }
+  } catch (error) {
+    toastError('Changement d’ensemble impossible', error);
+  } finally {
+    await afterSetChange(instance).catch(() => {});
+    setBusy('*sets*', false);
+  }
 }

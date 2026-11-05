@@ -9,9 +9,10 @@ import { renderMods } from './views/mods.js';
 import { renderVersions } from './views/versions.js';
 import { handleShortcut } from './shortcuts.js';
 import { init } from './actions.js';
-import { sceneUrl } from './banner.js';
+import { checkOtherInstances } from './mods-actions.js';
+import { renderScene } from './scene.js';
 import { h } from './dom.js';
-import { selectedInstance, state, subscribe } from './state.js';
+import { state, subscribe } from './state.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -67,6 +68,15 @@ function restore(snap, sameView) {
     }
   });
   if (sameView) $('main').scrollTop = snap.mainScroll;
+  if (state.modal?.type === 'palette') {
+    // La palette garde toujours le focus dans son champ, et la ligne choisie au clavier reste visible.
+    const field = document.getElementById('palette-input');
+    if (field && snap.focus?.id !== 'palette-input') field.focus({ preventScroll: true });
+    if (state.modal.reveal) {
+      document.querySelector('[data-reveal]')?.scrollIntoView({ block: 'nearest' });
+      state.modal.reveal = false;
+    }
+  }
   if (snap.focus) {
     const el = document.getElementById(snap.focus.id);
     if (el) {
@@ -80,18 +90,6 @@ function restore(snap, sameView) {
       }
     }
   }
-}
-
-const DEFAULT_SEED = 120;
-let sceneSeed = null;
-
-/** Le décor suit l'instance sélectionnée. */
-function renderScene() {
-  if (!state.ready) return;
-  const seed = selectedInstance()?.seed ?? DEFAULT_SEED;
-  if (seed === sceneSeed) return;
-  sceneSeed = seed;
-  $('scene-art').src = sceneUrl(seed);
 }
 
 function render() {
@@ -120,4 +118,4 @@ document.addEventListener('keydown', handleShortcut);
 
 subscribe(render);
 render();
-init();
+init().then(() => setTimeout(() => checkOtherInstances().catch(() => {}), 4000));

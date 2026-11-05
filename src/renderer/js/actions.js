@@ -274,9 +274,66 @@ export function setActiveAccount(id) {
 
 // ---------- Lancement ----------
 
+let checkingMods = false;
+
 export async function requestLaunch(options = {}) {
   const instance = selectedInstance();
-  if (!instance || !activeAccount() || state.run) return;
+  if (!instance || !activeAccount() || state.run || checkingMods) return;
+  checkingMods = true;
+  try {
+    const { problems } = await api.checkMods(instance.id);
+    if (problems.length) {
+      update((s) => { s.modal = { type: 'mod-check', instanceId: instance.id, options, problems }; });
+      return;
+    }
+  } catch {
+    // le diagnostic ne doit jamais empêcher de jouer
+  } finally {
+    checkingMods = false;
+  }
+  continueLaunch(instance, options);
+}
+
+/** Applique une correction (activer ou désactiver un mod), puis met la liste à jour. */
+export async function fixModProblem(problem) {
+  const modal = state.modal;
+  if (modal?.type !== 'mod-check' || !problem.action) return;
+  try {
+    await api.toggleContent(modal.instanceId, 'mods', problem.action.file);
+    const { problems } = await api.checkMods(modal.instanceId);
+    if (problems.length) update((s) => { if (s.modal?.type === 'mod-check') s.modal.problems = problems; });
+    else {
+      update((s) => { s.modal = null; });
+      toast({ kind: 'success', title: 'Mods corrigés', text: 'Plus aucun problème détecté.' });
+    }
+  } catch (error) {
+    toastError('Correction impossible', error);
+  }
+}
+
+/** Applique toutes les corrections, puis lance. */
+export async function fixAllAndLaunch() {
+  const modal = state.modal;
+  if (modal?.type !== 'mod-check') return;
+  const files = [...new Set(modal.problems.map((p) => p.action?.file).filter(Boolean))];
+  try {
+    for (const file of files) await api.toggleContent(modal.instanceId, 'mods', file);
+  } catch (error) {
+    toastError('Correction impossible', error);
+    return;
+  }
+  const instance = state.instances.find((i) => i.id === modal.instanceId);
+  if (instance) continueLaunch(instance, modal.options);
+}
+
+export function launchAnyway() {
+  const modal = state.modal;
+  const instance = modal && state.instances.find((i) => i.id === modal.instanceId);
+  if (instance) continueLaunch(instance, modal.options);
+}
+
+async function continueLaunch(instance, options) {
+  update((s) => { s.modal = null; });
   const { freeGb } = await refreshMemory();
   if (instance.settings.lowRamWarning && instance.settings.ram * 0.7 > freeGb) {
     update((s) => { s.modal = { type: 'low-ram', instanceId: instance.id, options }; });
