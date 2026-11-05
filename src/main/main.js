@@ -26,7 +26,6 @@ function createWindow() {
     minHeight: 680,
     title: '0Rzxn_ Launcher',
     backgroundColor: COLORS.background,
-    show: false,
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: COLORS.titlebar, symbolColor: COLORS.symbols, height: 34 },
     webPreferences: {
@@ -40,7 +39,8 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  // Pas de show: false + ready-to-show : Chromium met ~300 ms à peindre sa première image, la fenêtre
+  // (déjà au bon fond sombre) apparaît sans l'attendre.
 
   // Les liens externes s'ouvrent dans le navigateur, jamais dans le launcher.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

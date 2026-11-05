@@ -37,18 +37,9 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ],
       "icon": "build/icon.ico"
-    },
-    "portable": {
-      "artifactName": "0Rzxn_-Launcher-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
