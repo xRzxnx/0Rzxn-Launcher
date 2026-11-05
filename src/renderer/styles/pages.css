@@ -858,13 +858,79 @@
 
 .path-preview strong { font-weight: 500; color: var(--text); }
 
+/* Liste déroulante : <select> natif, stylable grâce à base-select (clavier et accessibilité conservés). */
+.select,
+.select::picker(select) {
+  appearance: base-select;
+}
+
 .select {
   height: 50px;
   width: 100%;
   padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: 1px solid var(--line-4);
   background: var(--bg-deep);
   font-size: 15px;
+  transition: border-color 0.14s ease;
+}
+
+.select:hover:not(:disabled),
+.select:open { border-color: var(--accent-line); }
+
+.select::picker-icon {
+  margin-left: auto;
+  color: var(--muted);
+  transition: rotate 0.14s ease;
+}
+.select:open::picker-icon { rotate: 180deg; }
+
+.select::picker(select) {
+  margin-block: 6px;
+  padding: 6px;
+  max-height: min(340px, 60vh);
+  overflow-y: auto;
+  border: 1px solid var(--line-3);
+  border-radius: var(--r-md);
+  background: rgba(30, 22, 58, 0.94);
+  -webkit-backdrop-filter: var(--glass-fx);
+  backdrop-filter: var(--glass-fx);
+  box-shadow: 0 18px 44px rgba(8, 5, 20, 0.55);
+  color: var(--text);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.select option {
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--r-sm);
+  font-size: 14.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.select option:hover,
+.select option:focus-visible {
+  outline: 0;
+  background: var(--panel-3);
+}
+
+.select option:checked {
+  background: var(--accent-bg);
+  font-weight: 600;
+}
+
+.select option::checkmark {
+  order: 1;
+  margin-left: auto;
+  color: var(--accent-3);
 }
 
 /* ---------- Boutons-icônes ---------- */
