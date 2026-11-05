@@ -87,6 +87,7 @@ contextBridge.exposeInMainWorld('launcher', {
   },
   perf: {
     preview: invoke('perf:preview'),
+    ramGuide: invoke('perf:ramGuide'),
     pack: invoke('perf:pack'),
     installPack: invoke('perf:installPack'),
     metrics: invoke('perf:metrics'),

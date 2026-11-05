@@ -61,15 +61,34 @@ function jvmArguments({ preset = 'auto', javaMajor, ramGb, jvmArgs = '', cpus })
   return { gc, args: heap };
 }
 
-/** Mémoire conseillée en Go : base du loader, nombre de mods, marge si ZGC est imposé, au plus la moitié de la RAM. */
-function recommendedRam({ loader = 'vanilla', mods = 0, zgc = false, totalGb = os.totalmem() / 1024 ** 3 }) {
-  let gb = loader === 'vanilla' ? 3 : 4;
-  if (mods > 50) gb = 6;
-  if (mods > 120) gb = 8;
-  if (mods > 200) gb = 10;
-  if (zgc) gb += 1; // ZGC prend 10 à 15 % de mémoire en plus
-  const cap = Math.max(2, Math.floor(totalGb / 2));
-  return Math.min(gb, cap);
+// Part maximale de la RAM du PC donnée au jeu : le tas est réservé d'un coup, Windows doit garder le reste.
+// Une carte intégrée prend sa mémoire dans la RAM : on en laisse plus.
+const RAM_SHARE = 0.6;
+const RAM_SHARE_INTEGRATED = 0.5;
+
+/** Versions d'avant 1.13 : monde et textures bien plus légers. */
+function isOldVersion(version) {
+  const release = /^1\.(\d+)/.exec(version);
+  return release ? Number(release[1]) < 13 : /^(a|b|c|rd|inf)/.test(version);
+}
+
+/**
+ * Mémoire utile en Go, selon l'instance puis selon le PC.
+ * min : en dessous, le jeu manque de mémoire ; low à high : zone idéale ; cap : limite du PC ; ideal : valeur conseillée.
+ */
+function ramGuide({ loader = 'vanilla', version = '', mods = 0, shaders = 0, zgc = false, totalGb = os.totalmem() / 1024 ** 3, integrated = false }) {
+  let [low, high] = [4, 6];
+  if (loader === 'vanilla') [low, high] = isOldVersion(version) ? [2, 3] : [3, 4];
+  else if (mods > 200) [low, high] = [10, 12];
+  else if (mods > 120) [low, high] = [8, 10];
+  else if (mods > 50) [low, high] = [6, 8];
+  const extra = (shaders > 0 ? 1 : 0) + (zgc ? 1 : 0); // ZGC prend 10 à 15 % de mémoire en plus
+  const share = integrated ? RAM_SHARE_INTEGRATED : RAM_SHARE;
+  const cap = Math.max(2, Math.floor(Math.round(totalGb) * share * 2) / 2);
+  const limited = cap < high + extra;
+  low = Math.min(low + extra, cap);
+  high = Math.min(high + extra, cap);
+  return { min: Math.max(1.5, low - 1), low, high, cap, limited, ideal: Math.min(high, Math.ceil((low + high) / 2)) };
 }
 
 // ---------- Pack Performances ----------
@@ -178,4 +197,11 @@ async function packInstalledCount({ gameDir, instance }) {
   return { installed: count, mods: installed.filter((m) => m.enabled).length };
 }
 
-module.exports = { PRESETS, G1_ARGS, COMMON_ARGS, ZGC_MIN_CPUS, ZGC_MIN_RAM, zgcArgs, userChoosesGc, resolveGc, jvmArguments, recommendedRam, PACK, packStatus, installPack, packInstalledCount };
+/** Shaders présents et actifs (une instance vanilla ne peut pas en charger). */
+async function activeShaders({ gameDir, instance }) {
+  if (instance.loader === 'vanilla') return 0;
+  const { items } = await content.listContent({ gameDir, kind: 'shaders', instance, online: false });
+  return items.filter((item) => item.enabled).length;
+}
+
+module.exports = { PRESETS, G1_ARGS, COMMON_ARGS, ZGC_MIN_CPUS, ZGC_MIN_RAM, zgcArgs, userChoosesGc, resolveGc, jvmArguments, ramGuide, PACK, packStatus, installPack, packInstalledCount, activeShaders };

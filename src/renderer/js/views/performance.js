@@ -84,7 +84,7 @@ function ramAdviceSection({ settings, save }, preview) {
       null,
       h('button', { class: `btn${applied ? '' : ' btn--primary'}`, disabled: !ram || applied, onClick: () => update(() => { settings.ram = ram; save(); }) }, applied ? 'Déjà appliqué' : `Mettre ${ram ? formatGo(ram) : '…'}`),
     ),
-    h('p', { class: 'hint' }, `Calcul : base du loader, nombre de mods, marge si tu imposes ZGC, au plus la moitié de la RAM du PC (${formatGo(Math.round(state.memory.totalGb))}).`),
+    h('p', { class: 'hint' }, `Calcul : loader, nombre de mods, shaders, marge si tu imposes ZGC, et limite de ce PC (${preview?.pc ?? formatGo(Math.round(state.memory.totalGb))}).`),
   );
 }
 

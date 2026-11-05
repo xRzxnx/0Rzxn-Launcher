@@ -61,6 +61,7 @@ export const state = {
     busy: {}, // projet ou fichier en cours de traitement → true
   },
   perf: {
+    guides: {}, // « instance|préréglage » → conseil de mémoire | { loading } | { error }
     previews: {}, // « instance|préréglage|ram|arguments » → aperçu des arguments Java | { loading } | { error }
     last: {}, // instance → dernier aperçu (affiché pendant le calcul du suivant)
     metrics: null, // consommation du launcher { cpu, memoryMb, running }
@@ -92,6 +93,11 @@ export function update(mutate) {
   // Fenêtre réduite pendant une partie : requestAnimationFrame est en pause, on passe par un minuteur.
   if (document.hidden) setTimeout(flush, 100);
   else requestAnimationFrame(flush);
+}
+
+/** Mods, shaders, version ou loader changés : le conseil de mémoire est à recalculer. */
+export function forgetRamGuide(instanceId) {
+  for (const key of Object.keys(state.perf.guides)) if (key.startsWith(`${instanceId}|`)) delete state.perf.guides[key];
 }
 
 export function selectedInstance() {

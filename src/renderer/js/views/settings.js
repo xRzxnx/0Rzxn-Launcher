@@ -1,7 +1,9 @@
 // Paramètres : réglages de l'instance sélectionnée ou réglages globaux (utilisés par les nouvelles instances).
 import { saveSettings, versionDetails } from '../actions.js';
 import { api } from '../api.js';
+import { ramRange, ramVerdict } from '../data.js';
 import { blockIcon, formatGo, h, icon } from '../dom.js';
+import { ramGuide, refreshFreeRam } from '../perf-actions.js';
 import { selectedInstance, state, toastError, update } from '../state.js';
 import { go } from './chrome.js';
 import { renderLauncherTab, renderStorageTab } from './launcher-settings.js';
@@ -14,17 +16,17 @@ const AFTER_LAUNCH = [
   { id: 'hide', label: 'Masquer' },
 ];
 
-function ramHint(ram) {
-  const { totalGb, freeGb } = state.memory;
-  if (ram * 0.7 > freeGb) return { warn: true, text: `RAM libre insuffisante (${formatGo(freeGb.toFixed(1))}) : le launcher te préviendra avant de lancer.` };
-  if (ram > totalGb / 2) return { warn: true, text: `${formatGo(ram)}, c'est plus de la moitié de ta RAM. Windows risque de ralentir.` };
-  return { warn: false, text: 'Recommandé : 4 à 6 Go pour la vanilla, 6 à 8 Go avec beaucoup de mods.' };
+function ramHint(ram, guide) {
+  if (!guide) return { warn: false, text: '' };
+  const verdict = ramVerdict(ram, guide, state.memory.freeGb);
+  return { warn: verdict.level !== 'ok', text: `${verdict.title} : ${verdict.text} Conseillé : ${ramRange(guide)}.` };
 }
 
 /** Ctx = { settings, save } : `save()` enregistre (avec un petit délai) le bon jeu de réglages. */
-function memorySection({ settings, save }) {
+function memorySection({ settings, save }, instance) {
   const maxRam = Math.max(2, Math.floor(state.memory.totalGb * 2) / 2);
-  const hint = ramHint(settings.ram);
+  const guide = ramGuide(instance);
+  const hint = ramHint(settings.ram, guide);
   const value = h('span', { class: 'ram-value' }, formatGo(settings.ram));
   const hintEl = h('p', { class: `hint${hint.warn ? ' hint--warn' : ''}` }, hint.text);
   return h(
@@ -40,21 +42,22 @@ function memorySection({ settings, save }) {
       max: maxRam,
       step: 0.5,
       value: settings.ram,
-      // Mise à jour sans redessin complet, pour garder le curseur en main.
+      onPointerdown: refreshFreeRam,
+      // Mise à jour sans redessin complet, pour garder le curseur en main ; enregistré au relâchement.
       onInput: (e) => {
         settings.ram = Number(e.target.value);
-        const next = ramHint(settings.ram);
+        const next = ramHint(settings.ram, guide);
         value.textContent = formatGo(settings.ram);
         hintEl.textContent = next.text;
         hintEl.className = `hint${next.warn ? ' hint--warn' : ''}`;
-        save();
       },
+      onChange: save,
     }),
     h(
       'div',
       { class: 'scale' },
       h('span', null, '1 Go'),
-      h('span', null, `${formatGo(Math.round(state.memory.totalGb))} sur ce PC · ${formatGo(state.memory.freeGb.toFixed(1))} libres`),
+      h('span', { title: guide?.pc.detail ?? null }, `${guide?.pc.summary ?? formatGo(Math.round(state.memory.totalGb))} · ${formatGo(state.memory.freeGb.toFixed(1))} libres`),
     ),
     hintEl,
   );
@@ -299,7 +302,7 @@ export function renderSettings() {
     h(
       'div',
       { class: 'settings__grid' },
-      memorySection(ctx),
+      memorySection(ctx, scope === 'instance' ? instance : null),
       javaSection(ctx, scope === 'instance' ? instance.version : null),
       ...Object.values(performanceSections(ctx, scope === 'instance' ? instance : null)).filter(Boolean),
       windowSection(ctx),

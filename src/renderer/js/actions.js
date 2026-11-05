@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
-import { activeAccount, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
+import { activeAccount, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
 
 export async function refreshInstances() {
   const instances = await api.instances();
@@ -151,6 +151,7 @@ export async function createInstance(draft) {
 export async function editInstance(id, patch) {
   await api.updateInstance(id, patch);
   await refreshInstances();
+  forgetRamGuide(id);
   update((s) => { s.modal = null; });
   toast({ kind: 'success', title: 'Instance modifiée', text: patch.name });
 }

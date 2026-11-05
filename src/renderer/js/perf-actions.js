@@ -2,7 +2,7 @@
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { refreshInstalled } from './mods-actions.js';
-import { selectedInstance, state, toast, toastError, update } from './state.js';
+import { forgetRamGuide, selectedInstance, state, toast, toastError, update } from './state.js';
 
 const previewKey = (instanceId, s) => `${instanceId ?? 'global'}|${s.jvmPreset}|${s.ram}|${s.jvmArgs}`;
 
@@ -23,9 +23,30 @@ export function perfPreview(instanceId, settings) {
   return known && !known.loading && !known.error ? known : state.perf.last[instanceId ?? 'global'] ?? null;
 }
 
+/** Conseil de mémoire pour une instance (ou les réglages globaux) ; null pendant le calcul. */
+export function ramGuide(instance) {
+  const settings = instance?.settings ?? state.globalSettings;
+  const key = `${instance?.id ?? 'global'}|${settings.jvmPreset}`;
+  const known = state.perf.guides[key];
+  if (!known) {
+    state.perf.guides[key] = { loading: true };
+    api
+      .perfRamGuide(instance?.id ?? null, settings)
+      .then((data) => update((s) => { s.perf.guides[key] = data; }))
+      .catch(() => update((s) => { s.perf.guides[key] = { error: true }; }));
+  }
+  return known && !known.loading && !known.error ? known : null;
+}
+
+/** RAM libre à jour, sans redessin : l'interface reste celle que l'utilisateur est en train de manipuler. */
+export function refreshFreeRam() {
+  api.memory().then((memory) => { state.memory = memory; }).catch(() => {});
+}
+
 /** Le contenu de l'instance a changé : l'aperçu (nombre de mods, RAM conseillée) est à refaire. */
 export function forgetPreviews(instanceId) {
   for (const key of Object.keys(state.perf.previews)) if (key.startsWith(`${instanceId}|`)) delete state.perf.previews[key];
+  forgetRamGuide(instanceId);
 }
 
 export async function openPack(instance = selectedInstance()) {

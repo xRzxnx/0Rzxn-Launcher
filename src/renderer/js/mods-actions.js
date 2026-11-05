@@ -1,7 +1,7 @@
 // Actions de l'onglet Mods : contenu installé, recherche Modrinth, installation, mises à jour.
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
-import { selectedInstance, state, toast, toastError, update } from './state.js';
+import { forgetRamGuide, selectedInstance, state, toast, toastError, update } from './state.js';
 
 export const KIND_LABELS = { mods: 'Mods', resourcepacks: 'Packs de ressources', shaders: 'Shaders', modpacks: 'Modpacks' };
 const SINGULAR = { mods: 'mod', resourcepacks: 'pack de ressources', shaders: 'shader' };
@@ -22,6 +22,7 @@ export async function refreshInstalled(instance = selectedInstance(), kind = sta
   state.mods.installed[key] = { ...(state.mods.installed[key] ?? {}), loading: true };
   try {
     const data = await api.content(instance.id, kind);
+    forgetRamGuide(instance.id);
     update((s) => { s.mods.installed[key] = { ...data, loading: false }; });
   } catch (error) {
     update((s) => { s.mods.installed[key] = { items: [], loading: false, error: error.message }; });

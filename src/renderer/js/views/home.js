@@ -1,7 +1,8 @@
 // Onglet Accueil : bannière de l'instance, bouton Jouer, cartes d'informations ou progression.
 import { createShortcut, duplicateInstance, openInstanceFolder, requestLaunch, saveSettings, stopGame, verifyInstance, versionDetails } from '../actions.js';
-import { checkModpackUpdate, installedContent, updateModpack } from '../mods-actions.js';
-import { FILES_STEP, JAVA_STEP, LAUNCH_STEPS, LOADER_NAMES, LOADER_STEP, MEMORY_STEP, formatLastPlayed, loaderLabel } from '../data.js';
+import { checkModpackUpdate, updateModpack } from '../mods-actions.js';
+import { ramGuide, refreshFreeRam } from '../perf-actions.js';
+import { FILES_STEP, JAVA_STEP, LAUNCH_STEPS, LOADER_NAMES, LOADER_STEP, MEMORY_STEP, formatLastPlayed, loaderLabel, ramRange, ramVerdict, ramZones } from '../data.js';
 import { formatGo, formatPlaytime, h, icon } from '../dom.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceAccount, instanceStatus, runPercent, selectedInstance, state, update } from '../state.js';
@@ -189,39 +190,74 @@ function blockCube(instance, still) {
   return { stage, aim };
 }
 
-function ramTile(instance, busy) {
+const RAM_MIN = 1;
+
+/** Tuile Mémoire : le conseil suit le curseur, d'après l'instance et les composants du PC. */
+function ramTile(instance, guide, busy) {
   const settings = instance.settings;
+  const max = Math.max(2, settings.ram, Math.floor(state.memory.totalGb * 2) / 2);
   const value = h('span', { class: 'spec-tile__value' }, formatGo(settings.ram));
+  const badge = h('span', { class: 'ram-badge' });
+  const advice = h('p', { class: 'ram-advice' });
+  const showVerdict = () => {
+    if (!guide) return;
+    const verdict = ramVerdict(settings.ram, guide, state.memory.freeGb);
+    badge.className = `ram-badge ram-badge--${verdict.level}`;
+    badge.textContent = verdict.title;
+    advice.textContent = verdict.text;
+  };
+  showVerdict();
   return h(
     'div',
-    { class: 'spec-tile' },
-    h('label', { class: 'spec-tile__label', for: 'home-ram' }, 'Mémoire'),
-    value,
+    { class: 'spec-tile spec-tile--ram' },
+    h('div', { class: 'ram-row' }, h('label', { class: 'spec-tile__label', for: 'home-ram' }, 'Mémoire'), badge),
+    h(
+      'div',
+      { class: 'ram-row' },
+      value,
+      guide &&
+        h(
+          'button',
+          {
+            class: 'ram-ideal',
+            disabled: busy,
+            title: `Régler sur ${formatGo(guide.ideal)}`,
+            onClick: () => update(() => {
+              settings.ram = guide.ideal;
+              saveSettings('instance', instance.id);
+            }),
+          },
+          `Conseillé : ${ramRange(guide)}`,
+        ),
+    ),
     h('input', {
       id: 'home-ram',
-      class: 'range-thin',
+      class: 'range-zones',
       type: 'range',
-      min: 1,
-      max: Math.max(2, settings.ram, Math.floor(state.memory.totalGb * 2) / 2),
+      min: RAM_MIN,
+      max,
       step: 0.5,
       value: settings.ram,
       disabled: busy,
-      // Sans redessin, pour garder le curseur en main.
+      style: guide ? `background:${ramZones(guide, RAM_MIN, max)}` : null,
+      onPointerdown: refreshFreeRam,
+      // Sans redessin, pour garder le curseur en main ; enregistré au relâchement.
       onInput: (e) => {
         settings.ram = Number(e.target.value);
         value.textContent = formatGo(settings.ram);
-        saveSettings('instance', instance.id);
+        showVerdict();
       },
+      onChange: () => saveSettings('instance', instance.id),
     }),
+    advice,
+    guide && h('p', { class: 'ram-pc', title: guide.pc.detail }, guide.pc.summary),
   );
 }
 
-function modsValue(instance) {
-  if (!instance.loader || instance.loader === 'vanilla') return 'Aucun';
-  const content = installedContent(instance, 'mods');
-  if (!content?.items) return '…';
-  const active = content.items.filter((item) => item.enabled).length;
-  return active ? `${active} actif${active > 1 ? 's' : ''}` : 'Aucun';
+function modsValue(guide) {
+  if (!guide) return '…';
+  if (!guide.mods) return 'Aucun';
+  return `${guide.mods} actif${guide.mods > 1 ? 's' : ''}`;
 }
 
 function blockAction(iconName, label, props) {
@@ -234,6 +270,7 @@ function instanceBlock(instance, status, details) {
   const { stage, aim } = blockCube(instance, status.kind === 'running');
   const follow = !reducedMotion();
   const custom = instance.settings.java === 'custom' && instance.settings.javaPath;
+  const guide = ramGuide(instance);
   return h(
     'section',
     {
@@ -251,10 +288,9 @@ function instanceBlock(instance, status, details) {
     h(
       'div',
       { class: 'instance-block__specs' },
-      h('button', { class: 'spec-tile', onClick: () => go('mods') }, h('span', { class: 'spec-tile__label' }, 'Mods'), h('span', { class: 'spec-tile__value' }, modsValue(instance))),
-      ramTile(instance, busy),
+      h('button', { class: 'spec-tile', onClick: () => go('mods') }, h('span', { class: 'spec-tile__label' }, 'Mods'), h('span', { class: 'spec-tile__value' }, modsValue(guide))),
+      ramTile(instance, guide, busy),
       h('button', { class: 'spec-tile', onClick: () => go('settings') }, h('span', { class: 'spec-tile__label' }, 'Java'), h('span', { class: 'spec-tile__value' }, custom ? 'Personnalisé' : javaLabel(details))),
-      h('div', { class: 'spec-tile' }, h('span', { class: 'spec-tile__label' }, 'Fichiers du jeu'), h('span', { class: 'spec-tile__value' }, instance.installed ? 'Prêts' : 'À installer')),
     ),
     h(
       'div',

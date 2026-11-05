@@ -83,6 +83,7 @@ export const api = {
   removeRuntime: wrap((component) => bridge.java.removeRuntime(component)),
   openRuntime: wrap((component) => bridge.java.openRuntime(component)),
   perfPreview: wrap((id, settings) => bridge.perf.preview(id, settings)),
+  perfRamGuide: wrap((id, settings) => bridge.perf.ramGuide(id, settings)),
   perfPack: wrap((id) => bridge.perf.pack(id)),
   installPack: wrap((id, slugs, options) => bridge.perf.installPack(id, slugs, options)),
   perfMetrics: wrap(() => bridge.perf.metrics()),

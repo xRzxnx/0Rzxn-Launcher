@@ -21,6 +21,7 @@ const crashes = require('./core/crashes');
 const storage = require('./core/storage');
 const performance = require('./core/performance');
 const gpu = require('./core/gpu');
+const { readHardware } = require('./core/hardware');
 const { findSystemJavas } = require('./core/java');
 const { DiscordPresence, gameActivity } = require('./core/discord');
 const { LauncherTray } = require('./tray');
@@ -745,19 +746,34 @@ function registerIpc(getWindow) {
   handle('java:openRuntime', (component) => openDir(runtimeDir(component)));
   // ---------- Performances ----------
   const cpus = os.cpus().length;
+  // Conseil de mémoire : charge de l'instance (mods, shaders, ZGC) et composants du PC.
+  const ramAdvice = async (instance, gc, counts) => {
+    const pc = await readHardware();
+    const shaders = instance ? await performance.activeShaders({ gameDir: instances.gameDir(instance.id), instance }).catch(() => 0) : 0;
+    const guide = performance.ramGuide({ loader: instance?.loader, version: instance?.version, mods: counts.mods, shaders, zgc: gc, totalGb: pc.totalGb, integrated: pc.integrated });
+    return { ...guide, mods: counts.mods, shaders, pc: { summary: pc.summary, detail: pc.detail } };
+  };
+  handle('perf:ramGuide', async (id, settings) => {
+    const instance = id ? instances.get(text(id)) : null;
+    const s = sanitizeSettings(settings ?? {}, instance?.settings ?? services.settings.defaults());
+    const counts = instance ? await performance.packInstalledCount({ gameDir: instances.gameDir(instance.id), instance }).catch(() => ({ mods: 0 })) : { mods: 0 };
+    return ramAdvice(instance, s.jvmPreset === 'zgc', counts);
+  });
   handle('perf:preview', async (id, settings) => {
     const instance = id ? instances.get(text(id)) : null;
     const s = sanitizeSettings(settings ?? {}, instance?.settings ?? services.settings.defaults());
     const javaMajor = instance ? ((await versions.versionDetails(dirs, instance.version).catch(() => null))?.java ?? null) : null;
     const tuned = performance.jvmArguments({ preset: s.jvmPreset, javaMajor: javaMajor ?? 21, ramGb: s.ram, jvmArgs: s.jvmArgs, cpus });
     const counts = instance ? await performance.packInstalledCount({ gameDir: instances.gameDir(instance.id), instance }) : { installed: 0, mods: 0 };
+    const advice = await ramAdvice(instance, s.jvmPreset === 'zgc' && tuned.gc === 'zgc', counts);
     return {
       javaMajor,
       cpus,
       gc: tuned.gc,
       userGc: performance.userChoosesGc(s.jvmArgs),
       args: tuned.args,
-      ram: instance ? performance.recommendedRam({ loader: instance.loader, mods: counts.mods, zgc: s.jvmPreset === 'zgc' && tuned.gc === 'zgc' }) : null,
+      ram: instance ? advice.ideal : null,
+      pc: advice.pc.summary,
       mods: counts.mods,
       packInstalled: counts.installed,
     };
