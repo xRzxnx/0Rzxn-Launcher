@@ -519,3 +519,35 @@
   font-size: 12px;
   font-weight: 700;
 }
+
+/* Mise à jour prête : seul élément cliquable de la barre de titre */
+.titlebar__update {
+  margin-left: auto;
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.update-pill {
+  height: 26px;
+  padding: 0 11px 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.update-pill:hover { background: var(--accent-2); }
+.update-pill .icon { width: 15px; height: 15px; }
+
+.update-pill--wait,
+.update-pill--wait:hover {
+  background: rgba(30, 22, 58, 0.72);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-2);
+}

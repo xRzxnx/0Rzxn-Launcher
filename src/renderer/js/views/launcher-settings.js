@@ -6,6 +6,7 @@ import { formatSize, h, icon } from '../dom.js';
 import { cleanStorage, loadStorage, refreshDiscord, removeRuntime, selectedCleanup, setLauncherPref, toggleCleanup } from '../launcher-actions.js';
 import { SHORTCUTS } from '../shortcuts.js';
 import { ACCENTS, accentTokens, applyAccent } from '../theme.js';
+import { checkUpdate, installUpdate, updateBlocker } from '../update-actions.js';
 import { selectedInstance, state, toastError, update } from '../state.js';
 import { close, dialog } from './modals.js';
 import { gameSection, gpuSection } from './performance.js';
@@ -127,6 +128,74 @@ function traySection(prefs) {
   );
 }
 
+const RELEASES_URL = 'https://github.com/xRzxnx/0Rzxn-Launcher/releases';
+
+function checkedAgo(time) {
+  if (!time) return '';
+  const minutes = Math.floor((Date.now() - time) / 60000);
+  if (minutes < 1) return " · vérifié à l'instant";
+  if (minutes < 60) return ` · vérifié il y a ${minutes} min`;
+  return ` · vérifié il y a ${Math.floor(minutes / 60)} h`;
+}
+
+/** Ce que la section dit de la mise à jour en cours. */
+function updateStatus(u) {
+  const version = `Version ${state.appVersion ?? ''}`;
+  const line = (text, cls = 'hint') => h('p', { class: cls, role: 'status' }, text);
+  if (!u?.supported) return line(`${version}. Les mises à jour fonctionnent dans le launcher installé.`);
+  switch (u.status) {
+    case 'checking':
+      return line('Recherche en cours…');
+    case 'current':
+      return line(`${version} : à jour${checkedAgo(u.checkedAt)}`);
+    case 'waiting':
+      return line(`La ${u.version} attend la fin de ${updateBlocker() || 'ta partie'}`);
+    case 'downloading':
+      return h(
+        'div',
+        { class: 'update-progress', role: 'status' },
+        h('p', { class: 'hint' }, `Téléchargement de la ${u.version}${u.total ? ` · ${formatSize(u.transferred)} sur ${formatSize(u.total)}` : ''}`),
+        h('div', { class: 'update-progress__bar' }, h('i', { style: `width:${u.percent}%` })),
+      );
+    case 'ready': {
+      const waiting = updateBlocker();
+      return h(
+        'div',
+        { class: 'toggle-row' },
+        h('span', { role: 'status' }, waiting ? `La ${u.version} attend la fin de ${waiting}` : `La ${u.version} est prête`),
+        h('button', { class: 'btn btn--primary', disabled: Boolean(waiting), onClick: installUpdate }, 'Redémarrer'),
+      );
+    }
+    case 'error':
+      return line(u.error, 'hint hint--error');
+    default:
+      return line(version);
+  }
+}
+
+function updateSection(prefs) {
+  const u = state.launcherUpdate;
+  const busy = u?.status === 'checking' || u?.status === 'downloading';
+  return h(
+    'section',
+    { class: 'settings__section', 'aria-labelledby': 'update-title' },
+    h(
+      'div',
+      { class: 'settings__title-row' },
+      h('h2', { class: 'settings__title', id: 'update-title' }, 'Mises à jour'),
+      h('button', { class: 'btn btn--ghost', disabled: !u?.supported || busy, onClick: checkUpdate }, icon('search'), 'Rechercher'),
+    ),
+    updateStatus(u),
+    toggleRow('update-label', 'Rechercher et télécharger les mises à jour automatiquement', prefs.autoUpdate, () => setLauncherPref({ autoUpdate: !prefs.autoUpdate })),
+    h(
+      'p',
+      { class: 'hint' },
+      "Le launcher contacte seulement GitHub. Rien ne se télécharge pendant une partie, et une mise à jour prête s'installe aussi quand tu fermes le launcher. ",
+      h('a', { href: RELEASES_URL, target: '_blank', rel: 'noreferrer' }, 'Voir les nouveautés'),
+    ),
+  );
+}
+
 const keys = (list) => h('span', { class: 'keys' }, list.map((k) => h('kbd', { class: 'kbd' }, k)));
 
 function shortcutsSection() {
@@ -151,7 +220,7 @@ export function renderLauncherTab() {
     'div',
     null,
     h('p', { class: 'settings__scope-note' }, icon('settings', 20), 'Réglages du launcher lui-même : ils valent pour toutes les instances.'),
-    h('div', { class: 'settings__grid' }, themeSection(prefs), discordSection(prefs), traySection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
+    h('div', { class: 'settings__grid' }, themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
   );
 }
 

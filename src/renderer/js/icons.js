@@ -26,6 +26,7 @@ export const ICONS = {
   copy: svg('<rect x="8" y="8" width="12" height="12"/><path d="M16 8V4H4v12h4"/>'),
   alert: svg('<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17v1"/>', 'stroke-width="2.5"'),
   info: svg('<rect x="4" y="4" width="16" height="16"/><path d="M12 11v6M12 7.5v.5"/>'),
+  clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>'),
   refresh: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'),
   external: svg('<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>'),
   upload: svg('<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>', 'stroke-width="2.5"'),

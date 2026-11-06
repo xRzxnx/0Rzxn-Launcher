@@ -1903,3 +1903,7 @@ button.spec-tile:hover { background: var(--panel-3); }
 .palette__foot { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 20px 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--text-3); }
 .palette__foot span { display: inline-flex; align-items: center; gap: 4px; }
 .palette__foot .kbd, .palette__field .kbd { height: 20px; min-width: 20px; padding: 0 6px; font-size: 12px; }
+
+.update-progress { display: flex; flex-direction: column; gap: 8px; }
+.update-progress__bar { height: 6px; border-radius: 3px; background: var(--panel-2, rgba(255, 255, 255, 0.14)); overflow: hidden; }
+.update-progress__bar i { display: block; height: 100%; background: var(--accent-3); }

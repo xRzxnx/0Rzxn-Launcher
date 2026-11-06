@@ -2,6 +2,7 @@
 import { api } from './api.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
+import { loadUpdate } from './update-actions.js';
 import { activeAccount, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
 
 export async function refreshInstances() {
@@ -50,7 +51,7 @@ export async function init() {
   let ui;
   try {
     let info, settings, launchState;
-    [info, settings, launchState, ui] = await Promise.all([api.info(), api.settings(), api.launchState(), api.ui(), refreshAccounts(), refreshInstances(), refreshMemory(), loadLauncherPrefs()]);
+    [info, settings, launchState, ui] = await Promise.all([api.info(), api.settings(), api.launchState(), api.ui(), refreshAccounts(), refreshInstances(), refreshMemory(), loadLauncherPrefs(), loadUpdate()]);
     update((s) => {
       s.appVersion = info.version;
       s.microsoftReady = info.microsoftReady;

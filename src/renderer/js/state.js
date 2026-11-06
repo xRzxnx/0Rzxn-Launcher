@@ -15,6 +15,7 @@ export const state = {
   launcherPrefs: null, // { accent, discord, discordShowName, tray, closeToTray }
   discordReady: false, // Application ID Discord configuré (src/main/discord-config.js)
   discord: null, // { configured, running, showing }
+  launcherUpdate: null, // { supported, status, version, percent, transferred, total, checkedAt, error }
   storage: {
     loading: false,
     error: null,

@@ -37,8 +37,19 @@ Les icônes sont générées depuis `src/renderer/assets/logo-mark.svg` par `npm
 - Comptes **Microsoft** et **hors-ligne**. Un nouveau compte hors-ligne demande d'abord un compte Microsoft qui possède le jeu. La connexion Microsoft attend l'accord de Mojang : voir [docs/MICROSOFT.md](docs/MICROSOFT.md).
 - Console en direct (logs XML de Minecraft convertis, jeton masqué), arrêt du jeu, détection des crashs.
 - **Confort** : couleur d'accent au choix, statut Discord pendant une partie (désactivé par défaut, voir [docs/DISCORD.md](docs/DISCORD.md)), icône dans la zone de notification, raccourcis clavier (Ctrl+/ pour l'aide), gestion des Java et nettoyage de l'espace disque (Paramètres › Java et stockage).
+- **Mises à jour** : les nouvelles versions se téléchargent en arrière-plan, jamais pendant une partie, et s'installent au redémarrage.
 
 Testé en vrai : 1.8.9 (Java 8), 1.12.2 (Java 8), 1.21.11 (Java 21) et 26.3 (Java 25).
+
+## Publier une version
+
+Change la version dans `package.json`, commite, pousse `main`, puis lance :
+
+```bash
+npm run publier
+```
+
+Le script construit l'installateur et crée la release GitHub que lisent les launchers installés. Il lui faut la CLI GitHub (`gh`) connectée.
 
 ## Où sont les données
 
@@ -70,6 +81,7 @@ src/
 │     ├─ instances.js  instances sur le disque
 │     ├─ accounts.js   comptes (jetons Microsoft chiffrés, renouvellement auto)
 │     ├─ microsoft.js  chaîne Microsoft → Xbox → XSTS → Minecraft
+│     ├─ updates.js    mises à jour du launcher (recherche, attente de fin de partie)
 │     ├─ rules.js      règles Mojang (système, processeur) et chemins Maven
 │     ├─ zip.js        extraction des natives
 │     └─ store.js      lecture/écriture JSON
