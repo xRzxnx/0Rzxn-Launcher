@@ -12,6 +12,7 @@ import { init } from './actions.js';
 import { checkOtherInstances } from './mods-actions.js';
 import { renderScene } from './scene.js';
 import { h } from './dom.js';
+import { t } from './i18n.js';
 import { state, subscribe } from './state.js';
 
 const $ = (id) => document.getElementById(id);
@@ -28,11 +29,11 @@ const FLUSH_VIEWS = new Set(['versions', 'console', 'mods']);
 let lastView = null;
 
 function loadingView() {
-  if (!state.loadError) return h('div', { class: 'empty' }, h('p', { class: 'empty__text' }, 'Chargement…'));
+  if (!state.loadError) return h('div', { class: 'empty' }, h('p', { class: 'empty__text' }, t('common.chargement')));
   return h(
     'div',
     { class: 'empty' },
-    h('h1', { class: 'empty__title' }, 'Le launcher n’a pas pu démarrer'),
+    h('h1', { class: 'empty__title' }, t('main.le_launcher_pas_pu_demarrer')),
     h('p', { class: 'empty__text' }, state.loadError),
   );
 }
@@ -98,6 +99,8 @@ function render() {
   lastView = state.view;
 
   renderScene();
+  $('tabs').setAttribute('aria-label', t('chrome.tabs_label'));
+  $('sidebar').setAttribute('aria-label', t('common.instances'));
   $('tabs').replaceChildren(...renderTabs());
   $('topbar-right').replaceChildren(...renderTopbarRight());
   $('sidebar').replaceChildren(...renderSidebar().filter(Boolean));

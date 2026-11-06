@@ -47,6 +47,7 @@
 - Light mode: the launcher uses almost no CPU while the game is running.
 
 **Comfort**
+- Available in **English**, **French** and **Spanish**: follows the Windows language, and changes instantly in Settings › Launcher.
 - Accent color themes, system tray menu, keyboard shortcuts (AZERTY-friendly).
 - Java and disk storage management.
 - Skin preview in 3D, saved skins, capes.
@@ -103,9 +104,11 @@ src/
 │  ├─ main.js         window and security settings
 │  ├─ preload.js      the only API exposed to the interface
 │  ├─ ipc.js          interface ↔ core channels
+│  ├─ i18n/           messages of the main process (fr, en, es)
 │  └─ core/           launcher core in plain Node.js (downloads, versions,
 │                     loaders, Modrinth, Microsoft sign-in, launch pipeline…)
 └─ renderer/        interface (HTML, CSS, vanilla JavaScript, no framework)
+                    its texts are in js/locales/ (fr, en, es); npm run check:i18n checks them
 ```
 
 ## Credits

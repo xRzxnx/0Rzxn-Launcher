@@ -1,4 +1,5 @@
 // Fenêtre « Skin et cape » d'un compte : aperçu 3D, Mes skins, capes.
+import { t } from '../i18n.js';
 import { applyChange, copyPlayerSkin, currentSkin, importSkin, pendingChange, pickCape, pickSkin, removeLibrarySkin, resetSkin, setVariant, viewSide } from '../skins-actions.js';
 import { h, icon } from '../dom.js';
 import { capeFront, libraryUrl, skinFront, skinHead, skinModel, textureUrl } from '../skin-view.js';
@@ -12,24 +13,24 @@ function banner(modal, account, seconds) {
   let text;
   if (seconds > 0) {
     kind = 'warn';
-    title = 'Mojang limite les changements de skin';
-    text = 'Attends un peu : le launcher ne réessaie jamais tout seul, pour ne pas mettre ton compte en danger.';
+    title = t('skins.mojang_limite_les_changements_de');
+    text = t('skins.attends_un_peu_le_launcher');
   } else if (account?.needsLogin) {
     kind = 'warn';
-    title = 'Session Microsoft expirée';
-    text = 'Reconnecte ce compte depuis la fenêtre Comptes pour changer de skin ou de cape.';
+    title = t('skins.session_microsoft_expiree');
+    text = t('skins.reconnecte_ce_compte_depuis_la');
   } else if (modal.problem) {
     kind = 'warn';
-    title = 'Mojang n’a pas pris le changement';
+    title = t('skins.mojang_pas_pris_le_changement');
     text = modal.problem.message;
   } else if (account?.type === 'offline') {
     kind = 'info';
-    title = 'Pas de skin personnalisé en jeu';
-    text = 'Sur un compte hors-ligne, Minecraft affiche un skin par défaut sans mod. Tu peux quand même préparer tes skins ici : ils seront prêts quand ton compte Microsoft sera connecté.';
+    title = t('skins.pas_de_skin_personnalise_en');
+    text = t('skins.sur_un_compte_hors_ligne');
   } else if (modal.done) {
     kind = 'ok';
-    title = 'Appliqué sur ton compte';
-    text = 'Tu le verras à ta prochaine partie. Sur un serveur, à ta prochaine connexion.';
+    title = t('skins.applique_sur_ton_compte');
+    text = t('skins.tu_le_verras_ta_prochaine');
   }
   if (!kind) return null;
   return h(
@@ -55,13 +56,13 @@ function modelPane(modal) {
     { class: 'skins__stage' },
     stage
       ? skinModel({ ...stage, slim: modal.variant === 'slim', capeUrl: cape ? textureUrl(cape.hash) : null }, modal.view)
-      : h('p', { class: 'skins__empty' }, modal.loading ? 'Chargement…' : 'Importe un skin pour le voir ici.'),
+      : h('p', { class: 'skins__empty' }, modal.loading ? t('common.chargement') : t('skins.importe_un_skin_pour_le')),
     h(
       'div',
       { class: 'skins__stage-bar' },
-      h('span', { class: 'hint', style: 'flex:1' }, 'Glisse pour tourner'),
-      h('button', { class: 'btn', onClick: () => viewSide(modal, 'front') }, 'Face'),
-      h('button', { class: 'btn', onClick: () => viewSide(modal, 'back') }, 'Dos'),
+      h('span', { class: 'hint', style: 'flex:1' }, t('skins.glisse_pour_tourner')),
+      h('button', { class: 'btn', onClick: () => viewSide(modal, 'front') }, t('skins.face')),
+      h('button', { class: 'btn', onClick: () => viewSide(modal, 'back') }, t('skins.dos')),
     ),
   );
 }
@@ -77,7 +78,7 @@ function skinTile({ selected, name, tag, preview, onPick, onRemove }) {
       h('span', { class: 'skin-tile__name' }, name),
       h('span', { class: 'skin-tile__tag' }, tag ?? ''),
     ),
-    onRemove && h('button', { class: 'skin-tile__remove', 'aria-label': `Retirer ${name} de Mes skins`, onClick: onRemove }, icon('close', 12)),
+    onRemove && h('button', { class: 'skin-tile__remove', 'aria-label': t('skins.retirer_de_mes_skins', { name }), onClick: onRemove }, icon('close', 12)),
   );
 }
 
@@ -88,8 +89,8 @@ function skinsSection(modal) {
     tiles.push(
       skinTile({
         selected: modal.pick?.kind === 'current',
-        name: 'Sur ce compte',
-        tag: 'Actuel',
+        name: t('skins.sur_ce_compte'),
+        tag: t('skins.actuel'),
         preview: skinFront(textureUrl(current.hash), { slim: current.variant === 'slim', legacy: current.legacy }),
         onPick: () => pickSkin(modal, { kind: 'current' }),
       }),
@@ -101,7 +102,7 @@ function skinsSection(modal) {
       skinTile({
         selected: modal.pick?.kind === 'library' && modal.pick.id === skin.id,
         name: skin.name,
-        tag: isCurrent ? 'Actuel' : null,
+        tag: isCurrent ? t('skins.actuel') : null,
         preview: skinFront(libraryUrl(skin.id), { slim: skin.variant === 'slim', legacy: skin.legacy }),
         onPick: () => pickSkin(modal, { kind: 'library', id: skin.id }),
         onRemove: isCurrent ? null : () => removeLibrarySkin(modal, skin.id),
@@ -109,7 +110,7 @@ function skinsSection(modal) {
     );
   }
   tiles.push(
-    h('button', { class: 'skin-tile skin-tile--add', onClick: () => importSkin(modal) }, icon('plus', 20), 'Importer un PNG'),
+    h('button', { class: 'skin-tile skin-tile--add', onClick: () => importSkin(modal) }, icon('plus', 20), t('skins.importer_un_png')),
   );
 
   const input = h('input', {
@@ -117,7 +118,7 @@ function skinsSection(modal) {
     class: 'input input--pixel',
     type: 'text',
     maxlength: 16,
-    placeholder: 'Pseudo',
+    placeholder: t('common.pseudo'),
     spellcheck: 'false',
     'data-keep': true,
     onKeydown: (e) => e.key === 'Enter' && copyPlayerSkin(modal, input),
@@ -126,28 +127,28 @@ function skinsSection(modal) {
   return h(
     'section',
     { class: 'skins__section' },
-    h('h2', { class: 'label' }, 'Mes skins'),
+    h('h2', { class: 'label' }, t('skins.mes_skins')),
     h('div', { class: 'skins__grid', 'data-scroll-key': 'skins-grid' }, tiles),
     h(
       'div',
       { class: 'field' },
-      h('label', { class: 'hint', for: 'skins-copy', style: 'font-weight:600' }, "Copier le skin public d'un joueur"),
+      h('label', { class: 'hint', for: 'skins-copy', style: 'font-weight:600' }, t('skins.copier_le_skin_public_un')),
       h(
         'div',
         { class: 'input-row' },
         input,
-        h('button', { class: 'btn', disabled: Boolean(modal.copying), onClick: () => copyPlayerSkin(modal, input) }, modal.copying ? 'Recherche…' : 'Ajouter à Mes skins'),
+        h('button', { class: 'btn', disabled: Boolean(modal.copying), onClick: () => copyPlayerSkin(modal, input) }, modal.copying ? t('common.recherche') : t('skins.ajouter_mes_skins')),
       ),
     ),
     h(
       'div',
       { class: 'skins__model' },
-      h('span', { class: 'hint', id: 'skins-variant', style: 'font-weight:600' }, 'Modèle'),
+      h('span', { class: 'hint', id: 'skins-variant', style: 'font-weight:600' }, t('skins.modele')),
       h(
         'div',
         { class: 'segmented', role: 'radiogroup', 'aria-labelledby': 'skins-variant' },
-        h('button', { role: 'radio', 'aria-checked': variant === 'classic' ? 'true' : 'false', disabled: !modal.pick, onClick: () => setVariant(modal, 'classic') }, 'Classique · bras de 4 px'),
-        h('button', { role: 'radio', 'aria-checked': variant === 'slim' ? 'true' : 'false', disabled: !modal.pick, onClick: () => setVariant(modal, 'slim') }, 'Fin · bras de 3 px'),
+        h('button', { role: 'radio', 'aria-checked': variant === 'classic' ? 'true' : 'false', disabled: !modal.pick, onClick: () => setVariant(modal, 'classic') }, t('skins.classique_bras_de_px')),
+        h('button', { role: 'radio', 'aria-checked': variant === 'slim' ? 'true' : 'false', disabled: !modal.pick, onClick: () => setVariant(modal, 'slim') }, t('skins.fin_bras_de_px')),
       ),
     ),
   );
@@ -164,18 +165,18 @@ function capesSection(modal, account) {
     );
   let body;
   if (account?.type !== 'microsoft') {
-    body = h('p', { class: 'hint' }, "Les capes appartiennent à un compte Microsoft : elles s'affichent ici quand il est connecté.");
+    body = h('p', { class: 'hint' }, t('skins.les_capes_appartiennent_un_compte'));
   } else if (!capes.length) {
-    body = h('p', { class: 'hint' }, 'Ce compte ne possède pas de cape.');
+    body = h('p', { class: 'hint' }, t('skins.ce_compte_ne_possede_pas'));
   } else {
     body = h(
       'div',
       { class: 'skins__capes' },
-      tile(null, 'Aucune', h('span', { class: 'cape-tile__none' })),
+      tile(null, t('skins.aucune'), h('span', { class: 'cape-tile__none' })),
       capes.map((c) => tile(c.id, c.alias, capeFront(textureUrl(c.hash)))),
     );
   }
-  return h('section', { class: 'skins__section' }, h('h2', { class: 'label' }, 'Cape'), body);
+  return h('section', { class: 'skins__section' }, h('h2', { class: 'label' }, t('skins.cape')), body);
 }
 
 export function skinsDialog(modal) {
@@ -188,10 +189,10 @@ export function skinsDialog(modal) {
   const change = modal.data ? pendingChange(modal) : null;
   const canApply = !blocked && !modal.busy && !modal.loading && Boolean(change);
   const canReset = !blocked && !modal.busy && !modal.loading && Boolean(currentSkin(modal));
-  let label = 'Appliquer';
-  if (!microsoft) label = 'Compte Microsoft requis';
-  else if (seconds > 0) label = `Réessayer dans ${seconds} s`;
-  else if (modal.busy) label = 'Envoi…';
+  let label = t('skins.appliquer');
+  if (!microsoft) label = t('skins.compte_microsoft_requis');
+  else if (seconds > 0) label = t('skins.reessayer_dans', { seconds });
+  else if (modal.busy) label = t('skins.envoi');
 
   const title = h(
     'span',
@@ -200,8 +201,8 @@ export function skinsDialog(modal) {
     h(
       'span',
       { class: 'skins__title-text' },
-      'Skin et cape',
-      h('span', { class: 'skins__account' }, `${account.name} · ${microsoft ? 'Compte Microsoft' : 'Hors-ligne'}`),
+      t('common.skin_et_cape'),
+      h('span', { class: 'skins__account' }, `${account.name} · ${microsoft ? t('common.compte_microsoft') : t('common.hors_ligne')}`),
     ),
   );
   return dialog({
@@ -215,8 +216,8 @@ export function skinsDialog(modal) {
       h('div', { class: 'skins__side' }, banner(modal, account, seconds), skinsSection(modal), capesSection(modal, account)),
     ),
     foot: [
-      h('span', { class: 'hint spacer' }, microsoft ? 'Le fichier part chez Mojang seulement quand tu appuies sur Appliquer.' : 'PNG de 64×64 ou 64×32 pixels.'),
-      microsoft && h('button', { class: 'btn btn--lg', disabled: !canReset, onClick: () => resetSkin(modal) }, modal.confirmReset ? 'Confirmer ?' : 'Skin par défaut'),
+      h('span', { class: 'hint spacer' }, microsoft ? t('skins.le_fichier_part_chez_mojang') : t('skins.png_de_64_64_ou')),
+      microsoft && h('button', { class: 'btn btn--lg', disabled: !canReset, onClick: () => resetSkin(modal) }, modal.confirmReset ? t('skins.confirmer') : t('skins.skin_par_defaut')),
       h('button', { class: 'btn btn--primary btn--lg', disabled: !canApply, onClick: () => applyChange(modal) }, label),
     ],
   });

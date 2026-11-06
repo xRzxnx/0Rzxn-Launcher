@@ -1,10 +1,11 @@
 // Actions de l'onglet Mods : contenu installé, recherche Modrinth, installation, mises à jour.
+import { t } from './i18n.js';
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { forgetRamGuide, selectedInstance, state, toast, toastError, update } from './state.js';
 
-export const KIND_LABELS = { mods: 'Mods', resourcepacks: 'Packs de ressources', shaders: 'Shaders', modpacks: 'Modpacks' };
-const SINGULAR = { mods: 'mod', resourcepacks: 'pack de ressources', shaders: 'shader' };
+export const KIND_LABELS = { mods: 'Mods', get resourcepacks() { return t('mods.packs_de_ressources'); }, shaders: 'Shaders', modpacks: 'Modpacks' };
+const SINGULAR = { mods: 'mod', get resourcepacks() { return t('mods.pack_de_ressources'); }, shaders: 'shader' };
 
 const keyOf = (instance, kind) => `${instance.id}:${kind}`;
 
@@ -130,19 +131,19 @@ export async function installProject(instance, projectId, versionId = null, titl
     const main = result.installed.find((d) => !d.dependency);
     const deps = result.installed.filter((d) => d.dependency);
     if (!main && !deps.length) {
-      toast({ title: `${title || 'Ce contenu'} est déjà installé` });
+      toast({ title: t('common.est_deja_installe', { title: title || t('mods.ce_contenu') }) });
     } else {
       toast({
         kind: 'success',
-        title: `${main?.title ?? title} installé`,
-        text: deps.length ? `Avec ${deps.map((d) => d.title).join(', ')} (dépendance${deps.length > 1 ? 's' : ''} obligatoire${deps.length > 1 ? 's' : ''}).` : `Version ${main?.version ?? ''}`,
+        title: t('mods.installe', { title: main?.title ?? title }),
+        text: deps.length ? t('mods.with_deps', { count: deps.length, deps: deps.map((d) => d.title).join(', ') }) : t('mods.version', { version: main?.version ?? '' }),
       });
     }
     if (result.missingDependencies) {
-      toast({ kind: 'error', title: 'Dépendance introuvable', text: `${result.missingDependencies} dépendance(s) n'existent pas pour cette version : le mod risque de ne pas démarrer.` });
+      toast({ kind: 'error', title: t('mods.dependance_introuvable'), text: t('mods.deps_missing', { count: result.missingDependencies }) });
     }
   } catch (error) {
-    toastError('Installation impossible', error);
+    toastError(t('common.installation_impossible'), error);
   } finally {
     setBusy(projectId, false);
   }
@@ -154,7 +155,7 @@ export async function toggleItem(instance, item) {
     await api.toggleContent(instance.id, state.mods.kind, item.file);
     await refreshInstalled(instance);
   } catch (error) {
-    toastError('Action impossible', error);
+    toastError(t('common.action_impossible'), error);
   } finally {
     setBusy(item.file, false);
   }
@@ -165,9 +166,9 @@ export async function deleteItem(instance, item) {
   try {
     await api.deleteContent(instance.id, state.mods.kind, item.file);
     await refreshInstalled(instance);
-    toast({ kind: 'success', title: `${item.title ?? item.name} supprimé`, text: 'Le fichier est dans la corbeille de Windows.' });
+    toast({ kind: 'success', title: t('mods.supprime', { title: item.title ?? item.name }), text: t('mods.le_fichier_est_dans_la') });
   } catch (error) {
-    toastError('Suppression impossible', error);
+    toastError(t('common.suppression_impossible'), error);
   } finally {
     setBusy(item.file, false);
   }
@@ -179,9 +180,9 @@ export async function updateItems(instance, files = null, kind = state.mods.kind
   try {
     const updated = await api.updateContent(instance.id, kind, files);
     await refreshInstalled(instance, kind);
-    toast({ kind: 'success', title: updated.length > 1 ? `${updated.length} mises à jour installées` : 'Mise à jour installée', text: updated.map((u) => `${u.title} ${u.version}`).join(', ') });
+    toast({ kind: 'success', title: updated.length > 1 ? t('mods.mises_jour_installees', { updated: updated.length }) : t('mods.mise_jour_installee'), text: updated.map((u) => `${u.title} ${u.version}`).join(', ') });
   } catch (error) {
-    toastError('Mise à jour impossible', error);
+    toastError(t('mods.mise_jour_impossible'), error);
   } finally {
     setBusy(id, false);
   }
@@ -193,15 +194,15 @@ export async function importDropped(instance, files) {
   try {
     const copied = await api.importContent(instance.id, kind, paths);
     await refreshInstalled(instance, kind);
-    if (copied.length) toast({ kind: 'success', title: `${copied.length} fichier${copied.length > 1 ? 's' : ''} ajouté${copied.length > 1 ? 's' : ''}`, text: copied.join(', ') });
-    else toast({ kind: 'error', title: 'Rien à ajouter', text: `Glisse des fichiers ${kind === 'mods' ? '.jar' : '.zip'} pour ajouter un ${SINGULAR[kind]}.` });
+    if (copied.length) toast({ kind: 'success', title: t('mods.fichiers_ajoutes', { count: copied.length }), text: copied.join(', ') });
+    else toast({ kind: 'error', title: t('mods.rien_ajouter'), text: t({ mods: 'mods.drop_add_mod', resourcepacks: 'mods.drop_add_pack', shaders: 'mods.drop_add_shader' }[kind]) });
   } catch (error) {
-    toastError('Ajout impossible', error);
+    toastError(t('mods.ajout_impossible'), error);
   }
 }
 
 export function openContentFolder(instance) {
-  api.openContentFolder(instance.id, state.mods.kind).catch((error) => toastError("Impossible d'ouvrir le dossier", error));
+  api.openContentFolder(instance.id, state.mods.kind).catch((error) => toastError(t('common.impossible_ouvrir_le_dossier'), error));
 }
 
 // ---------- Modpacks ----------
@@ -217,16 +218,16 @@ async function afterModpack(promise, verb) {
   toast({
     kind: 'success',
     title: `${instance.name} ${verb}`,
-    text: `Nouvelle instance : Minecraft ${instance.version}${instance.loader !== 'vanilla' ? ` · ${instance.loader}` : ''}. Le premier lancement installe le loader.`,
+    text: t('mods.new_instance_text', { version: [instance.version, instance.loader !== 'vanilla' && instance.loader].filter(Boolean).join(' · ') }),
   });
 }
 
 export async function installModpack(hit, versionId = null) {
   setBusy(hit.id, true);
   try {
-    await afterModpack(api.installModpack(hit.id, versionId, { title: hit.title, icon: hit.icon }), 'installé');
+    await afterModpack(api.installModpack(hit.id, versionId, { title: hit.title, icon: hit.icon }), t('mods.installe_2'));
   } catch (error) {
-    toastError('Installation du modpack impossible', error);
+    toastError(t('mods.installation_du_modpack_impossible'), error);
   } finally {
     setBusy(hit.id, false);
   }
@@ -234,9 +235,9 @@ export async function installModpack(hit, versionId = null) {
 
 export async function importModpack() {
   try {
-    await afterModpack(api.importModpack(), 'importé');
+    await afterModpack(api.importModpack(), t('mods.importe'));
   } catch (error) {
-    toastError('Import impossible', error);
+    toastError(t('common.import_impossible'), error);
   }
 }
 
@@ -245,10 +246,10 @@ export async function checkModpackUpdate(instance) {
   try {
     const next = await api.checkModpackUpdate(instance.id);
     update((s) => { s.modpackUpdates[instance.id] = next ?? { none: true }; });
-    if (!next) toast({ title: `${instance.modpack.name} est à jour`, text: `Version ${instance.modpack.version}` });
+    if (!next) toast({ title: t('mods.est_jour', { name: instance.modpack.name }), text: t('mods.version', { version: instance.modpack.version }) });
   } catch (error) {
     update((s) => { delete s.modpackUpdates[instance.id]; });
-    toastError('Vérification impossible', error);
+    toastError(t('mods.verification_impossible'), error);
   }
 }
 
@@ -262,11 +263,11 @@ export async function updateModpack(instance, versionId) {
     });
     toast({
       kind: 'success',
-      title: `${result.instance.modpack.name} mis à jour`,
-      text: `Version ${result.instance.modpack.version} · ${result.files} fichiers${result.removed ? `, ${result.removed} retirés (corbeille)` : ''}. Tes réglages et tes mondes sont conservés.`,
+      title: t('mods.mis_jour', { name: result.instance.modpack.name }),
+      text: t(result.removed ? 'mods.pack_updated_removed' : 'mods.pack_updated', { version: result.instance.modpack.version, files: result.files, removed: result.removed }),
     });
   } catch (error) {
-    toastError('Mise à jour du modpack impossible', error);
+    toastError(t('mods.mise_jour_du_modpack_impossible'), error);
   }
 }
 
@@ -275,8 +276,8 @@ export async function exportInstance(instance, options) {
   if (!result) return false; // enregistrement annulé
   toast({
     kind: 'success',
-    title: 'Modpack exporté',
-    text: `${result.file} · ${result.referenced} fichiers téléchargés depuis Modrinth, ${result.embedded} inclus dans le pack.`,
+    title: t('mods.modpack_exporte'),
+    text: t('mods.fichiers_telecharges_depuis_modrinth_inclus', { file: result.file, referenced: result.referenced, embedded: result.embedded }),
     timeout: 10000,
   });
   return true;
@@ -328,13 +329,13 @@ export async function selectModSet(instance, setId) {
     if (result.failed.length) {
       toast({
         kind: 'error',
-        title: 'Bascule incomplète',
-        text: `${result.failed.length} mod${result.failed.length > 1 ? 's' : ''} n'ont pas pu changer d'état (${result.failed.slice(0, 3).map((f) => f.file).join(', ')}). Ferme ce qui les utilise et réessaie.`,
+        title: t('mods.bascule_incomplete'),
+        text: t('mods.mods_ont_pas_pu_changer', { count: result.failed.length, failed: result.failed.slice(0, 3).map((f) => f.file).join(', ') }),
         timeout: 12000,
       });
     }
   } catch (error) {
-    toastError('Changement d’ensemble impossible', error);
+    toastError(t('mods.changement_ensemble_impossible'), error);
   } finally {
     await afterSetChange(instance).catch(() => {});
     setBusy('*sets*', false);

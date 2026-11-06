@@ -1,4 +1,5 @@
 // Performances : aperçu des arguments Java, Pack Performances, consommation du launcher et carte graphique.
+import { t } from './i18n.js';
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { refreshInstalled } from './mods-actions.js';
@@ -91,17 +92,17 @@ export async function installPack(modal) {
     const deps = result.installed.length - mods;
     toast({
       kind: result.failed.length ? 'error' : 'success',
-      title: `Pack Performances : ${mods} mod${mods > 1 ? 's' : ''} installé${mods > 1 ? 's' : ''}`,
+      title: t('perf.pack_performances_mods_installes', { count: mods }),
       text: [
-        convert && `${instance.name} est passée en Fabric.`,
-        deps > 0 && `${deps} dépendance${deps > 1 ? 's' : ''} ajoutée${deps > 1 ? 's' : ''}.`,
-        result.failed.length > 0 && `Échec : ${result.failed.map((f) => f.title).join(', ')} (${result.failed[0].message}).`,
-      ].filter(Boolean).join(' ') || 'Les FPS changent au prochain lancement.',
+        convert && t('perf.est_passee_en_fabric', { name: instance.name }),
+        deps > 0 && t('perf.dependances_ajoutees', { count: deps }),
+        result.failed.length > 0 && t('perf.echec', { failed: result.failed.map((f) => f.title).join(', '), message: result.failed[0].message }),
+      ].filter(Boolean).join(' ') || t('perf.les_fps_changent_au_prochain'),
       timeout: 9000,
     });
     refreshInstalled(state.instances.find((i) => i.id === instance.id) ?? instance, 'mods');
   } catch (error) {
-    toastError('Pack Performances non installé', error);
+    toastError(t('perf.pack_performances_non_installe'), error);
   }
 }
 
@@ -151,9 +152,9 @@ export async function setGpu(on) {
       s.launcherPrefs = prefs;
       s.perf.gpu = null;
     });
-    toast({ kind: 'success', title: on ? 'Carte dédiée choisie pour Minecraft' : 'Choix de Windows rétabli', text: on ? 'Les Java du launcher utiliseront la carte graphique dédiée.' : 'Windows choisit de nouveau la carte graphique.' });
+    toast({ kind: 'success', title: on ? t('perf.carte_dediee_choisie_pour_minecraft') : t('perf.choix_de_windows_retabli'), text: on ? t('perf.les_java_du_launcher_utiliseront') : t('perf.windows_choisit_de_nouveau_la') });
   } catch (error) {
-    toastError('Réglage de Windows non modifié', error);
+    toastError(t('perf.reglage_de_windows_non_modifie'), error);
   } finally {
     update((s) => { s.perf.gpuBusy = false; });
     loadGpu();

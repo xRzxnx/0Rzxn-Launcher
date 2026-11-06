@@ -1,4 +1,5 @@
 // Fond choisi par instance : ouverture de la fenêtre, choix de l'image, annulation et enregistrement.
+import { t } from './i18n.js';
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { fondUrl, minimumDim, renderScene } from './scene.js';
@@ -76,8 +77,8 @@ export async function saveBackground(modal) {
     await api.updateInstance(modal.instanceId, { background });
     await refreshInstances();
     update((s) => { s.modal = modal.back; });
-    toast({ kind: 'success', title: 'Fond enregistré' });
+    toast({ kind: 'success', title: t('background.fond_enregistre') });
   } catch (error) {
-    toastError('Fond non enregistré', error);
+    toastError(t('background.fond_non_enregistre'), error);
   }
 }

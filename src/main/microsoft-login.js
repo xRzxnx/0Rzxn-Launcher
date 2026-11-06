@@ -2,6 +2,7 @@
 
 // Fenêtre de connexion Microsoft : la page officielle de Microsoft, ouverte dans une fenêtre isolée.
 // Le launcher ne voit jamais le mot de passe : il récupère seulement le code renvoyé à la fin.
+const { t } = require('./i18n');
 const { BrowserWindow, shell } = require('electron');
 const { MicrosoftAuthError, createAuthorization, parseRedirect } = require('./core/microsoft');
 
@@ -11,7 +12,7 @@ let openWindow = null;
 function promptMicrosoftLogin(parent, clientId) {
   if (openWindow && !openWindow.isDestroyed()) {
     openWindow.focus();
-    return Promise.reject(new MicrosoftAuthError('Une fenêtre de connexion est déjà ouverte.', 'BUSY'));
+    return Promise.reject(new MicrosoftAuthError(t('microsoft.une_fenetre_de_connexion_est'), 'BUSY'));
   }
   const { url, verifier, state } = createAuthorization(clientId);
 
@@ -22,7 +23,7 @@ function promptMicrosoftLogin(parent, clientId) {
       modal: true,
       width: 520,
       height: 700,
-      title: 'Connexion Microsoft',
+      title: t('microsoft.connexion_microsoft'),
       autoHideMenuBar: true,
       backgroundColor: '#ffffff',
       webPreferences: {
@@ -67,12 +68,12 @@ function promptMicrosoftLogin(parent, clientId) {
     });
     win.webContents.on('did-fail-load', (_event, code, description, failedUrl, isMainFrame) => {
       if (isMainFrame && code !== -3 && !failedUrl.startsWith('https://login.microsoftonline.com/common/oauth2/nativeclient')) {
-        finish(new MicrosoftAuthError(`La page de connexion ne s'est pas chargée (${description}).`, 'NETWORK'));
+        finish(new MicrosoftAuthError(t('microsoft.la_page_de_connexion_ne', { description }), 'NETWORK'));
       }
     });
     win.on('closed', () => {
       openWindow = null;
-      finish(new MicrosoftAuthError('Connexion annulée.', 'CANCELLED'));
+      finish(new MicrosoftAuthError(t('microsoft.connexion_annulee'), 'CANCELLED'));
     });
 
     win.loadURL(url);

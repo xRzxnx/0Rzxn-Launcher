@@ -1,39 +1,40 @@
 // Raccourcis clavier du launcher. Les chiffres sont lus par position (Digit1…) pour marcher en AZERTY.
+import { t } from './i18n.js';
 import { requestLaunch } from './actions.js';
 import { togglePalette } from './palette-actions.js';
 import { activeAccount, selectedInstance, state, update } from './state.js';
 import { focusSearch, go, openNewInstance, selectInstance, TABS, visibleInstances } from './views/chrome.js';
 
-export const SHORTCUTS = [
+export const SHORTCUTS = () => [
   {
-    title: 'Jouer',
+    title: t('common.jouer'),
     rows: [
-      { label: "Jouer à l'instance sélectionnée", keys: ['Ctrl', 'Entrée'] },
-      { label: 'Arrêter le jeu (avec confirmation)', keys: ['Ctrl', 'Maj', 'K'] },
+      { label: t('shortcuts.jouer_instance_selectionnee'), keys: ['Ctrl', t('common.entree')] },
+      { label: t('shortcuts.arreter_le_jeu_avec_confirmation'), keys: ['Ctrl', t('common.maj'), 'K'], helpOnly: true },
     ],
   },
   {
-    title: 'Instances',
+    title: t('common.instances'),
     rows: [
-      { label: 'Recherche globale', keys: ['Ctrl', 'K'] },
-      { label: 'Rechercher dans les instances', keys: ['Ctrl', 'F'] },
-      { label: 'Précédente / suivante', keys: ['Alt', '↑', '↓'] },
-      { label: 'Nouvelle instance', keys: ['Ctrl', 'N'] },
+      { label: t('common.recherche_globale'), keys: ['Ctrl', 'K'] },
+      { label: t('shortcuts.rechercher_dans_les_instances'), keys: ['Ctrl', 'F'] },
+      { label: t('shortcuts.precedente_suivante'), keys: ['Alt', '↑', '↓'] },
+      { label: t('common.nouvelle_instance'), keys: ['Ctrl', 'N'] },
     ],
   },
   {
-    title: 'Navigation',
+    title: t('shortcuts.navigation'),
     rows: [
-      { label: 'Onglets Accueil à Versions', keys: ['Ctrl', '1…3'] },
-      { label: 'Console', keys: ['Ctrl', 'L'] },
-      { label: 'Paramètres', keys: ['Ctrl', ','] },
+      { label: t('shortcuts.onglets_accueil_versions'), keys: ['Ctrl', '1…3'] },
+      { label: t('common.console'), keys: ['Ctrl', 'L'] },
+      { label: t('common.parametres'), keys: ['Ctrl', ','] },
     ],
   },
   {
-    title: 'Fenêtre',
+    title: t('shortcuts.fenetre'),
     rows: [
-      { label: 'Fermer la fenêtre ouverte', keys: ['Échap'] },
-      { label: 'Cette aide', keys: ['Ctrl', '/'] },
+      { label: t('shortcuts.fermer_la_fenetre_ouverte'), keys: [t('common.echap')], helpOnly: true },
+      { label: t('shortcuts.cette_aide'), keys: ['Ctrl', '/'], helpOnly: true },
     ],
   },
 ];

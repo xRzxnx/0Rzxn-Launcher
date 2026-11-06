@@ -1,4 +1,5 @@
 // Décor de la fenêtre : coucher de soleil par défaut, ou le fond choisi pour l'instance sélectionnée.
+import { t } from './i18n.js';
 import { sceneUrl } from './banner.js';
 import { selectedInstance, state } from './state.js';
 
@@ -37,7 +38,7 @@ export function minimumDim(url) {
       new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        img.onerror = () => reject(new Error("Impossible de lire l'image."));
+        img.onerror = () => reject(new Error(t('scene.impossible_de_lire_image')));
         img.onload = () => {
           try {
             resolve(dimForPixels(readTopPixels(img)));

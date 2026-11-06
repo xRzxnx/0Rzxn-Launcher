@@ -1,6 +1,7 @@
 'use strict';
 
 // Fichiers du jeu : jar client, bibliothèques, natives, assets et configuration des logs.
+const { t } = require('../i18n');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
@@ -76,7 +77,7 @@ async function prepareAssets(version, dirs, { signal, verify } = {}) {
     if (!exists(indexFile)) throw error;
   }
   const index = readJson(indexFile, null);
-  if (!index?.objects) throw new Error(`Index des assets ${info.id} illisible.`);
+  if (!index?.objects) throw new Error(t('install.index_des_assets_illisible', { id: info.id }));
   const tasks = Object.values(index.objects).map(({ hash, size }) => ({
     url: `${RESOURCES_URL}${hash.slice(0, 2)}/${hash}`,
     path: path.join(dirs.assets, 'objects', hash.slice(0, 2), hash),

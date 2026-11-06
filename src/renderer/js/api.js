@@ -20,6 +20,7 @@ export const api = {
   available: Boolean(bridge),
   info: wrap(() => bridge.info()),
   memory: wrap(() => bridge.memory()),
+  setLanguage: wrap((language) => bridge.setLanguage(language)),
   openLauncherFolder: wrap(() => bridge.openLauncherFolder()),
   pickJava: wrap(() => bridge.pickJava()),
   versions: wrap(() => bridge.versions.list()),

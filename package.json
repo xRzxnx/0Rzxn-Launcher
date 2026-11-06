@@ -11,7 +11,8 @@
     "start": "electron .",
     "apercu": "electron scripts/apercu.js",
     "dist": "electron-builder --win",
-    "icon": "electron scripts/make-icon.js"
+    "icon": "electron scripts/make-icon.js",
+    "check:i18n": "node scripts/check-i18n.js"
   },
   "devDependencies": {
     "@fontsource/geist-mono": "5.3.0",
@@ -50,7 +51,13 @@
       "createStartMenuShortcut": true,
       "shortcutName": "0Rzxn_ Launcher",
       "artifactName": "0Rzxn_-Launcher-Setup-${version}.${ext}",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "fr_FR",
+        "en_US",
+        "es_ES"
+      ]
     }
   }
 }

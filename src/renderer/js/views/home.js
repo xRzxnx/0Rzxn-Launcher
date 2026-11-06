@@ -1,10 +1,11 @@
 // Onglet Accueil : bannière de l'instance, bouton Jouer, cartes d'informations ou progression.
+import { formatDateTime, num, t } from '../i18n.js';
 import { createShortcut, duplicateInstance, openInstanceFolder, requestLaunch, saveSettings, stopGame, verifyInstance, versionDetails } from '../actions.js';
 import { checkModpackUpdate, installedContent, pendingModUpdates, updateItems, updateModpack } from '../mods-actions.js';
 import { openRecap } from '../recap-actions.js';
 import { ramGuide,refreshFreeRam } from '../perf-actions.js';
 import { FILES_STEP, JAVA_STEP, LAUNCH_STEPS, LOADER_NAMES, LOADER_STEP, MEMORY_STEP, formatLastPlayed, loaderLabel, ramRange, ramVerdict, ramZones } from '../data.js';
-import { formatGo, formatPlaytime, h, icon } from '../dom.js';
+import { formatGo, formatPlaytime, formatShortTime, h, icon } from '../dom.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceAccount, instanceStatus, runPercent, selectedInstance, state, update } from '../state.js';
 import { go, openNewInstance } from './chrome.js';
@@ -12,23 +13,23 @@ import { go, openNewInstance } from './chrome.js';
 const javaLabel = (details) => (details ? `Java ${details.java}` : 'Java');
 
 function playButton(instance, status) {
-  if (!activeAccount()) return h('button', { class: 'play play--disabled', disabled: true }, 'Aucun compte');
+  if (!activeAccount()) return h('button', { class: 'play play--disabled', disabled: true }, t('common.aucun_compte'));
   if (status.kind === 'running') {
-    return h('button', { class: 'play play--running', onClick: stopGame }, h('span', { class: 'dot', 'aria-hidden': 'true' }), 'En jeu · Arrêter');
+    return h('button', { class: 'play play--running', onClick: stopGame }, h('span', { class: 'dot', 'aria-hidden': 'true' }), t('home.en_jeu_arreter'));
   }
-  if (status.kind === 'busy') return h('button', { class: 'play play--busy', onClick: stopGame, title: 'Annuler' }, status.label);
-  if (state.run) return h('button', { class: 'play play--disabled', disabled: true }, 'Une autre partie tourne');
+  if (status.kind === 'busy') return h('button', { class: 'play play--busy', onClick: stopGame, title: t('common.annuler') }, status.label);
+  if (state.run) return h('button', { class: 'play play--disabled', disabled: true }, t('home.une_autre_partie_tourne'));
   if (!instance.installed) {
-    return h('button', { class: 'play play--install', onClick: () => requestLaunch() }, icon('download'), `Installer ${instance.version}`);
+    return h('button', { class: 'play play--install', onClick: () => requestLaunch() }, icon('download'), t('home.installer', { version: instance.version }));
   }
-  return h('button', { class: 'play', onClick: () => requestLaunch() }, icon('play'), 'Jouer');
+  return h('button', { class: 'play', onClick: () => requestLaunch() }, icon('play'), t('common.jouer'));
 }
 
 /** Rappel à côté de Jouer quand l'instance a son propre compte. */
 function fixedAccount(instance) {
   const account = instanceAccount(instance);
   if (!account) return null;
-  return h('span', { class: 'hero__account' }, skinHead(account, 28), h('span', null, `Toujours avec ${account.name}`));
+  return h('span', { class: 'hero__account' }, skinHead(account, 28), h('span', null, t('home.toujours_avec', { name: account.name })));
 }
 
 const UPDATE_ROWS = 3;
@@ -42,27 +43,27 @@ function updatesCard(instance) {
   const busy = state.mods.busy['*update-all*'];
   return h(
     'section',
-    { class: 'upcard', 'aria-label': 'Mises à jour de mods' },
-    h('h3', { class: 'upcard__title' }, `${items.length} mise${items.length > 1 ? 's' : ''} à jour`),
+    { class: 'upcard', 'aria-label': t('home.mises_jour_de_mods') },
+    h('h3', { class: 'upcard__title' }, t('home.mises_jour', { count: items.length })),
     shown.map((item) =>
       h('div', { class: 'kv' }, h('span', { class: 'kv__name' }, item.title ?? item.name), h('b', { class: 'kv__ver' }, `${item.version ?? '?'} → ${item.update.number}`)),
     ),
-    more > 0 && h('p', { class: 'upcard__more' }, `et ${more} autre${more > 1 ? 's' : ''}`),
-    h('button', { class: 'btn btn--primary', disabled: busy, onClick: () => updateItems(instance, null, 'mods') }, icon('download'), busy ? 'Mise à jour…' : 'Tout mettre à jour'),
+    more > 0 && h('p', { class: 'upcard__more' }, t('home.et_autres', { count: more })),
+    h('button', { class: 'btn btn--primary', disabled: busy, onClick: () => updateItems(instance, null, 'mods') }, icon('download'), busy ? t('home.mise_jour') : t('home.tout_mettre_jour')),
   );
 }
 
 function hero(instance, status, details, card) {
-  const pillState = { ready: 'Prête', busy: status.label.split(' ·')[0], running: 'En jeu', idle: 'À installer' }[status.kind];
+  const pillState = { ready: t('common.prete'), busy: status.label.split(' ·')[0], running: t('common.en_jeu'), idle: t('common.installer') }[status.kind];
   const lastPlayed = formatLastPlayed(instance.lastPlayedAt);
   const sub =
     status.kind === 'busy' && !instance.installed
-      ? 'Première installation : quelques centaines de Mo, partagés ensuite entre tes instances.'
-      : `${loaderLabel(instance)} · ${javaLabel(details)} · ${formatPlaytime(instance.playtime)}${instance.playtime ? ' de jeu' : ''}`;
+      ? t('home.premiere_installation_quelques_centaines_de')
+      : `${loaderLabel(instance)} · ${javaLabel(details)} · ${formatPlaytime(instance.playtime)}${instance.playtime ? t('home.de_jeu') : ''}`;
 
   return h(
     'section',
-    { class: `hero${card ? ' hero--updates' : ''}`, 'aria-label': `Instance ${instance.name}` },
+    { class: `hero${card ? ' hero--updates' : ''}`, 'aria-label': t('common.instance_2', { name: instance.name }) },
     card,
     h(
       'div',
@@ -77,7 +78,7 @@ function hero(instance, status, details, card) {
           h('span', { class: 'status-pill__dot', 'aria-hidden': 'true' }),
           h('span', { class: 'status-pill__state' }, pillState),
         ),
-        lastPlayed && h('span', { class: 'status-pill' }, `Dernière partie ${lastPlayed}`),
+        lastPlayed && h('span', { class: 'status-pill' }, t('home.derniere_partie', { lastPlayed })),
       ),
       h('h1', { class: 'hero__title' }, instance.name),
       h('p', { class: 'hero__sub' }, sub),
@@ -89,10 +90,10 @@ function hero(instance, status, details, card) {
       h(
         'div',
         { class: 'version-box' },
-        h('span', { class: 'version-box__body' }, h('span', { class: 'label' }, 'Version'), h('span', { class: 'version-box__value' }, instance.version)),
+        h('span', { class: 'version-box__body' }, h('span', { class: 'label' }, t('common.version')), h('span', { class: 'version-box__value' }, instance.version)),
       ),
       fixedAccount(instance),
-      h('button', { class: 'btn btn--ghost', onClick: () => openInstanceFolder(instance.id) }, icon('folder'), 'Ouvrir le dossier'),
+      h('button', { class: 'btn btn--ghost', onClick: () => openInstanceFolder(instance.id) }, icon('folder'), t('home.ouvrir_le_dossier')),
     ),
   );
 }
@@ -102,11 +103,11 @@ function modpackCard(instance, busy) {
   const pack = instance.modpack;
   const check = state.modpackUpdates[instance.id];
   let action;
-  if (!pack.projectId) action = h('span', { class: 'hint' }, 'Importé depuis un fichier');
+  if (!pack.projectId) action = h('span', { class: 'hint' }, t('home.importe_depuis_un_fichier'));
   else if (check?.versionId) {
-    action = h('button', { class: 'btn btn--primary', disabled: busy || Boolean(state.task), onClick: () => updateModpack(instance, check.versionId) }, icon('download'), `Mettre à jour vers ${check.number}`);
+    action = h('button', { class: 'btn btn--primary', disabled: busy || Boolean(state.task), onClick: () => updateModpack(instance, check.versionId) }, icon('download'), t('common.mettre_jour_vers', { number: check.number }));
   } else {
-    action = h('button', { class: 'btn btn--ghost', disabled: check?.checking, onClick: () => checkModpackUpdate(instance) }, check?.checking ? 'Vérification…' : check?.none ? 'Vérifier à nouveau' : 'Vérifier les mises à jour');
+    action = h('button', { class: 'btn btn--ghost', disabled: check?.checking, onClick: () => checkModpackUpdate(instance) }, check?.checking ? t('home.verification') : check?.none ? t('home.verifier_nouveau') : t('home.verifier_les_mises_jour'));
   }
   return h(
     'section',
@@ -115,8 +116,8 @@ function modpackCard(instance, busy) {
     h(
       'div',
       { class: 'card__body' },
-      h('h3', { class: 'card__title' }, `Modpack ${pack.name}`),
-      h('p', { class: 'card__text' }, `Version ${pack.version} · ${pack.files?.length ?? 0} fichiers gérés par le modpack${check?.none ? ' · à jour' : ''}`),
+      h('h3', { class: 'card__title' }, t('home.modpack', { name: pack.name })),
+      h('p', { class: 'card__text' }, t(check?.none ? 'home.pack_files_ok' : 'home.pack_files', { version: pack.version, count: pack.files?.length ?? 0 })),
     ),
     action,
   );
@@ -124,8 +125,8 @@ function modpackCard(instance, busy) {
 
 const pad = (n) => String(n).padStart(2, '0');
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-export const shortTime = (minutes) => (minutes ? formatPlaytime(Math.round(minutes)).replace(' min', '').replace(/^(\d+)$/, '$1 min') : '0 min');
-const SINCE = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
+export const shortTime = formatShortTime;
+const SINCE = { day: 'numeric', month: 'short' };
 
 function statTile(label, value, foot, extra) {
   return h('div', { class: 'stat-tile' }, h('span', { class: 'stat-tile__label' }, label), h('span', { class: 'stat-tile__value' }, value), foot, extra);
@@ -147,29 +148,29 @@ function statsTiles(instance) {
 
   return h(
     'section',
-    { class: 'stat-tiles', 'aria-label': 'Temps de jeu' },
+    { class: 'stat-tiles', 'aria-label': t('home.temps_de_jeu') },
     h(
       'div',
-      { class: 'stat-tile', title: untracked > 0 ? `Dont ${formatPlaytime(untracked)} ${instance.importedFrom ? 'reprises d’un autre launcher ou ' : ''}d’avant le suivi par jour` : null },
-      h('span', { class: 'stat-tile__label' }, 'Temps de jeu au total'),
-      h('button', { class: 'stat-tile__link', title: 'Voir le bilan du mois', onClick: openRecap }, 'Bilan du mois'),
+      { class: 'stat-tile', title: untracked > 0 ? t(instance.importedFrom ? 'home.untracked_imported' : 'home.untracked', { time: formatPlaytime(untracked) }) : null },
+      h('span', { class: 'stat-tile__label' }, t('home.temps_de_jeu_au_total')),
+      h('button', { class: 'stat-tile__link', title: t('home.voir_le_bilan_du_mois'), onClick: openRecap }, t('common.bilan_du_mois')),
       h('span', { class: 'stat-tile__row' }, h('span', { class: 'stat-tile__value' }, shortTime(instance.playtime)), !alone && h('span', { class: 'stat-tile__share' }, `${share} %`)),
       alone
-        ? note('Sur cette instance')
-        : h('span', { class: 'stat-tile__meter', role: 'img', 'aria-label': `${share} % de ton temps total` }, h('i', { style: `width:${share}%` })),
+        ? note(t('home.sur_cette_instance'))
+        : h('span', { class: 'stat-tile__meter', role: 'img', 'aria-label': t('home.de_ton_temps_total', { share }) }, h('i', { style: `width:${share}%` })),
     ),
     statTile(
-      '7 derniers jours',
+      t('home.derniers_jours'),
       shortTime(weekTotal),
-      note('Par jour'),
+      note(t('home.par_jour')),
       h(
         'span',
         { class: 'stat-tile__bars', 'aria-hidden': 'true' },
         week.map((minutes, i) => h('span', { class: `stat-tile__bar${minutes ? '' : ' stat-tile__bar--empty'}${i === 6 ? ' stat-tile__bar--today' : ''}`, style: `height:${Math.max(8, Math.round((minutes / peak) * 100))}%` })),
       ),
     ),
-    statTile(stats.sessions > 1 ? 'Parties' : 'Partie', String(stats.sessions), note(stats.since ? `depuis le ${SINCE.format(new Date(stats.since))}` : stats.sessions ? 'Au total' : 'Aucune suivie')),
-    statTile('Plus longue partie', shortTime(stats.longest), note(stats.sessions ? `moyenne ${shortTime(tracked / stats.sessions)}` : 'Pas encore de moyenne')),
+    statTile(stats.sessions > 1 ? t('home.parties') : t('home.partie'), String(stats.sessions), note(stats.since ? t('home.depuis_le', { value: formatDateTime(new Date(stats.since), SINCE) }) : stats.sessions ? t('home.au_total') : t('home.aucune_suivie'))),
+    statTile(t('home.plus_longue_partie'), shortTime(stats.longest), note(stats.sessions ? t('home.average', { time: shortTime(tracked / stats.sessions) }) : t('home.pas_encore_de_moyenne'))),
   );
 }
 
@@ -199,7 +200,7 @@ function blockCube(instance, still) {
     'button',
     {
       class: `cube-stage loader--${instance.loader ?? 'vanilla'}`,
-      'aria-label': 'Faire tourner le bloc',
+      'aria-label': t('home.faire_tourner_le_bloc'),
       onClick: () => {
         if (reducedMotion()) return;
         pose.turns += 1;
@@ -234,7 +235,7 @@ function ramTile(instance, guide, busy) {
   return h(
     'div',
     { class: 'spec-tile spec-tile--ram' },
-    h('div', { class: 'ram-row' }, h('label', { class: 'spec-tile__label', for: 'home-ram' }, 'Mémoire'), badge),
+    h('div', { class: 'ram-row' }, h('label', { class: 'spec-tile__label', for: 'home-ram' }, t('common.memoire')), badge),
     h(
       'div',
       { class: 'ram-row' },
@@ -245,13 +246,13 @@ function ramTile(instance, guide, busy) {
           {
             class: 'ram-ideal',
             disabled: busy,
-            title: `Régler sur ${formatGo(guide.ideal)}`,
+            title: t('home.regler_sur', { ideal: formatGo(guide.ideal) }),
             onClick: () => update(() => {
               settings.ram = guide.ideal;
               saveSettings('instance', instance.id);
             }),
           },
-          `Conseillé : ${ramRange(guide)}`,
+          t('home.conseille', { guide: ramRange(guide) }),
         ),
     ),
     h('input', {
@@ -280,8 +281,8 @@ function ramTile(instance, guide, busy) {
 
 function modsValue(guide) {
   if (!guide) return '…';
-  if (!guide.mods) return 'Aucun';
-  return `${guide.mods} actif${guide.mods > 1 ? 's' : ''}`;
+  if (!guide.mods) return t('home.aucun');
+  return t('home.mods_active', { count: guide.mods });
 }
 
 function blockAction(iconName, label, props) {
@@ -299,7 +300,7 @@ function instanceBlock(instance, status, details) {
     'section',
     {
       class: 'instance-block',
-      'aria-label': 'Instance',
+      'aria-label': t('common.instance'),
       onPointermove: follow
         ? (e) => {
             const box = e.currentTarget.getBoundingClientRect();
@@ -314,22 +315,22 @@ function instanceBlock(instance, status, details) {
       { class: 'instance-block__specs' },
       h('button', { class: 'spec-tile', onClick: () => go('mods') }, h('span', { class: 'spec-tile__label' }, 'Mods'), h('span', { class: 'spec-tile__value' }, modsValue(guide))),
       ramTile(instance, guide, busy),
-      h('button', { class: 'spec-tile', onClick: () => go('settings') }, h('span', { class: 'spec-tile__label' }, 'Java'), h('span', { class: 'spec-tile__value' }, custom ? 'Personnalisé' : javaLabel(details))),
+      h('button', { class: 'spec-tile', onClick: () => go('settings') }, h('span', { class: 'spec-tile__label' }, 'Java'), h('span', { class: 'spec-tile__value' }, custom ? t('common.personnalise') : javaLabel(details))),
     ),
     h(
       'div',
       { class: 'instance-block__actions' },
-      blockAction('edit', 'Modifier', {
+      blockAction('edit', t('home.modifier'), {
         disabled: busy,
         onClick: () => update((s) => { s.modal = { type: 'edit-instance', instanceId: instance.id, draft: { name: instance.name, icon: instance.icon, version: instance.version, loader: instance.loader, loaderVersion: instance.loaderVersion, group: instance.group ?? '', accountId: instance.accountId ?? null } }; }),
       }),
-      blockAction('copy', 'Dupliquer', { disabled: busy, onClick: () => duplicateInstance(instance.id) }),
-      blockAction('upload', 'Exporter', {
+      blockAction('copy', t('home.dupliquer'), { disabled: busy, onClick: () => duplicateInstance(instance.id) }),
+      blockAction('upload', t('home.exporter'), {
         onClick: () => update((s) => { s.modal = { type: 'export', instanceId: instance.id, draft: { name: instance.modpack?.name ?? instance.name, version: '1.0.0', summary: '' } }; }),
       }),
-      blockAction('link', 'Raccourci', { onClick: () => createShortcut(instance.id) }),
-      blockAction('shield', 'Vérifier', { disabled: !instance.installed || Boolean(state.run), onClick: () => verifyInstance(instance.id) }),
-      blockAction('trash', 'Supprimer', {
+      blockAction('link', t('home.raccourci'), { onClick: () => createShortcut(instance.id) }),
+      blockAction('shield', t('home.verifier'), { disabled: !instance.installed || Boolean(state.run), onClick: () => verifyInstance(instance.id) }),
+      blockAction('trash', t('common.supprimer'), {
         class: 'block-action block-action--danger',
         disabled: busy,
         onClick: () => update((s) => { s.modal = { type: 'delete-instance', instanceId: instance.id }; }),
@@ -349,8 +350,8 @@ function infoCards(instance, status, details) {
         h(
           'span',
           null,
-          h('strong', null, 'Hors connexion. '),
-          'Seules les instances déjà installées peuvent être lancées. En solo, un compte Microsoft fonctionne avec la dernière session.',
+          h('strong', null, t('home.hors_connexion')),
+          t('home.seules_les_instances_deja_installees'),
         ),
       ),
     instanceBlock(instance, status, details),
@@ -361,34 +362,34 @@ function infoCards(instance, status, details) {
 
 function stepDetail(step, index, run, instance, details) {
   const counted = run.step === index && run.total > 0;
-  if (index === FILES_STEP && counted) return `${run.done.toLocaleString('fr-FR')} / ${run.total.toLocaleString('fr-FR')} fichiers`;
-  if (index === JAVA_STEP) return counted ? `${javaLabel(details)} : ${run.done} / ${run.total} fichiers` : `${javaLabel(details)} · runtime Mojang`;
-  if (index === MEMORY_STEP) return `${formatGo(instance.settings.ram)} demandés`;
-  if (index === LOADER_STEP && instance.loader !== 'vanilla') return counted ? `${loaderLabel(instance)} : ${run.done} / ${run.total} fichiers` : loaderLabel(instance);
+  if (index === FILES_STEP && counted) return t('home.fichiers', { done: num(run.done), total: num(run.total) });
+  if (index === JAVA_STEP) return counted ? t('home.fichiers_2', { details: javaLabel(details), done: run.done, total: run.total }) : t('home.runtime_mojang', { details: javaLabel(details) });
+  if (index === MEMORY_STEP) return t('home.demandes', { ram: formatGo(instance.settings.ram) });
+  if (index === LOADER_STEP && instance.loader !== 'vanilla') return counted ? t('home.fichiers_3', { instance: loaderLabel(instance), done: run.done, total: run.total }) : loaderLabel(instance);
   return step.detail;
 }
 
 function progressPanel(instance, details) {
   const run = state.run;
   const percent = runPercent(run);
-  const title = run.prepareOnly ? 'Vérification de' : instance.installed ? 'Lancement de' : 'Installation de';
+  const title = run.prepareOnly ? 'home.verifying_mc' : instance.installed ? 'home.launching_mc' : 'home.installing_mc';
   return [
-    h('h2', { class: 'home__heading' }, `${title} Minecraft ${instance.version}`, h('span', { class: 'home__heading-value' }, `${percent} %`)),
+    h('h2', { class: 'home__heading' }, t(title, { version: instance.version }), h('span', { class: 'home__heading-value' }, `${percent} %`)),
     h(
       'div',
-      { class: 'progress', role: 'progressbar', 'aria-valuenow': percent, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': 'Progression' },
+      { class: 'progress', role: 'progressbar', 'aria-valuenow': percent, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': t('home.progression') },
       h('div', { class: 'progress__fill', style: `width:${percent}%` }),
     ),
     h(
       'p',
       { class: 'progress-stats' },
-      h('span', null, `Étape ${run.step + 1} / ${LAUNCH_STEPS.length} : ${LAUNCH_STEPS[run.step].name}`),
-      run.total > 0 && h('span', null, `${run.done.toLocaleString('fr-FR')} / ${run.total.toLocaleString('fr-FR')} fichiers`),
-      h('button', { class: 'btn btn--ghost', style: 'height:28px;margin-left:auto;font-size:14px', onClick: stopGame }, 'Annuler'),
+      h('span', null, t('home.etape', { step: run.step + 1, LAUNCH_STEPS: LAUNCH_STEPS.length, name: LAUNCH_STEPS[run.step].name })),
+      run.total > 0 && h('span', null, t('home.fichiers', { done: num(run.done), total: num(run.total) })),
+      h('button', { class: 'btn btn--ghost', style: 'height:28px;margin-left:auto;font-size:14px', onClick: stopGame }, t('common.annuler')),
     ),
     h(
       'ol',
-      { class: 'steps', 'aria-label': 'Étapes du lancement' },
+      { class: 'steps', 'aria-label': t('home.etapes_du_lancement') },
       LAUNCH_STEPS.map((step, i) => {
         const kind = i < run.step ? 'done' : i === run.step ? 'active' : 'todo';
         return h(
@@ -408,9 +409,9 @@ export function renderHome() {
     return h(
       'div',
       { class: 'empty' },
-      h('h1', { class: 'empty__title' }, 'Aucune instance'),
-      h('p', { class: 'empty__text' }, 'Une instance, c’est une installation de Minecraft avec ses propres mondes et réglages. Crée la première pour commencer.'),
-      h('button', { class: 'btn btn--primary btn--lg', onClick: openNewInstance }, icon('plus'), 'Nouvelle instance'),
+      h('h1', { class: 'empty__title' }, t('common.aucune_instance')),
+      h('p', { class: 'empty__text' }, t('home.une_instance_est_une_installation')),
+      h('button', { class: 'btn btn--primary btn--lg', onClick: openNewInstance }, icon('plus'), t('common.nouvelle_instance')),
     );
   }
   const status = instanceStatus(instance);

@@ -1,4 +1,5 @@
 // Console : logs du launcher et du jeu, filtrables, et rapports de crash expliqués.
+import { num, t } from '../i18n.js';
 import { h, icon } from '../dom.js';
 import { stopGame } from '../actions.js';
 import { openCrashes } from '../crash-actions.js';
@@ -20,17 +21,17 @@ function consoleTabs() {
     );
   return h(
     'div',
-    { class: 'segmented', role: 'tablist', 'aria-label': 'Vue de la console' },
-    tab('logs', 'Logs'),
-    tab('crashes', 'Rapports de crash', count > 0 && h('span', { class: 'segmented__count' }, count)),
+    { class: 'segmented', role: 'tablist', 'aria-label': t('console.vue_de_la_console') },
+    tab('logs', t('console.logs')),
+    tab('crashes', t('console.rapports_de_crash'), count > 0 && h('span', { class: 'segmented__count' }, count)),
   );
 }
 
 const FILTERS = [
-  { id: 'all', label: 'Tout' },
+  { id: 'all', get label() { return t('common.tout'); } },
   { id: 'launcher', label: 'Launcher' },
-  { id: 'warn', label: 'Avertissements' },
-  { id: 'error', label: 'Erreurs' },
+  { id: 'warn', get label() { return t('console.avertissements'); } },
+  { id: 'error', get label() { return t('console.erreurs'); } },
 ];
 
 function levelOf(line) {
@@ -43,8 +44,8 @@ function levelOf(line) {
 function copyLogs() {
   const text = state.logs.map((l) => `[${l.time}] [${l.tag}]: ${l.msg}`).join('\n');
   navigator.clipboard.writeText(text).then(
-    () => toast({ kind: 'success', title: 'Logs copiés', text: `${state.logs.length} lignes dans le presse-papiers.` }),
-    () => toast({ kind: 'error', title: 'Copie impossible', text: "Le presse-papiers n'est pas accessible." }),
+    () => toast({ kind: 'success', title: t('console.logs_copies'), text: t('console.lignes_dans_le_presse_papiers', { logs: state.logs.length }) }),
+    () => toast({ kind: 'error', title: t('common.copie_impossible'), text: t('common.le_presse_papiers_est_pas') }),
   );
 }
 
@@ -53,7 +54,7 @@ export function renderConsole() {
     return h(
       'div',
       { class: 'page', style: 'height:100%' },
-      h('div', { class: 'page__head' }, h('h1', { class: 'page__title' }, 'Console'), consoleTabs()),
+      h('div', { class: 'page__head' }, h('h1', { class: 'page__title' }, t('common.console')), consoleTabs()),
       renderCrashes(),
     );
   }
@@ -70,9 +71,9 @@ export function renderConsole() {
   const hidden = matching.length - lines.length;
 
   let pill;
-  if (run?.phase === 'running') pill = { kind: 'running', text: `En jeu · ${instance?.name ?? ''} · ${instance?.version ?? ''}` };
-  else if (run) pill = { kind: 'busy', text: `Préparation · ${instance?.name ?? ''}` };
-  else pill = { kind: 'idle', text: 'Aucune partie en cours' };
+  if (run?.phase === 'running') pill = { kind: 'running', text: t('console.en_jeu', { name: instance?.name ?? '', version: instance?.version ?? '' }) };
+  else if (run) pill = { kind: 'busy', text: t('console.preparation', { name: instance?.name ?? '' }) };
+  else pill = { kind: 'idle', text: t('console.aucune_partie_en_cours') };
 
   return h(
     'div',
@@ -80,13 +81,13 @@ export function renderConsole() {
     h(
       'div',
       { class: 'page__head' },
-      h('h1', { class: 'page__title' }, 'Console'),
+      h('h1', { class: 'page__title' }, t('common.console')),
       consoleTabs(),
       h('span', { class: `status-pill status-pill--${pill.kind}` }, h('span', { class: 'status-pill__dot', 'aria-hidden': 'true' }), pill.text),
       h('span', { class: 'page__spacer' }),
-      h('button', { class: 'btn', onClick: copyLogs, disabled: state.logs.length === 0 }, icon('copy'), 'Copier'),
-      h('button', { class: 'btn', onClick: () => update((s) => { s.logs = []; }), disabled: state.logs.length === 0 || !!run }, icon('trash'), 'Effacer'),
-      run && h('button', { class: 'btn btn--danger', onClick: stopGame }, icon('stop'), run.phase === 'running' ? 'Arrêter le jeu' : 'Annuler'),
+      h('button', { class: 'btn', onClick: copyLogs, disabled: state.logs.length === 0 }, icon('copy'), t('common.copier')),
+      h('button', { class: 'btn', onClick: () => update((s) => { s.logs = []; }), disabled: state.logs.length === 0 || !!run }, icon('trash'), t('console.effacer')),
+      run && h('button', { class: 'btn btn--danger', onClick: stopGame }, icon('stop'), run.phase === 'running' ? t('common.arreter_le_jeu') : t('common.annuler')),
     ),
     h(
       'div',
@@ -96,11 +97,11 @@ export function renderConsole() {
           'button',
           { class: 'chip', 'aria-pressed': state.console.filter === f.id ? 'true' : 'false', onClick: () => update((s) => { s.console.filter = f.id; }) },
           f.label,
-          h('span', { class: 'chip__count' }, counts[f.id].toLocaleString('fr-FR')),
+          h('span', { class: 'chip__count' }, num(counts[f.id])),
         ),
       ),
       h('span', { class: 'spacer' }),
-      h('span', { class: 'console__auto', id: 'autoscroll-label' }, 'Défilement automatique'),
+      h('span', { class: 'console__auto', id: 'autoscroll-label' }, t('console.defilement_automatique')),
       h('button', {
         class: 'toggle',
         'aria-labelledby': 'autoscroll-label',
@@ -110,11 +111,11 @@ export function renderConsole() {
     ),
     h(
       'div',
-      { class: 'log', role: 'log', 'aria-label': 'Logs', 'data-scroll-key': 'console-log', 'data-autoscroll': state.console.autoscroll ? 'true' : null },
+      { class: 'log', role: 'log', 'aria-label': t('console.logs'), 'data-scroll-key': 'console-log', 'data-autoscroll': state.console.autoscroll ? 'true' : null },
       hidden > 0 &&
-        h('button', { class: 'btn btn--ghost btn--sm log__more', onClick: () => update((s) => { s.console.all = true; }) }, `Afficher les ${hidden.toLocaleString('fr-FR')} lignes plus anciennes`),
+        h('button', { class: 'btn btn--ghost btn--sm log__more', onClick: () => update((s) => { s.console.all = true; }) }, t('console.afficher_les_lignes_plus_anciennes', { hidden: num(hidden) })),
       lines.length === 0
-        ? h('p', { class: 'log__empty' }, state.logs.length ? 'Aucune ligne pour ce filtre.' : "Lance une instance : ses logs s'afficheront ici.")
+        ? h('p', { class: 'log__empty' }, state.logs.length ? t('console.aucune_ligne_pour_ce_filtre') : t('console.lance_une_instance_ses_logs'))
         : lines.map((l) =>
             h(
               'div',
@@ -125,6 +126,6 @@ export function renderConsole() {
             ),
           ),
     ),
-    h('p', { class: 'console__foot' }, 'Le jeton de connexion est masqué automatiquement dans les logs.'),
+    h('p', { class: 'console__foot' }, t('console.le_jeton_de_connexion_est')),
   );
 }

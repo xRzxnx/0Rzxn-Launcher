@@ -2,6 +2,7 @@
 
 // Connexion Microsoft → Xbox Live → XSTS → Minecraft (méthode officielle avec une application Azure).
 // Référence : https://minecraft.wiki/w/Microsoft_authentication
+const { t } = require('../i18n');
 const crypto = require('node:crypto');
 
 const OAUTH = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
@@ -14,12 +15,12 @@ const MC = (process.env.LAUNCHER_MC_API ?? '').trim() || 'https://api.minecrafts
 const TIMEOUT_MS = 20_000;
 
 const XSTS_ERRORS = {
-  2148916227: 'Ce compte est banni du Xbox Live.',
-  2148916233: "Ce compte Microsoft n'a pas encore de profil Xbox : crée-le sur xbox.com puis réessaie.",
-  2148916235: "Le Xbox Live n'est pas disponible dans ton pays.",
-  2148916236: 'Une vérification de l’âge est nécessaire sur le site Xbox (Corée du Sud).',
-  2148916237: 'Une vérification de l’âge est nécessaire sur le site Xbox (Corée du Sud).',
-  2148916238: "C'est un compte enfant : un adulte doit l'ajouter à une famille Microsoft avant de pouvoir jouer.",
+  get 2148916227() { return t('microsoft.ce_compte_est_banni_du'); },
+  get 2148916233() { return t('microsoft.ce_compte_microsoft_pas_encore'); },
+  get 2148916235() { return t('microsoft.le_xbox_live_est_pas'); },
+  get 2148916236() { return t('microsoft.une_verification_de_age_est'); },
+  get 2148916237() { return t('microsoft.une_verification_de_age_est'); },
+  get 2148916238() { return t('microsoft.est_un_compte_enfant_un'); },
 };
 
 class MicrosoftAuthError extends Error {
@@ -46,7 +47,7 @@ async function call(url, { method = 'GET', headers = {}, json, form, multipart, 
   try {
     res = await fetch(url, init);
   } catch (error) {
-    throw new MicrosoftAuthError(`Pas de réponse de ${new URL(url).host} (${error.cause?.code ?? error.message}).`, 'NETWORK');
+    throw new MicrosoftAuthError(t('microsoft.pas_de_reponse_de', { host: new URL(url).host, code: error.cause?.code ?? error.message }), 'NETWORK');
   }
   const text = await res.text();
   let body = null;
@@ -93,22 +94,22 @@ function parseRedirect(rawUrl, expectedState) {
   const params = new URL(rawUrl).searchParams;
   if (params.get('error')) {
     const description = params.get('error_description') ?? params.get('error');
-    if (params.get('error') === 'access_denied') throw new MicrosoftAuthError('Connexion refusée.', 'DENIED');
-    throw new MicrosoftAuthError(`Microsoft a refusé la connexion : ${description}`, params.get('error'));
+    if (params.get('error') === 'access_denied') throw new MicrosoftAuthError(t('microsoft.connexion_refusee'), 'DENIED');
+    throw new MicrosoftAuthError(t('microsoft.microsoft_refuse_la_connexion', { description }), params.get('error'));
   }
-  if (params.get('state') !== expectedState) throw new MicrosoftAuthError('Réponse de connexion inattendue, réessaie.', 'STATE');
+  if (params.get('state') !== expectedState) throw new MicrosoftAuthError(t('microsoft.reponse_de_connexion_inattendue_reessaie'), 'STATE');
   const code = params.get('code');
-  if (!code) throw new MicrosoftAuthError('Réponse de connexion incomplète, réessaie.', 'NO_CODE');
+  if (!code) throw new MicrosoftAuthError(t('microsoft.reponse_de_connexion_incomplete_reessaie'), 'NO_CODE');
   return { code };
 }
 
 function tokenError(res) {
   const error = res.body?.error;
-  if (error === 'invalid_grant') return new MicrosoftAuthError('La session Microsoft a expiré : reconnecte ce compte.', 'EXPIRED');
+  if (error === 'invalid_grant') return new MicrosoftAuthError(t('microsoft.la_session_microsoft_expire_reconnecte'), 'EXPIRED');
   if (error === 'invalid_client' || error === 'unauthorized_client') {
-    return new MicrosoftAuthError("L'application Azure du launcher est mal configurée (voir docs/MICROSOFT.md).", error);
+    return new MicrosoftAuthError(t('microsoft.application_azure_du_launcher_est'), error);
   }
-  return new MicrosoftAuthError(`Microsoft a refusé le jeton (${res.body?.error_description ?? res.status}).`, error ?? 'TOKEN');
+  return new MicrosoftAuthError(t('microsoft.microsoft_refuse_le_jeton', { error_description: res.body?.error_description ?? res.status }), error ?? 'TOKEN');
 }
 
 async function redeemCode(clientId, code, verifier) {
@@ -140,7 +141,7 @@ async function xboxLive(msAccessToken) {
       TokenType: 'JWT',
     },
   });
-  if (!res.ok || !res.body?.Token) throw new MicrosoftAuthError(`Connexion Xbox Live refusée (${res.status}).`, 'XBL');
+  if (!res.ok || !res.body?.Token) throw new MicrosoftAuthError(t('microsoft.connexion_xbox_live_refusee', { status: res.status }), 'XBL');
   return { token: res.body.Token, userHash: res.body.DisplayClaims?.xui?.[0]?.uhs };
 }
 
@@ -151,9 +152,9 @@ async function xsts(xblToken) {
   });
   if (res.status === 401) {
     const xerr = res.body?.XErr;
-    throw new MicrosoftAuthError(XSTS_ERRORS[xerr] ?? `Accès Xbox refusé (code ${xerr ?? 401}).`, `XSTS_${xerr ?? 401}`);
+    throw new MicrosoftAuthError(XSTS_ERRORS[xerr] ?? t('microsoft.acces_xbox_refuse_code', { xerr: xerr ?? 401 }), `XSTS_${xerr ?? 401}`);
   }
-  if (!res.ok || !res.body?.Token) throw new MicrosoftAuthError(`Autorisation Xbox refusée (${res.status}).`, 'XSTS');
+  if (!res.ok || !res.body?.Token) throw new MicrosoftAuthError(t('microsoft.autorisation_xbox_refusee', { status: res.status }), 'XSTS');
   const claims = res.body.DisplayClaims?.xui?.[0] ?? {};
   return { token: res.body.Token, userHash: claims.uhs, xuid: claims.xid };
 }
@@ -165,12 +166,12 @@ async function minecraftLogin(userHash, xstsToken) {
   });
   if (res.status === 403) {
     throw new MicrosoftAuthError(
-      "Mojang n'a pas encore approuvé l'application du launcher (Invalid app registration). Attends la réponse au formulaire, puis réessaie.",
+      t('microsoft.mojang_pas_encore_approuve_application'),
       'APP_NOT_APPROVED',
     );
   }
-  if (res.status === 429) throw new MicrosoftAuthError('Trop de connexions en peu de temps : réessaie dans quelques minutes.', 'RATE_LIMIT');
-  if (!res.ok || !res.body?.access_token) throw new MicrosoftAuthError(`Connexion Minecraft refusée (${res.status}).`, 'MC_LOGIN');
+  if (res.status === 429) throw new MicrosoftAuthError(t('microsoft.trop_de_connexions_en_peu'), 'RATE_LIMIT');
+  if (!res.ok || !res.body?.access_token) throw new MicrosoftAuthError(t('microsoft.connexion_minecraft_refusee', { status: res.status }), 'MC_LOGIN');
   return { accessToken: res.body.access_token, expiresAt: Date.now() + (res.body.expires_in ?? 86400) * 1000 };
 }
 
@@ -178,11 +179,11 @@ async function profile(mcAccessToken) {
   const res = await call(`${MC}/minecraft/profile`, { token: mcAccessToken });
   if (res.status === 404) {
     throw new MicrosoftAuthError(
-      "Ce compte ne possède pas Minecraft: Java Edition (ou n'a pas encore choisi de pseudo : lance une fois le launcher officiel).",
+      t('microsoft.ce_compte_ne_possede_pas'),
       'NOT_OWNED',
     );
   }
-  if (!res.ok || !res.body?.id) throw new MicrosoftAuthError(`Profil Minecraft introuvable (${res.status}).`, 'PROFILE');
+  if (!res.ok || !res.body?.id) throw new MicrosoftAuthError(t('microsoft.profil_minecraft_introuvable', { status: res.status }), 'PROFILE');
   const skin = res.body.skins?.find((s) => s.state === 'ACTIVE') ?? res.body.skins?.[0];
   return { uuid: res.body.id, name: res.body.name, skinUrl: skin?.url ?? null };
 }
@@ -192,33 +193,33 @@ async function profile(mcAccessToken) {
 /** Toutes ces routes renvoient le profil complet : skins, capes et leur état. */
 async function profileCall(path, what, options = {}) {
   const res = await call(`${MC}${path}`, options);
-  if (res.status === 401) throw new MicrosoftAuthError('La session Minecraft a expiré.', 'UNAUTHORIZED');
+  if (res.status === 401) throw new MicrosoftAuthError(t('microsoft.la_session_minecraft_expire'), 'UNAUTHORIZED');
   if (res.status === 429) {
-    const error = new MicrosoftAuthError('Mojang limite les changements de skin : attends une minute avant de réessayer.', 'RATE_LIMIT');
+    const error = new MicrosoftAuthError(t('microsoft.mojang_limite_les_changements_de'), 'RATE_LIMIT');
     error.retryAfter = res.retryAfter;
     throw error;
   }
-  if (res.status === 403) throw new MicrosoftAuthError(`Mojang a refusé de ${what} : compte suspendu ou session non valide.`, 'FORBIDDEN');
-  if (res.status === 404) throw new MicrosoftAuthError("Ce compte n'a pas de profil Minecraft.", 'NOT_OWNED');
+  if (res.status === 403) throw new MicrosoftAuthError(t('microsoft.mojang_refuse_de_compte_suspendu', { what }), 'FORBIDDEN');
+  if (res.status === 404) throw new MicrosoftAuthError(t('microsoft.ce_compte_pas_de_profil'), 'NOT_OWNED');
   if (!res.ok) {
     const reason = res.body?.errorMessage ?? res.body?.details?.status ?? res.status;
-    throw new MicrosoftAuthError(`Mojang a refusé de ${what} (${reason}).`, 'SKIN_REJECTED');
+    throw new MicrosoftAuthError(t('microsoft.mojang_refuse_de', { what, reason }), 'SKIN_REJECTED');
   }
   return res.body;
 }
 
-const fullProfile = (token) => profileCall('/minecraft/profile', 'lire le profil', { token });
+const fullProfile = (token) => profileCall('/minecraft/profile', t('microsoft.lire_le_profil'), { token });
 
 function uploadSkin(token, { png, variant }) {
   const form = new FormData();
   form.set('variant', variant);
   form.set('file', new Blob([png], { type: 'image/png' }), 'skin.png');
-  return profileCall('/minecraft/profile/skins', 'changer le skin', { method: 'POST', multipart: form, token });
+  return profileCall('/minecraft/profile/skins', t('microsoft.changer_le_skin'), { method: 'POST', multipart: form, token });
 }
 
-const resetSkin = (token) => profileCall('/minecraft/profile/skins/active', 'remettre le skin par défaut', { method: 'DELETE', token });
-const showCape = (token, capeId) => profileCall('/minecraft/profile/capes/active', 'changer la cape', { method: 'PUT', json: { capeId }, token });
-const hideCape = (token) => profileCall('/minecraft/profile/capes/active', 'masquer la cape', { method: 'DELETE', token });
+const resetSkin = (token) => profileCall('/minecraft/profile/skins/active', t('microsoft.remettre_le_skin_par_defaut'), { method: 'DELETE', token });
+const showCape = (token, capeId) => profileCall('/minecraft/profile/capes/active', t('microsoft.changer_la_cape'), { method: 'PUT', json: { capeId }, token });
+const hideCape = (token) => profileCall('/minecraft/profile/capes/active', t('microsoft.masquer_la_cape'), { method: 'DELETE', token });
 
 /** De jetons Microsoft jusqu'au profil Minecraft. */
 async function minecraftFromMicrosoft(ms) {

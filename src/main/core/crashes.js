@@ -3,6 +3,7 @@
 // Rapports de crash : rapports du jeu (crash-reports), plantages de Java (hs_err_pid*.log) et logs
 // gardés par le launcher quand le jeu s'arrête sur une erreur. Chaque rapport est expliqué en français
 // quand l'erreur est connue, et peut être partagé sur mclo.gs.
+const { gb, t } = require('../i18n');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const os = require('node:os');
@@ -16,14 +17,14 @@ const MAX_TEXT = 4 * 1024 * 1024;
 
 /** Les trois sources, avec la règle de nom qui les protège des chemins arbitraires. */
 const SOURCES = {
-  report: { dir: ({ gameDir }) => path.join(gameDir, 'crash-reports'), name: /^crash-.+\.txt$/i, kind: 'Crash du jeu' },
-  jvm: { dir: ({ gameDir }) => gameDir, name: /^hs_err_pid\d+\.log$/i, kind: 'Crash de Java' },
-  log: { dir: ({ instanceDir }) => path.join(instanceDir, LOG_DIR), name: /^launcher-[\d_-]+\.log$/i, kind: 'Arrêt anormal' },
+  report: { dir: ({ gameDir }) => path.join(gameDir, 'crash-reports'), name: /^crash-.+\.txt$/i, get kind() { return t('crashes.kind_report'); } },
+  jvm: { dir: ({ gameDir }) => gameDir, name: /^hs_err_pid\d+\.log$/i, get kind() { return t('crashes.kind_jvm'); } },
+  log: { dir: ({ instanceDir }) => path.join(instanceDir, LOG_DIR), name: /^launcher-[\d_-]+\.log$/i, get kind() { return t('crashes.kind_log'); } },
 };
 
 function crashFile(dirs, source, file) {
   const def = SOURCES[source];
-  if (!def || typeof file !== 'string' || file !== path.basename(file) || !def.name.test(file)) throw new Error('Rapport invalide.');
+  if (!def || typeof file !== 'string' || file !== path.basename(file) || !def.name.test(file)) throw new Error(t('crashes.rapport_invalide'));
   return path.join(def.dir(dirs), file);
 }
 
@@ -67,7 +68,7 @@ async function saveCrashLog(instanceDir, lines, { code } = {}) {
   const d = new Date();
   const file = `launcher-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}.log`;
   const body = lines.map((l) => `[${l.time}] [${l.tag}]: ${l.msg}`).join('\n');
-  await fsp.writeFile(path.join(dir, file), `${body}\n[0Rzxn_ Launcher] Jeu fermé avec le code de sortie ${code}\n`);
+  await fsp.writeFile(path.join(dir, file), t('crashes.0rzxn_launcher_jeu_ferme_avec', { body, code }));
   const old = (await fsp.readdir(dir)).filter((n) => SOURCES.log.name.test(n)).sort().slice(0, -KEEP_LOGS);
   await Promise.all(old.map((n) => fsp.rm(path.join(dir, n), { force: true })));
   return file;
@@ -142,13 +143,13 @@ function diagnose(text, context = {}) {
     const usingCustom = context.javaMode === 'custom';
     add('java', {
       id: 'java',
-      label: 'Java incompatible',
-      title: need ? `Il faut Java ${need}${have ? `, pas Java ${have}` : ''}` : 'Cette version de Java ne convient pas',
-      text: `Minecraft ou un de ses mods a été compilé pour ${need ? `Java ${need}` : 'une autre version de Java'}${have ? `, mais le jeu a démarré avec Java ${have}` : ''}. Java refuse alors de charger le code.`,
+      label: t('crashes.java_incompatible'),
+      title: need ? t(have ? 'crashes.need_java_not' : 'crashes.need_java', { need, have }) : t('crashes.cette_version_de_java_ne'),
+      text: t(need ? (have ? 'crashes.compiled_for_need_have' : 'crashes.compiled_for_need') : have ? 'crashes.compiled_for_have' : 'crashes.compiled_for', { need, have }),
       advice: usingCustom
-        ? 'Ton instance utilise un Java personnalisé : repasse en Java automatique, le launcher téléchargera le bon.'
-        : 'Si un seul mod demande ce Java, il est fait pour une autre version de Minecraft : prends la version du mod qui correspond à ton instance.',
-      actions: usingCustom ? [{ type: 'settings', label: 'Ouvrir les réglages Java' }] : [{ type: 'mods', label: "Ouvrir l'onglet Mods" }],
+        ? t('crashes.ton_instance_utilise_un_java')
+        : t('crashes.si_un_seul_mod_demande'),
+      actions: usingCustom ? [{ type: 'settings', label: t('crashes.ouvrir_les_reglages_java') }] : [{ type: 'mods', label: t('crashes.ouvrir_onglet_mods') }],
     }, line);
   };
   const missing = (requester, depId, rawName, range, line) => {
@@ -157,13 +158,13 @@ function diagnose(text, context = {}) {
     const depName = rawName ?? KNOWN_NAMES[depId] ?? null;
     add(`missing:${depId}`, {
       id: 'missing',
-      label: 'Mod manquant',
-      title: `${requester.name} a besoin de ${depName ?? depId}, qui n'est pas installé`,
-      text: `Le loader vérifie les dépendances avant de démarrer : ${requester.name}${requester.version ? ` ${requester.version}` : ''} demande ${depName ?? depId}${range && range !== 'any version' ? ` (${range})` : ''}. Le jeu s'arrête avant le menu.`,
-      advice: `Installe ${depName ?? depId} pour cette version de Minecraft, ou désactive ${requester.name}.`,
+      label: t('crashes.mod_manquant'),
+      title: t('crashes.besoin_de_qui_est_pas', { name: requester.name, depName: depName ?? depId }),
+      text: t('crashes.missing_dep_text', { mod: [requester.name, requester.version].filter(Boolean).join(' '), dep: `${depName ?? depId}${range && range !== 'any version' ? ` (${range})` : ''}` }),
+      advice: t('crashes.installe_pour_cette_version_de', { depName: depName ?? depId, name: requester.name }),
       actions: [
-        { type: 'install', slug: slugOf(depId), label: `Installer ${depName ?? depId}` },
-        requester.id && { type: 'disable', modId: requester.id, label: `Désactiver ${requester.name}` },
+        { type: 'install', slug: slugOf(depId), label: t('crashes.installer', { depName: depName ?? depId }) },
+        requester.id && { type: 'disable', modId: requester.id, label: t('crashes.desactiver', { name: requester.name }) },
       ].filter(Boolean),
     }, line);
   };
@@ -174,13 +175,13 @@ function diagnose(text, context = {}) {
     const isGame = depId === 'minecraft';
     add(`version:${requester.id}:${depId}`, {
       id: 'version',
-      label: isGame ? 'Mod pour une autre version' : 'Mauvaise version de dépendance',
-      title: isGame ? `${requester.name} est fait pour Minecraft ${range}` : `${requester.name} demande une autre version de ${depName ?? depId}`,
-      text: `${requester.name}${requester.version ? ` ${requester.version}` : ''} demande ${depName ?? depId} ${range}, mais la version installée est ${present}.`,
+      label: isGame ? t('crashes.mod_pour_une_autre_version') : t('crashes.mauvaise_version_de_dependance'),
+      title: isGame ? t('crashes.est_fait_pour_minecraft', { name: requester.name, range }) : t('crashes.demande_une_autre_version_de', { name: requester.name, depName: depName ?? depId }),
+      text: t('crashes.wrong_dep_text', { mod: [requester.name, requester.version].filter(Boolean).join(' '), dep: depName ?? depId, range, present }),
       advice: isGame
-        ? `Remplace ${requester.name} par sa version pour Minecraft ${present}, ou désactive-le.`
-        : `Mets à jour ${depName ?? depId} ou ${requester.name} depuis l'onglet Mods.`,
-      actions: [{ type: 'disable', modId: requester.id, label: `Désactiver ${requester.name}` }, { type: 'mods', label: "Ouvrir l'onglet Mods" }],
+        ? t('crashes.remplace_par_sa_version_pour', { name: requester.name, present })
+        : t('crashes.mets_jour_ou_depuis_onglet', { depName: depName ?? depId, name: requester.name }),
+      actions: [{ type: 'disable', modId: requester.id, label: t('crashes.desactiver', { name: requester.name }) }, { type: 'mods', label: t('crashes.ouvrir_onglet_mods') }],
     }, line);
   };
 
@@ -197,11 +198,11 @@ function diagnose(text, context = {}) {
       const other = m[5] ?? m[6] ?? m[7];
       add(`breaks:${m[2]}:${other}`, {
         id: 'incompatible',
-        label: 'Mods incompatibles',
-        title: `${m[1]} ne fonctionne pas avec ${other}`,
-        text: `${m[1]} déclare être incompatible avec ${other} : les deux ne peuvent pas être installés ensemble.`,
-        advice: `Désactive l'un des deux.`,
-        actions: [{ type: 'disable', modId: m[2], label: `Désactiver ${m[1]}` }],
+        label: t('common.mods_incompatibles'),
+        title: t('crashes.ne_fonctionne_pas_avec', { m: m[1], other }),
+        text: t('crashes.declare_etre_incompatible_avec_les', { m: m[1], other }),
+        advice: t('crashes.desactive_un_des_deux'),
+        actions: [{ type: 'disable', modId: m[2], label: t('crashes.desactiver_2', { m: m[1] }) }],
       }, i);
     } else if ((m = FORGE_DEP.exec(line))) {
       const requester = { name: m[2], id: m[2] };
@@ -212,33 +213,33 @@ function diagnose(text, context = {}) {
     } else if (/AppClassLoader cannot be cast to (?:class )?java\.net\.URLClassLoader/.test(line)) {
       javaProblem(8, context.java, i);
     } else if (/NoClassDefFoundError: net\/fabricmc\/fabric\/api|ClassNotFoundException: net\.fabricmc\.fabric\.api/.test(line)) {
-      missing({ name: 'Un mod' }, 'fabric-api', 'Fabric API', null, i);
+      missing({ name: t('crashes.un_mod') }, 'fabric-api', 'Fabric API', null, i);
     } else if ((m = /java\.lang\.OutOfMemoryError(?:: (.+))?/.exec(line))) {
       add('memory', {
         id: 'memory',
-        label: 'Mémoire insuffisante',
-        title: 'Le jeu a manqué de mémoire',
-        text: `Java a utilisé toute la mémoire allouée${context.ram ? ` (${String(context.ram).replace('.', ',')} Go)` : ''}${m[1] ? ` : « ${m[1].trim()} »` : ''}. C'est fréquent avec beaucoup de mods ou de gros packs de ressources.`,
-        advice: 'Donne plus de mémoire à l’instance (6 à 8 Go suffisent pour la plupart des modpacks), sans dépasser la moitié de la RAM de ton PC.',
-        actions: [{ type: 'settings', label: 'Changer la mémoire' }],
+        label: t('crashes.memoire_insuffisante'),
+        title: t('crashes.le_jeu_manque_de_memoire'),
+        text: t('crashes.oom_heap_text', { detail: `${context.ram ? ` (${gb(context.ram)})` : ''}${m[1] ? t('crashes.oom_detail', { message: m[1].trim() }) : ''}` }),
+        advice: t('crashes.donne_plus_de_memoire_instance'),
+        actions: [{ type: 'settings', label: t('crashes.changer_la_memoire') }],
       }, i);
     } else if (/Could not reserve enough space for .*object heap|Invalid maximum heap size/.test(line)) {
       add('reserve', {
         id: 'memory',
-        label: 'Mémoire insuffisante',
-        title: 'Java n’a pas pu réserver la mémoire demandée',
-        text: `La mémoire demandée${context.ram ? ` (${String(context.ram).replace('.', ',')} Go)` : ''} n'est pas disponible : trop de programmes ouverts, ou un Java 32 bits limité à environ 1,5 Go.`,
-        advice: 'Baisse la mémoire de l’instance ou ferme des programmes. Avec un Java personnalisé, vérifie qu’il est en 64 bits.',
-        actions: [{ type: 'settings', label: 'Changer la mémoire' }],
+        label: t('crashes.memoire_insuffisante'),
+        title: t('crashes.java_pas_pu_reserver_la'),
+        text: t('crashes.oom_reserve_text', { detail: context.ram ? ` (${gb(context.ram)})` : '' }),
+        advice: t('crashes.baisse_la_memoire_de_instance'),
+        actions: [{ type: 'settings', label: t('crashes.changer_la_memoire') }],
       }, i);
     } else if (/There is insufficient memory for the Java Runtime Environment/.test(line)) {
       add('native-memory', {
         id: 'memory',
-        label: 'Mémoire insuffisante',
-        title: 'Ton PC n’avait plus assez de mémoire libre',
-        text: 'Java a demandé de la mémoire à Windows, qui n’en avait plus. Ce n’est pas la mémoire allouée au jeu qui manque, mais celle du PC.',
-        advice: 'Ferme des programmes (navigateur, autres jeux), ou baisse un peu la mémoire de l’instance pour laisser de la place à Windows.',
-        actions: [{ type: 'settings', label: 'Changer la mémoire' }],
+        label: t('crashes.memoire_insuffisante'),
+        title: t('crashes.ton_pc_avait_plus_assez'),
+        text: t('crashes.java_demande_de_la_memoire'),
+        advice: t('crashes.ferme_des_programmes_navigateur_autres'),
+        actions: [{ type: 'settings', label: t('crashes.changer_la_memoire') }],
       }, i);
     } else if (/Pixel format not accelerated|GLFW error 65542|WGL: The driver does not appear to support OpenGL|No OpenGL context found/i.test(line)) {
       add('gpu', gpuProblem(null), i);
@@ -246,30 +247,30 @@ function diagnose(text, context = {}) {
       const mod = m[1] && !m[1].endsWith('.json') ? m[1] : (m[2] ?? m[1] ?? '').replace(/(\.client|\.common)?\.mixins?\.json$/, '') || null;
       add(`mixin:${mod}`, {
         id: 'mixin',
-        label: 'Mod incompatible',
-        title: mod ? `${mod} n'a pas pu modifier le jeu` : "Un mod n'a pas pu modifier le jeu",
-        text: `Les mods Fabric et NeoForge modifient le code du jeu avec Mixin. ${mod ? `Celui de ${mod}` : 'Un de ces correctifs'} ne s'applique pas : le mod est fait pour une autre version, ou un autre mod modifie le même endroit.`,
-        advice: mod ? `Mets ${mod} à jour, ou désactive-le pour vérifier que c'est lui.` : 'Mets tes mods à jour depuis l’onglet Mods.',
-        actions: [mod && { type: 'disable', modId: mod, label: `Désactiver ${mod}` }, { type: 'mods', label: "Ouvrir l'onglet Mods" }].filter(Boolean),
+        label: t('crashes.mod_incompatible'),
+        title: mod ? t('crashes.pas_pu_modifier_le_jeu', { mod }) : t('crashes.un_mod_pas_pu_modifier'),
+        text: t(mod ? 'crashes.mixin_text_mod' : 'crashes.mixin_text', { mod }),
+        advice: mod ? t('crashes.mets_jour_ou_desactive_le', { mod }) : t('crashes.mets_tes_mods_jour_depuis'),
+        actions: [mod && { type: 'disable', modId: mod, label: t('crashes.desactiver_3', { mod }) }, { type: 'mods', label: t('crashes.ouvrir_onglet_mods') }].filter(Boolean),
       }, i);
     } else if (/java\.util\.zip\.ZipException|zip END header not found|invalid LOC header|error in opening zip file|ZipError/.test(line)) {
       const jar = /([\w.+-]+\.jar)/.exec(line)?.[1] ?? /([\w.+-]+\.jar)/.exec(lines[i + 1] ?? '')?.[1] ?? null;
       add('corrupt', {
         id: 'corrupt',
-        label: 'Fichier abîmé',
-        title: jar ? `Le fichier ${jar} est abîmé` : 'Un fichier .jar est abîmé',
-        text: 'Java n’arrive pas à ouvrir une archive : téléchargement interrompu, ou fichier modifié.',
-        advice: jar ? `Supprime ${jar} et réinstalle-le, puis lance « Vérifier à nouveau » sur l’accueil.` : 'Lance « Vérifier à nouveau » sur l’accueil pour retélécharger les fichiers du jeu.',
-        actions: [{ type: 'verify', label: 'Vérifier les fichiers' }],
+        label: t('crashes.fichier_abime'),
+        title: jar ? t('crashes.le_fichier_est_abime', { jar }) : t('crashes.un_fichier_jar_est_abime'),
+        text: t('crashes.java_arrive_pas_ouvrir_une'),
+        advice: jar ? t('crashes.supprime_et_reinstalle_le_puis', { jar }) : t('crashes.lance_verifier_nouveau_sur_accueil'),
+        actions: [{ type: 'verify', label: t('crashes.verifier_les_fichiers') }],
       }, i);
     } else if (/Java HotSpot\(TM\) Client VM|JVM is 32-bit|32-bit Java/i.test(line)) {
       add('java32', {
         id: 'java32',
-        label: 'Java 32 bits',
-        title: 'Le jeu tourne avec un Java 32 bits',
-        text: 'Un Java 32 bits ne peut pas utiliser plus d’environ 1,5 Go de mémoire, et les versions récentes de Minecraft ne le prennent plus en charge.',
-        advice: 'Repasse en Java automatique : le launcher utilise le Java 64 bits de Mojang.',
-        actions: [{ type: 'settings', label: 'Ouvrir les réglages Java' }],
+        label: t('crashes.java_32_bits'),
+        title: t('crashes.le_jeu_tourne_avec_un'),
+        text: t('crashes.un_java_32_bits_ne'),
+        advice: t('crashes.repasse_en_java_automatique_le'),
+        actions: [{ type: 'settings', label: t('crashes.ouvrir_les_reglages_java') }],
       }, i);
     } else if (/EXCEPTION_ACCESS_VIOLATION/.test(line)) {
       accessViolation = true;
@@ -291,12 +292,12 @@ function diagnose(text, context = {}) {
 function gpuProblem(vendor, dll) {
   return {
     id: 'gpu',
-    label: 'Pilote graphique',
-    title: vendor ? `Le pilote graphique ${vendor} a planté` : 'Le pilote graphique ne convient pas',
+    label: t('crashes.pilote_graphique'),
+    title: vendor ? t('crashes.le_pilote_graphique_plante', { vendor }) : t('crashes.le_pilote_graphique_ne_convient'),
     text: dll
-      ? `Java s'est arrêté dans ${dll}, un fichier du pilote de ta carte graphique. Ce n'est en général ni Minecraft ni un mod.`
-      : "Le jeu n'a pas pu ouvrir une fenêtre OpenGL : le pilote de la carte graphique est trop ancien ou c'est le pilote de base de Windows.",
-    advice: `Mets à jour le pilote ${vendor ?? 'de ta carte graphique'} depuis le site du fabricant${vendor === 'NVIDIA' ? ' (GeForce Experience ou nvidia.com)' : vendor === 'AMD' ? ' (AMD Software ou amd.com)' : vendor === 'Intel' ? ' (intel.com)' : ''}. Avec les shaders, essaie aussi sans.`,
+      ? t('crashes.java_est_arrete_dans_un', { dll })
+      : t('crashes.le_jeu_pas_pu_ouvrir'),
+    advice: t(vendor ? 'crashes.driver_advice_vendor' : 'crashes.driver_advice', { vendor, site: { NVIDIA: ' (GeForce Experience, nvidia.com)', AMD: ' (AMD Software, amd.com)', Intel: ' (intel.com)' }[vendor] ?? '' }),
     actions: [],
   };
 }
@@ -319,20 +320,20 @@ function unknownProblem(lines, suspects) {
     const names = suspects.map((s) => s.name).join(', ');
     return {
       id: 'suspect',
-      label: 'Mod en cause',
-      title: `Le plantage vient sans doute de ${names}`,
-      text: `Le rapport du jeu désigne ${suspects.length > 1 ? 'ces mods' : 'ce mod'}${error ? ` après l'erreur « ${error} »` : ''}.`,
-      advice: `Mets ${suspects.length > 1 ? 'ces mods' : 'ce mod'} à jour ou désactive-${suspects.length > 1 ? 'les' : 'le'} pour vérifier.`,
-      actions: suspects.slice(0, 2).map((s) => ({ type: 'disable', modId: s.modId, label: `Désactiver ${s.name}` })),
+      label: t('crashes.mod_en_cause'),
+      title: t('crashes.le_plantage_vient_sans_doute', { names }),
+      text: t(error ? 'crashes.suspect_error' : 'crashes.suspect', { count: suspects.length, error }),
+      advice: t('crashes.suspect_advice', { count: suspects.length }),
+      actions: suspects.slice(0, 2).map((s) => ({ type: 'disable', modId: s.modId, label: t('crashes.desactiver', { name: s.name }) })),
       lines: [errorAt, descriptionAt].filter((n) => n >= 0),
     };
   }
   return {
     id: 'unknown',
-    label: 'Erreur inconnue',
-    title: 'Le launcher ne reconnaît pas cette erreur',
-    text: error ? `Le jeu s'est arrêté sur « ${error} ».` : "Le jeu s'est arrêté sans message connu.",
-    advice: 'Partage le rapport sur mclo.gs et envoie le lien à la personne qui t’aide : il contient tout ce qu’il faut pour trouver la cause.',
+    label: t('crashes.erreur_inconnue'),
+    title: t('crashes.le_launcher_ne_reconnait_pas'),
+    text: error ? t('crashes.le_jeu_est_arrete_sur', { error }) : t('crashes.le_jeu_est_arrete_sans'),
+    advice: t('crashes.partage_le_rapport_sur_mclo'),
     actions: [],
     lines: [errorAt, descriptionAt].filter((n) => n >= 0),
   };
@@ -363,10 +364,10 @@ async function shareLog(text) {
       signal: AbortSignal.timeout(20000),
     });
   } catch (error) {
-    throw new Error(`mclo.gs ne répond pas (${error.cause?.code ?? error.message}).`);
+    throw new Error(t('crashes.mclo_gs_ne_repond_pas', { code: error.cause?.code ?? error.message }));
   }
   const data = await res.json().catch(() => null);
-  if (!res.ok || !data?.success) throw new Error(`mclo.gs a refusé le rapport${data?.error ? ` : ${data.error}` : ` (${res.status})`}.`);
+  if (!res.ok || !data?.success) throw new Error(data?.error ? t('crashes.mclogs_refused_error', { error: data.error }) : t('crashes.mclogs_refused', { status: res.status }));
   return { url: data.url, id: data.id };
 }
 

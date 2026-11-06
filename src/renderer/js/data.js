@@ -1,24 +1,26 @@
+import { formatDateTime, num, t } from './i18n.js';
+import { formatGo } from './dom.js';
 // Libellés partagés par l'interface. Les données elles-mêmes viennent du processus principal (api.js).
 
 export const VERSION_TYPES = {
   release: 'Release',
   snapshot: 'Snapshot',
-  beta: 'Bêta',
+  get beta() { return t('common.beta'); },
   alpha: 'Alpha',
-  custom: 'Personnalisée',
+  get custom() { return t('common.personnalisee'); },
 };
 
 // Mêmes étapes, dans le même ordre, que src/main/core/launch.js
 export const LAUNCH_STEPS = [
-  { name: 'Compte', detail: 'Vérification du compte' },
-  { name: 'Composants', detail: 'Fichier de version Mojang' },
-  { name: 'Fichiers du jeu', detail: 'Bibliothèques et assets' },
-  { name: 'Java', detail: 'Runtime Mojang adapté' },
-  { name: 'Loader de mods', detail: 'Vanilla : rien à installer' },
-  { name: 'Vérification de Java', detail: 'java -version' },
-  { name: 'Mémoire disponible', detail: 'RAM libre' },
-  { name: 'Natives', detail: 'Bibliothèques natives' },
-  { name: 'Lancement', detail: 'Démarrage de Minecraft' },
+  { get name() { return t('data.compte'); }, get detail() { return t('data.verification_du_compte'); } },
+  { get name() { return t('data.composants'); }, get detail() { return t('data.fichier_de_version_mojang'); } },
+  { get name() { return t('data.fichiers_du_jeu'); }, get detail() { return t('data.bibliotheques_et_assets'); } },
+  { name: 'Java', get detail() { return t('data.runtime_mojang_adapte'); } },
+  { get name() { return t('common.loader_de_mods'); }, get detail() { return t('data.vanilla_rien_installer'); } },
+  { get name() { return t('data.verification_de_java'); }, detail: 'java -version' },
+  { get name() { return t('data.memoire_disponible'); }, get detail() { return t('data.ram_libre'); } },
+  { get name() { return t('data.natives'); }, get detail() { return t('data.bibliotheques_natives'); } },
+  { get name() { return t('common.lancement'); }, get detail() { return t('data.demarrage_de_minecraft'); } },
 ];
 
 export const FILES_STEP = 2;
@@ -38,22 +40,20 @@ export function loaderLabel(instance) {
   return `${LOADER_NAMES[instance.loader]} ${short}`;
 }
 
-const gb = (value) => `${String(value).replace('.', ',')} Go`;
-
-/** « 4 à 6 Go », ou une seule valeur quand le PC limite la zone idéale. */
+/** « 4 à 6 Go » en français, ou une seule valeur quand le PC limite la zone idéale. */
 export function ramRange({ low, high }) {
-  return low === high ? gb(low) : `${String(low).replace('.', ',')} à ${gb(high)}`;
+  return low === high ? formatGo(low) : t('ram.range', { low: num(low), high: formatGo(high) });
 }
 
 /** Avis sur la mémoire choisie : level ok | warn | bad, titre court et explication. */
 export function ramVerdict(ram, guide, freeGb) {
-  if (ram > guide.cap) return { level: 'bad', title: 'Trop pour ce PC', text: 'Windows et ta carte graphique n’auraient plus assez de mémoire : tout le PC ralentirait.' };
-  if (ram < guide.min) return { level: 'bad', title: 'Pas assez', text: 'Le jeu risque de saccader ou de planter en chargeant le monde.' };
-  if (freeGb && ram > freeGb) return { level: 'warn', title: 'Peu de RAM libre', text: `Seulement ${gb(freeGb.toFixed(1))} libres maintenant : ferme des applications avant de jouer.` };
-  if (ram < guide.low) return { level: 'warn', title: 'Un peu juste', text: 'Ça passe, mais attends-toi à des saccades dans les gros mondes.' };
-  if (ram > guide.high) return { level: 'warn', title: 'Trop', text: 'Aucun FPS en plus, et des pauses plus longues quand Java fait le ménage.' };
-  if (guide.limited) return { level: 'ok', title: 'Parfait', text: 'Le mieux pour ce PC : le reste de la mémoire garde Windows fluide.' };
-  return { level: 'ok', title: 'Parfait', text: 'Bon équilibre : le jeu et ton PC restent à l’aise.' };
+  if (ram > guide.cap) return { level: 'bad', title: t('data.trop_pour_ce_pc'), text: t('data.windows_et_ta_carte_graphique') };
+  if (ram < guide.min) return { level: 'bad', title: t('data.pas_assez'), text: t('data.le_jeu_risque_de_saccader') };
+  if (freeGb && ram > freeGb) return { level: 'warn', title: t('data.peu_de_ram_libre'), text: t('data.seulement_libres_maintenant_ferme_des', { freeGb: formatGo(freeGb.toFixed(1)) }) };
+  if (ram < guide.low) return { level: 'warn', title: t('data.un_peu_juste'), text: t('data.ca_passe_mais_attends_toi') };
+  if (ram > guide.high) return { level: 'warn', title: t('data.trop'), text: t('data.aucun_fps_en_plus_et') };
+  if (guide.limited) return { level: 'ok', title: t('data.parfait'), text: t('data.le_mieux_pour_ce_pc') };
+  return { level: 'ok', title: t('data.parfait'), text: t('data.bon_equilibre_le_jeu_et') };
 }
 
 /** Fond du curseur : rouge, ambre, vert, ambre, rouge, aux seuils du conseil. */
@@ -69,19 +69,17 @@ export function ramZones({ min, low, high, cap }, sliderMin, sliderMax) {
   return `linear-gradient(90deg, ${parts.join(', ')})`;
 }
 
-const DATE = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-const DATE_LONG = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-const DATE_SHORT = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+const DATE = { day: 'numeric', month: 'short', year: 'numeric' };
 
-export const formatDate = (iso) => (iso ? DATE.format(new Date(iso)) : '—');
+export const formatDate = (iso) => (iso ? formatDateTime(new Date(iso), DATE) : '—');
 
-/** « aujourd'hui », « hier », « il y a 3 jours »… */
+/** Suite de « Dernière partie » : aujourd'hui, hier, il y a 3 jours… */
 export function formatLastPlayed(timestamp) {
   if (!timestamp) return null;
   const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((startOfDay(new Date()) - startOfDay(new Date(timestamp))) / 86_400_000);
-  if (days <= 0) return "aujourd'hui";
-  if (days === 1) return 'hier';
-  if (days < 30) return `il y a ${days} jours`;
-  return `le ${DATE.format(new Date(timestamp))}`;
+  if (days <= 0) return t('played.today');
+  if (days === 1) return t('played.yesterday');
+  if (days < 30) return t('played.days_ago', { count: days });
+  return t('played.on_date', { date: formatDateTime(new Date(timestamp), DATE) });
 }

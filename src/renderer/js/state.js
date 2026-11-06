@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // État unique de l'interface. On le modifie uniquement via update(), qui redessine au prochain frame.
 export const state = {
   ready: false,
@@ -124,11 +125,11 @@ export function runPercent(run) {
 export function instanceStatus(instance) {
   const run = state.run;
   if (run && run.instanceId === instance.id) {
-    if (run.phase === 'running') return { kind: 'running', label: 'En jeu' };
-    if (run.prepareOnly) return { kind: 'busy', label: 'Vérification' };
-    return { kind: 'busy', label: `${instance.installed ? 'Lancement' : 'Installation'} · ${runPercent(run)} %` };
+    if (run.phase === 'running') return { kind: 'running', label: t('common.en_jeu') };
+    if (run.prepareOnly) return { kind: 'busy', label: t('state.verification') };
+    return { kind: 'busy', label: `${instance.installed ? t('common.lancement') : t('state.installation')} · ${runPercent(run)} %` };
   }
-  return instance.installed ? { kind: 'ready', label: 'Prête' } : { kind: 'idle', label: 'À installer' };
+  return instance.installed ? { kind: 'ready', label: t('common.prete') } : { kind: 'idle', label: t('common.installer') };
 }
 
 let toastId = 0;

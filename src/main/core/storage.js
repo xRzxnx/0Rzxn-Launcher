@@ -3,6 +3,7 @@
 // Espace disque du launcher et nettoyage de ce qui se retélécharge : Java, versions, bibliothèques,
 // assets et fichiers du cache que plus aucune instance n'utilise. Uniquement sous la racine du launcher
 // (.0rzxn) : les dossiers des instances (mondes, mods, captures) et les sauvegardes ne sont jamais touchés.
+const { t } = require('../i18n');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
@@ -12,13 +13,13 @@ const { resolveLibraries } = require('./install');
 const { listRuntimes } = require('./java');
 
 const PARTS = [
-  { id: 'instances', label: 'Instances' },
-  { id: 'assets', label: 'Assets' },
-  { id: 'libraries', label: 'Bibliothèques' },
-  { id: 'backups', label: 'Sauvegardes' },
+  { id: 'instances', get label() { return t('storage.instances'); } },
+  { id: 'assets', get label() { return t('storage.assets'); } },
+  { id: 'libraries', get label() { return t('storage.bibliotheques'); } },
+  { id: 'backups', get label() { return t('storage.sauvegardes'); } },
   { id: 'runtime', label: 'Java' },
-  { id: 'versions', label: 'Versions' },
-  { id: 'cache', label: 'Cache' },
+  { id: 'versions', get label() { return t('storage.versions'); } },
+  { id: 'cache', get label() { return t('storage.cache'); } },
 ];
 // Les processeurs de Forge et NeoForge écrivent ici des jars qu'aucun fichier de version ne cite :
 // on n'y touche pas tant qu'une instance Forge ou NeoForge existe.
@@ -62,7 +63,7 @@ async function usage(dirs) {
     if (known.has(key(full))) continue;
     other += entry.isDirectory() ? await dirSize(full) : (await fsp.lstat(full).catch(() => ({ size: 0 }))).size;
   }
-  if (other) parts.push({ id: 'other', label: 'Autres', size: other });
+  if (other) parts.push({ id: 'other', label: t('storage.autres'), size: other });
   return { total: parts.reduce((t, p) => t + p.size, 0), parts };
 }
 
@@ -114,7 +115,7 @@ function inUse(dirs, instances) {
   return { versions, components, libraries, assetIndexes, forgeLike: instances.some((i) => i.loader === 'forge' || i.loader === 'neoforge') };
 }
 
-const list = (names) => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} et ${names.length - 3} autre${names.length > 4 ? 's' : ''}`);
+const list = (names) => (names.length <= 3 ? names.join(', ') : t('storage.names_more', { names: names.slice(0, 3).join(', '), count: names.length - 3 }));
 
 /**
  * Ce qui peut partir : [{ id, label, detail, size, count, paths }]. Recalculé avant chaque nettoyage,
@@ -128,8 +129,8 @@ async function cleanupPlan(dirs, instances) {
   const runtimeSizes = await Promise.all(runtimes.map((r) => dirSize(r.dir)));
   items.push({
     id: 'runtimes',
-    label: 'Java inutilisés',
-    detail: runtimes.length ? `${list(runtimes.map((r) => (r.major ? `Java ${r.major}` : r.component)))} : aucune instance ne ${runtimes.length > 1 ? 'les ' : "l'"}utilise` : 'Chaque Java sert à au moins une instance',
+    label: t('storage.java_inutilises'),
+    detail: runtimes.length ? t('storage.java_unused', { list: list(runtimes.map((r) => (r.major ? `Java ${r.major}` : r.component))), count: runtimes.length }) : t('storage.chaque_java_sert_au_moins'),
     count: runtimes.length,
     size: runtimeSizes.reduce((a, b) => a + b, 0),
     paths: runtimes.map((r) => r.dir),
@@ -144,8 +145,8 @@ async function cleanupPlan(dirs, instances) {
   const versionSizes = await Promise.all(versionNames.map((n) => dirSize(path.join(dirs.versions, n))));
   items.push({
     id: 'versions',
-    label: 'Versions sans instance',
-    detail: versionNames.length ? list(versionNames) : 'Chaque version sert à une instance',
+    label: t('storage.versions_sans_instance'),
+    detail: versionNames.length ? list(versionNames) : t('storage.chaque_version_sert_une_instance'),
     count: versionNames.length,
     size: versionSizes.reduce((a, b) => a + b, 0),
     paths: versionNames.map((n) => path.join(dirs.versions, n)),
@@ -158,8 +159,8 @@ async function cleanupPlan(dirs, instances) {
   });
   items.push({
     id: 'libraries',
-    label: 'Bibliothèques orphelines',
-    detail: orphanLibs.length ? `${orphanLibs.length.toLocaleString('fr-FR')} fichier${orphanLibs.length > 1 ? 's' : ''} que plus aucune version n'utilise` : 'Toutes servent encore',
+    label: t('storage.bibliotheques_orphelines'),
+    detail: orphanLibs.length ? t('storage.fichiers_que_plus_aucune_version', { count: orphanLibs.length }) : t('storage.toutes_servent_encore'),
     count: orphanLibs.length,
     size: sum(orphanLibs),
     paths: orphanLibs.map((f) => f.file),
@@ -181,8 +182,8 @@ async function cleanupPlan(dirs, instances) {
     : [];
   items.push({
     id: 'assets',
-    label: 'Assets inutilisés',
-    detail: orphanAssets.length ? 'Sons, textures et langues de versions supprimées' : 'Tous servent encore',
+    label: t('storage.assets_inutilises'),
+    detail: orphanAssets.length ? t('storage.sons_textures_et_langues_de') : t('storage.tous_servent_encore'),
     count: orphanAssets.length,
     size: sum(orphanAssets),
     paths: orphanAssets.map((f) => f.file),
@@ -191,8 +192,8 @@ async function cleanupPlan(dirs, instances) {
   const cacheFiles = (await Promise.all(CACHE_DIRS.map((d) => walk(path.join(dirs.cache, d))))).flat();
   items.push({
     id: 'cache',
-    label: 'Cache de téléchargement',
-    detail: cacheFiles.length ? 'Installateurs Forge et modpacks déjà installés' : 'Rien à vider',
+    label: t('storage.cache_de_telechargement'),
+    detail: cacheFiles.length ? t('storage.installateurs_forge_et_modpacks_deja') : t('storage.rien_vider'),
     count: cacheFiles.length,
     size: sum(cacheFiles),
     paths: cacheFiles.map((f) => f.file),

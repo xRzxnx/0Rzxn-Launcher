@@ -1,6 +1,7 @@
 'use strict';
 
 // Pont entre l'interface et le cœur : chaque canal valide ses entrées avant d'agir.
+const { SUPPORTED, currentLanguage, resolveLanguage, setLanguage, t } = require('./i18n');
 const { app, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -37,11 +38,11 @@ const LOG_BUFFER = 5000;
 /** Chiffre les jetons Microsoft avec la protection de Windows (DPAPI), liée à ta session Windows. */
 const vault = {
   encrypt(text) {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error("Le chiffrement de Windows n'est pas disponible : impossible d'enregistrer la session.");
+    if (!safeStorage.isEncryptionAvailable()) throw new Error(t('ipc.le_chiffrement_de_windows_est'));
     return `enc:${safeStorage.encryptString(text).toString('base64')}`;
   },
   decrypt(data) {
-    if (!data?.startsWith('enc:')) throw new Error('Session illisible.');
+    if (!data?.startsWith('enc:')) throw new Error(t('ipc.session_illisible'));
     return safeStorage.decryptString(Buffer.from(data.slice(4), 'base64'));
   },
 };
@@ -63,13 +64,14 @@ function createServices() {
 
 // Réglages du launcher lui-même (Paramètres › Launcher).
 // lightMode : le launcher se met en veille pendant une partie ; gpuHighPerformance : accord donné pour la carte dédiée.
-const LAUNCHER_DEFAULTS = { accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false };
+const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false };
 const ACCENTS = new Set(['violet', 'bleu', 'cyan', 'vert', 'ambre', 'rouge', 'rose']);
 const LOADER_NAMES = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
 
 function sanitizeLauncher(input, base = LAUNCHER_DEFAULTS) {
   const s = { ...base };
   if (input == null) return s;
+  if (input.language === 'auto' || SUPPORTED.includes(input.language)) s.language = input.language;
   // Couleur d'accent : un thème prédéfini ou une couleur perso « #rrggbb ».
   if (ACCENTS.has(input.accent) || /^#[0-9a-f]{6}$/i.test(input.accent ?? '')) s.accent = input.accent.toLowerCase();
   for (const key of ['discord', 'discordShowName', 'tray', 'closeToTray', 'lightMode', 'gpuHighPerformance']) if (typeof input[key] === 'boolean') s[key] = input[key];
@@ -173,18 +175,18 @@ class LaunchManager {
   }
 
   start(instanceId, { verify = false, prepareOnly = false } = {}) {
-    if (this.session) throw new Error('Une partie ou une installation est déjà en cours.');
+    if (this.session) throw new Error(t('ipc.une_partie_ou_une_installation'));
     const { dirs, instances, accounts } = this.services;
     const instance = instances.get(instanceId);
     const accountId = accounts.resolveId(instance.accountId);
-    if (!accountId) throw new Error('Ajoute un compte avant de jouer.');
+    if (!accountId) throw new Error(t('common.ajoute_un_compte_avant_de'));
 
     const session = new LaunchSession({
       dirs,
       instance,
       instanceDir: instances.dir(instanceId),
       getAccount: (log) => {
-        if (instance.accountId && instance.accountId !== accountId) log("Le compte choisi pour cette instance n'existe plus : compte actif utilisé.");
+        if (instance.accountId && instance.accountId !== accountId) log(t('ipc.le_compte_choisi_pour_cette'));
         return accounts.launchAccount(log, accountId);
       },
       launcherVersion: app.getVersion(),
@@ -250,7 +252,7 @@ class LaunchManager {
     if (process.platform !== 'win32' || !this.services.settings.launcher().gpuHighPerformance) return;
     if ((await gpu.preference(exe)) === 'high') return;
     await gpu.setHighPerformance([exe]);
-    log('Carte graphique dédiée choisie pour ce Java (préférence Windows).');
+    log(t('ipc.carte_graphique_dediee_choisie_pour'));
   }
 
   finish(extra) {
@@ -278,13 +280,23 @@ class LaunchManager {
 function registerIpc(getWindow) {
   const services = createServices();
   const { dirs, accounts, instances } = services;
+
+  // Langue : le réglage du launcher, ou celle de Windows en automatique.
+  let language;
+  const applyLanguage = () => {
+    language = resolveLanguage(services.settings.launcher().language, app.getPreferredSystemLanguages());
+    setLanguage(language);
+    return language;
+  };
+  applyLanguage();
+
   const skins = new SkinStore(dirs);
   const wardrobe = new Wardrobe({ accounts, store: skins });
   const launches = new LaunchManager(services, getWindow);
 
   const handle = (channel, fn) =>
     ipcMain.handle(channel, (event, ...args) => {
-      if (event.sender !== getWindow()?.webContents) throw new Error('Origine refusée.');
+      if (event.sender !== getWindow()?.webContents) throw new Error(t('ipc.origine_refusee'));
       return fn(...args);
     });
   const text = (value) => (typeof value === 'string' ? value : '');
@@ -314,19 +326,19 @@ function registerIpc(getWindow) {
   handle('instances:list', () => instances.list());
   handle('instances:create', (data) => instances.create(data ?? {}, services.settings.defaults()));
   handle('instances:update', (id, patch) => {
-    if (launches.run?.instanceId === id && patch?.version) throw new Error("Impossible de changer de version pendant qu'elle tourne.");
+    if (launches.run?.instanceId === id && patch?.version) throw new Error(t('ipc.impossible_de_changer_de_version'));
     return instances.update(text(id), patch ?? {});
   });
   const notRunning = (id, action) => {
-    if (launches.run?.instanceId === id) throw new Error(`Impossible de ${action} pendant que l'instance tourne : ferme d'abord le jeu.`);
+    if (launches.run?.instanceId === id) throw new Error(t('ipc.impossible_de_pendant_que_instance', { action }));
   };
   handle('instances:duplicate', (id, name) => {
-    notRunning(text(id), 'dupliquer');
+    notRunning(text(id), t('ipc.action_duplicate'));
     return instances.duplicate(text(id), text(name));
   });
   handle('instances:pickBackground', async (id) => {
     instances.get(text(id));
-    const result = await dialog.showOpenDialog(getWindow(), { title: 'Choisir une image de fond', filters: [{ name: 'Image (PNG, JPEG, WebP)', extensions: ['png', 'jpg', 'jpeg', 'webp'] }], properties: ['openFile'] });
+    const result = await dialog.showOpenDialog(getWindow(), { title: t('ipc.choisir_une_image_de_fond'), filters: [{ name: t('ipc.image_png_jpeg_webp'), extensions: ['png', 'jpg', 'jpeg', 'webp'] }], properties: ['openFile'] });
     const file = result.filePaths?.[0];
     if (result.canceled || !file) return null;
     return instances.importBackground(text(id), file);
@@ -347,13 +359,13 @@ function registerIpc(getWindow) {
   });
   // Suppression = corbeille Windows : on peut toujours récupérer ses mondes.
   handle('instances:delete', async (id) => {
-    notRunning(text(id), 'supprimer');
+    notRunning(text(id), t('ipc.action_delete'));
     instances.get(text(id));
     await shell.trashItem(instances.dir(text(id)));
     if (services.settings.ui().selectedId === id) services.settings.setUi({ selectedId: null });
   });
   handle('instances:shortcut', (id) => {
-    if (process.platform !== 'win32') throw new Error('Les raccourcis bureau sont disponibles sous Windows uniquement.');
+    if (process.platform !== 'win32') throw new Error(t('ipc.les_raccourcis_bureau_sont_disponibles'));
     const instance = instances.get(text(id));
     const safeName = instance.name.replace(/[\\/:*?"<>|]/g, '').trim() || instance.id;
     const file = path.join(app.getPath('desktop'), `${safeName} (0Rzxn_).lnk`);
@@ -362,12 +374,12 @@ function registerIpc(getWindow) {
       // En développement, Electron a besoin du dossier du projet avant les arguments.
       args: app.isPackaged ? `--launch=${instance.id}` : `"${app.getAppPath()}" --launch=${instance.id}`,
       cwd: path.dirname(process.execPath),
-      description: `Lancer ${instance.name} avec 0Rzxn_ Launcher`,
+      description: t('ipc.lancer_avec_0rzxn_launcher', { name: instance.name }),
       icon: process.execPath,
       iconIndex: 0,
     };
     if (!shell.writeShortcutLink(file, fs.existsSync(file) ? 'replace' : 'create', options)) {
-      throw new Error("Windows n'a pas pu créer le raccourci.");
+      throw new Error(t('ipc.windows_pas_pu_creer_le'));
     }
     return path.basename(file);
   });
@@ -386,7 +398,7 @@ function registerIpc(getWindow) {
   };
   const syncSets = (id) => modSets.sync(setsCtx(id)).catch(() => {});
   handle('content:toggle', async (id, kind, file) => {
-    notRunning(text(id), 'modifier son contenu');
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
     await content.toggle({ ...contentCtx(id, kind), file: text(file) });
     if (text(kind) === 'mods') await syncSets(id);
   });
@@ -394,7 +406,7 @@ function registerIpc(getWindow) {
   handle('modsets:rename', (id, setId, name) => modSets.rename({ ...setsCtx(id), setId: text(setId), name: text(name) }));
   handle('modsets:delete', (id, setId) => modSets.remove({ ...setsCtx(id), setId: text(setId) }));
   handle('modsets:apply', (id, setId) => {
-    notRunning(text(id), "changer d'ensemble de mods");
+    notRunning(text(id), t('ipc.changer_ensemble_de_mods'));
     return modSets.apply({ ...setsCtx(id), setId: setId == null ? null : text(setId) });
   });
   handle('modcheck:run', (id) => {
@@ -402,25 +414,25 @@ function registerIpc(getWindow) {
     return modCheck.check({ gameDir: ctx.gameDir, instance: ctx.instance });
   });
   handle('content:delete', async (id, kind, file) => {
-    notRunning(text(id), 'modifier son contenu');
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
     const ctx = contentCtx(id, kind);
     await trash(content.safePath(content.contentDir(ctx.gameDir, ctx.kind), text(file)));
     if (ctx.kind === 'mods') await syncSets(id);
   });
   handle('content:install', async (id, kind, projectId, versionId) => {
-    notRunning(text(id), 'modifier son contenu');
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
     const result = await content.install({ ...contentCtx(id, kind), projectId: text(projectId), versionId: text(versionId) || null, trash });
     if (text(kind) === 'mods') await syncSets(id);
     return result;
   });
   handle('content:update', async (id, kind, files) => {
-    notRunning(text(id), 'mettre à jour son contenu');
+    notRunning(text(id), t('ipc.mettre_jour_son_contenu'));
     const result = await content.update({ ...contentCtx(id, kind), files: Array.isArray(files) ? files.map(text) : null, trash });
     if (text(kind) === 'mods') await syncSets(id);
     return result;
   });
   handle('content:import', async (id, kind, paths) => {
-    notRunning(text(id), 'modifier son contenu');
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
     const result = await content.importFiles({ ...contentCtx(id, kind), paths: Array.isArray(paths) ? paths.map(text) : [] });
     if (text(kind) === 'mods') await syncSets(id);
     return result;
@@ -459,7 +471,7 @@ function registerIpc(getWindow) {
   let task = null;
   let taskAbort = null; // les tâches qui acceptent un signal (sauvegarde, restauration) peuvent être annulées
   const runTask = async (label, work, { cancellable = false } = {}) => {
-    if (task) throw new Error(`Patiente : « ${task} » est en cours.`);
+    if (task) throw new Error(t('ipc.patiente_est_en_cours', { task }));
     task = label;
     taskAbort = cancellable ? new AbortController() : null;
     const send = (payload) => {
@@ -482,9 +494,9 @@ function registerIpc(getWindow) {
   handle('modpacks:install', async (projectId, versionId, meta) => {
     const id = text(projectId);
     const chosen = text(versionId) || (await modrinth.versions(id, {}))[0]?.id;
-    if (!chosen) throw new Error("Ce modpack n'a aucune version téléchargeable.");
+    if (!chosen) throw new Error(t('ipc.ce_modpack_aucune_version_telechargeable'));
     const { buffer } = await modpacks.downloadPack(dirs, chosen);
-    return installFromBuffer(`Installation de ${text(meta?.title) || 'modpack'}`, buffer, {
+    return installFromBuffer(t('ipc.installation_de', { title: text(meta?.title) || 'modpack' }), buffer, {
       projectId: id,
       versionId: chosen,
       title: text(meta?.title) || undefined,
@@ -493,20 +505,20 @@ function registerIpc(getWindow) {
   });
   handle('modpacks:import', async () => {
     const result = await dialog.showOpenDialog(getWindow(), {
-      title: 'Importer un modpack',
+      title: t('ipc.importer_un_modpack'),
       properties: ['openFile'],
-      filters: [{ name: 'Modpack Modrinth', extensions: ['mrpack'] }],
+      filters: [{ name: t('ipc.modpack_modrinth'), extensions: ['mrpack'] }],
     });
     if (result.canceled) return null;
     const buffer = await fs.promises.readFile(result.filePaths[0]);
-    return installFromBuffer(`Import de ${path.basename(result.filePaths[0])}`, buffer, null);
+    return installFromBuffer(t('ipc.import_de', { filePaths: path.basename(result.filePaths[0]) }), buffer, null);
   });
   handle('modpacks:checkUpdate', (id) => modpacks.checkUpdate(instances.get(text(id))));
   handle('modpacks:update', async (id, versionId) => {
-    notRunning(text(id), 'mettre à jour le modpack');
+    notRunning(text(id), t('ipc.mettre_jour_le_modpack'));
     const instance = instances.get(text(id));
     const { buffer } = await modpacks.downloadPack(dirs, text(versionId));
-    return runTask(`Mise à jour de ${instance.name}`, (onProgress) =>
+    return runTask(t('ipc.mise_jour_de', { name: instance.name }), (onProgress) =>
       modpacks.updatePack({ instances, instanceId: instance.id, buffer, source: { versionId: text(versionId) }, trash, onProgress }),
     );
   });
@@ -528,14 +540,14 @@ function registerIpc(getWindow) {
   };
   handle('import:scanInstances', () => instancesFrom(importer.defaultInstancesDir(app.getPath('appData'))));
   handle('import:pickInstances', async () => {
-    const dir = await pickFolder("Dossier d'instances d'un autre launcher, ou dossier d'une instance", importer.defaultInstancesDir(app.getPath('appData')));
+    const dir = await pickFolder(t('ipc.dossier_instances_un_autre_launcher'), importer.defaultInstancesDir(app.getPath('appData')));
     return dir ? instancesFrom(dir) : null;
   });
   handle('import:instance', (dir) => {
     const source = text(dir);
     const launcher = scanned.get(source);
-    if (!launcher) throw new Error('Instance inconnue : relance la recherche.');
-    return runTask(`Import de ${path.basename(source)}`, (onProgress) =>
+    if (!launcher) throw new Error(t('ipc.instance_inconnue_relance_la_recherche'));
+    return runTask(t('ipc.import_de_2', { source: path.basename(source) }), (onProgress) =>
       importer.importInstance({ instances, dir: source, defaults: services.settings.defaults(), launcher, onProgress }),
     );
   });
@@ -561,7 +573,7 @@ function registerIpc(getWindow) {
     await Promise.all(
       recent.map(async (item) => {
         const file = crashes.crashFile(crashDirs(item.instanceId), item.source, item.file);
-        const key = `${file}:${item.at}`;
+        const key = `${currentLanguage()}:${file}:${item.at}`;
         if (!summaries.has(key)) {
           const body = await crashes.readCrashText(file).then((r) => r.text, () => '');
           summaries.set(key, crashes.diagnose(body).problems[0]?.label ?? null);
@@ -590,9 +602,9 @@ function registerIpc(getWindow) {
     const name = text(options?.name).trim() || instance.name;
     const version = text(options?.version).trim() || '1.0.0';
     const result = await dialog.showSaveDialog(getWindow(), {
-      title: 'Exporter en modpack',
+      title: t('ipc.exporter_en_modpack'),
       defaultPath: path.join(app.getPath('desktop'), `${name.replace(/[\\/:*?"<>|]/g, '')}-${version}.mrpack`),
-      filters: [{ name: 'Modpack Modrinth', extensions: ['mrpack'] }],
+      filters: [{ name: t('ipc.modpack_modrinth'), extensions: ['mrpack'] }],
     });
     if (result.canceled) return null;
     const pack = await modpacks.exportPack({ instance, gameDir: instances.gameDir(instance.id), name, version, summary: text(options?.summary) });
@@ -605,16 +617,16 @@ function registerIpc(getWindow) {
   const RECAP_MAX_BYTES = 4 * 1024 * 1024;
   const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   handle('stats:saveRecapImage', async (month, bytes) => {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text(month))) throw new Error('Mois invalide.');
-    if (!(bytes instanceof Uint8Array) || bytes.length < 33 || bytes.length > RECAP_MAX_BYTES) throw new Error("Image refusée : taille inattendue.");
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text(month))) throw new Error(t('ipc.mois_invalide'));
+    if (!(bytes instanceof Uint8Array) || bytes.length < 33 || bytes.length > RECAP_MAX_BYTES) throw new Error(t('ipc.image_refusee_taille_inattendue'));
     const png = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length);
     const header = png.subarray(12, 16).toString('latin1') === 'IHDR';
     const tooBig = png.readUInt32BE(16) > 4096 || png.readUInt32BE(20) > 4096;
-    if (!png.subarray(0, 8).equals(PNG_SIGNATURE) || !header || tooBig) throw new Error('Image refusée : ce n’est pas un PNG valide.');
+    if (!png.subarray(0, 8).equals(PNG_SIGNATURE) || !header || tooBig) throw new Error(t('ipc.image_refusee_ce_est_pas'));
     const result = await dialog.showSaveDialog(getWindow(), {
-      title: 'Enregistrer le bilan du mois',
-      defaultPath: path.join(app.getPath('pictures'), `bilan-${month}.png`),
-      filters: [{ name: 'Image PNG', extensions: ['png'] }],
+      title: t('ipc.enregistrer_le_bilan_du_mois'),
+      defaultPath: path.join(app.getPath('pictures'), t('ipc.bilan_png', { month })),
+      filters: [{ name: t('ipc.image_png'), extensions: ['png'] }],
     });
     if (result.canceled || !result.filePath) return null;
     await fs.promises.writeFile(result.filePath, png);
@@ -636,7 +648,7 @@ function registerIpc(getWindow) {
   handle('accounts:addOffline', (name) => accounts.addOffline(text(name)));
   handle('accounts:addMicrosoft', async () => {
     if (!MICROSOFT_CLIENT_ID) {
-      throw new Error("La connexion Microsoft n'est pas encore activée : il manque l'identifiant de l'application Azure (voir docs/MICROSOFT.md).");
+      throw new Error(t('ipc.la_connexion_microsoft_est_pas'));
     }
     const { code, verifier } = await promptMicrosoftLogin(getWindow(), MICROSOFT_CLIENT_ID);
     const session = await microsoft.signIn(MICROSOFT_CLIENT_ID, code, verifier);
@@ -661,11 +673,11 @@ function registerIpc(getWindow) {
   handle('skins:state', (id) => wardrobe.state(text(id)));
   handle('skins:library', () => skins.list());
   handle('skins:import', async () => {
-    const result = await dialog.showOpenDialog(getWindow(), { title: 'Importer un skin', filters: [{ name: 'Skin Minecraft (PNG)', extensions: ['png'] }], properties: ['openFile'] });
+    const result = await dialog.showOpenDialog(getWindow(), { title: t('ipc.importer_un_skin'), filters: [{ name: t('ipc.skin_minecraft_png'), extensions: ['png'] }], properties: ['openFile'] });
     const file = result.filePaths?.[0];
     if (result.canceled || !file) return null;
     const stat = await fs.promises.stat(file);
-    if (stat.size > 2 * 1024 * 1024) throw new Error('Ce fichier est trop lourd pour un skin (2 Mo au maximum).');
+    if (stat.size > 2 * 1024 * 1024) throw new Error(t('common.ce_fichier_est_trop_lourd'));
     const { item, added } = skins.add(await fs.promises.readFile(file), { name: path.basename(file), variant: 'classic' });
     return { id: item.id, added, library: skins.list() };
   });
@@ -696,7 +708,7 @@ function registerIpc(getWindow) {
   handle('settings:update', (patch) => services.settings.setDefaults(patch ?? {}));
   handle('dialog:pickJava', async () => {
     const result = await dialog.showOpenDialog(getWindow(), {
-      title: 'Choisir un Java',
+      title: t('ipc.choisir_un_java'),
       properties: ['openFile'],
       filters: process.platform === 'win32' ? [{ name: 'Java', extensions: ['exe'] }] : [],
     });
@@ -725,10 +737,10 @@ function registerIpc(getWindow) {
     if (launches.run) {
       const { response } = await dialog.showMessageBox({
         type: 'warning',
-        title: 'Quitter 0Rzxn_ Launcher',
-        message: 'Une partie est en cours. Quitter le launcher quand même ?',
-        detail: "Le temps de jeu de cette partie ne sera pas enregistré et la console ne la suivra plus.",
-        buttons: ['Annuler', 'Quitter'],
+        title: t('ipc.quitter_0rzxn_launcher'),
+        message: t('ipc.une_partie_est_en_cours'),
+        detail: t('ipc.le_temps_de_jeu_de'),
+        buttons: [t('common.annuler'), t('common.quitter')],
         defaultId: 0,
         cancelId: 0,
         noLink: true,
@@ -776,6 +788,13 @@ function registerIpc(getWindow) {
   tray.setEnabled(services.settings.launcher().tray);
 
   handle('launcher:get', () => services.settings.launcher());
+  // La langue change sans redémarrer : messages d'erreur, dialogues et zone de notification suivent aussitôt.
+  handle('launcher:setLanguage', (language) => {
+    services.settings.setLauncher({ language });
+    const next = applyLanguage();
+    tray.refresh();
+    return next;
+  });
   handle('launcher:set', (patch) => {
     const prefs = services.settings.setLauncher(patch ?? {});
     tray.setEnabled(prefs.tray);
@@ -790,8 +809,8 @@ function registerIpc(getWindow) {
 
   // ---------- Java et espace disque ----------
   const notBusy = (action) => {
-    if (launches.session) throw new Error(`Impossible de ${action} pendant une partie ou une installation.`);
-    if (task) throw new Error(`Patiente : « ${task} » est en cours.`);
+    if (launches.session) throw new Error(t('ipc.impossible_de_pendant_une_partie', { action }));
+    if (task) throw new Error(t('ipc.patiente_est_en_cours', { task }));
   };
   let systemJavas = null;
   handle('java:runtimes', () => storage.runtimesWithUsage(dirs, instances.list()));
@@ -801,14 +820,14 @@ function registerIpc(getWindow) {
   });
   const runtimeDir = (component) => {
     const name = text(component);
-    if (!/^[a-z0-9-]+$/.test(name)) throw new Error('Java inconnu.');
+    if (!/^[a-z0-9-]+$/.test(name)) throw new Error(t('ipc.java_inconnu'));
     return path.join(dirs.runtime, name);
   };
   handle('java:removeRuntime', async (component) => {
-    notBusy('supprimer un Java');
+    notBusy(t('ipc.supprimer_un_java'));
     const runtime = (await storage.runtimesWithUsage(dirs, instances.list())).find((r) => r.component === text(component));
-    if (!runtime) throw new Error('Ce Java est déjà supprimé.');
-    if (runtime.usedBy.length) throw new Error(`Ce Java sert encore à ${runtime.usedBy.join(', ')}.`);
+    if (!runtime) throw new Error(t('ipc.ce_java_est_deja_supprime'));
+    if (runtime.usedBy.length) throw new Error(t('ipc.ce_java_sert_encore', { usedBy: runtime.usedBy.join(', ') }));
     await fs.promises.rm(runtimeDir(component), { recursive: true, force: true });
     return runtime.size;
   });
@@ -852,17 +871,17 @@ function registerIpc(getWindow) {
     return performance.packStatus({ gameDir: instances.gameDir(instance.id), instance });
   });
   handle('perf:installPack', async (id, slugs, options) => {
-    notRunning(text(id), 'modifier son contenu');
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
     let instance = instances.get(text(id));
     const list = Array.isArray(slugs) ? slugs.map(text) : [];
     // Instance vanilla : passage en Fabric (mondes et réglages gardés), comme « Modifier › Loader ».
     if (instance.loader === 'vanilla') {
-      if (options?.convert !== true) throw new Error("Cette instance est vanilla : il faut d'abord la passer en Fabric.");
+      if (options?.convert !== true) throw new Error(t('ipc.cette_instance_est_vanilla_il'));
       const fabric = (await availableLoaders(instance.version)).fabric;
-      if (!fabric?.recommended) throw new Error(`Fabric n'existe pas pour Minecraft ${instance.version}.`);
+      if (!fabric?.recommended) throw new Error(t('ipc.fabric_existe_pas_pour_minecraft', { version: instance.version }));
       instance = instances.update(instance.id, { loader: 'fabric', loaderVersion: fabric.recommended });
     }
-    const result = await runTask('Pack Performances', (onProgress) =>
+    const result = await runTask(t('ipc.pack_performances'), (onProgress) =>
       performance.installPack({ gameDir: instances.gameDir(instance.id), instance, slugs: list, trash, onProgress }),
     );
     return { ...result, instance };
@@ -887,17 +906,17 @@ function registerIpc(getWindow) {
     let loaderVersion = null;
     if (p.loader !== 'vanilla') {
       loaderVersion = (await availableLoaders(version)).fabric?.recommended;
-      if (!loaderVersion) throw new Error(`Fabric n'existe pas pour Minecraft ${version} : choisis une autre version.`);
+      if (!loaderVersion) throw new Error(t('ipc.fabric_existe_pas_pour_minecraft_2', { version }));
     }
     const created = instances.create({ ...data, version, loader: p.loader, loaderVersion }, services.settings.defaults());
     const guide = await profileRam(p, version);
     return instances.update(created.id, { settings: { ...created.settings, ram: guide.ideal } });
   });
   handle('profiles:installMods', (id, profileId) => {
-    notRunning(text(id), 'modifier son contenu');
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
     const instance = instances.get(text(id));
     const p = profiles.profile(text(profileId));
-    return runTask(`Mods du profil ${p.title}`, (onProgress) =>
+    return runTask(t('ipc.mods_du_profil', { title: p.title }), (onProgress) =>
       profiles.installMods({ profileId: p.id, gameDir: instances.gameDir(instance.id), instance, trash, onProgress }),
     );
   });
@@ -943,7 +962,7 @@ function registerIpc(getWindow) {
   handle('storage:usage', () => storage.usage(dirs));
   handle('storage:plan', async () => (await storage.cleanupPlan(dirs, instances.list())).map(({ paths, ...item }) => item));
   handle('storage:clean', (ids) => {
-    notBusy("libérer de l'espace");
+    notBusy(t('ipc.liberer_de_espace'));
     return storage.clean(dirs, instances.list(), Array.isArray(ids) ? ids.map(text) : []);
   });
 
@@ -952,6 +971,7 @@ function registerIpc(getWindow) {
     windowShown() {
       launches.resume();
     },
+    language: () => language,
     /** Le launcher est déjà ouvert et un raccourci a été lancé : on transmet la demande. */
     handleArgv(argv) {
       const id = launchArgument(argv);
@@ -964,7 +984,7 @@ function registerIpc(getWindow) {
       if (quitting || !tray.enabled || !prefs.closeToTray) return false;
       if (!balloonShown && process.platform === 'win32') {
         balloonShown = true;
-        tray.tray.displayBalloon({ iconType: 'info', title: '0Rzxn_ Launcher', content: 'Le launcher reste ouvert ici. Clic droit sur l’icône pour le quitter.' });
+        tray.tray.displayBalloon({ iconType: 'info', title: '0Rzxn_ Launcher', content: t('ipc.le_launcher_reste_ouvert_ici') });
       }
       return true;
     },

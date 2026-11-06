@@ -1,4 +1,5 @@
 // Actions de l'interface : elles appellent le processus principal puis mettent l'état à jour.
+import { t } from './i18n.js';
 import { api } from './api.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
@@ -94,7 +95,7 @@ function rememberSelection(saved) {
 /** Ouverture depuis un raccourci bureau (--launch=<instance>). */
 function launchFromShortcut(instanceId) {
   if (!state.instances.some((i) => i.id === instanceId)) {
-    toast({ kind: 'error', title: 'Raccourci invalide', text: "Cette instance n'existe plus." });
+    toast({ kind: 'error', title: t('actions.raccourci_invalide'), text: t('actions.cette_instance_existe_plus') });
     return;
   }
   update((s) => {
@@ -142,8 +143,8 @@ export async function createInstance(draft) {
   });
   toast({
     kind: 'success',
-    title: `${instance.name} créée`,
-    text: instance.installed ? 'Minecraft est déjà installé : tu peux jouer tout de suite.' : `Clique sur « Installer ${instance.version} » pour la préparer.`,
+    title: t('common.creee', { name: instance.name }),
+    text: instance.installed ? t('actions.minecraft_est_deja_installe_tu') : t('actions.clique_sur_installer_pour_la', { version: instance.version }),
   });
 }
 
@@ -153,18 +154,18 @@ export async function editInstance(id, patch) {
   await refreshInstances();
   forgetRamGuide(id);
   update((s) => { s.modal = null; });
-  toast({ kind: 'success', title: 'Instance modifiée', text: patch.name });
+  toast({ kind: 'success', title: t('actions.instance_modifiee'), text: patch.name });
 }
 
 export async function duplicateInstance(id) {
   const source = state.instances.find((i) => i.id === id);
   try {
-    const copy = await api.duplicateInstance(id, `${source.name} (copie)`);
+    const copy = await api.duplicateInstance(id, t('actions.copy_name', { name: source.name }));
     await refreshInstances();
     update((s) => { s.selectedId = copy.id; s.view = 'home'; });
-    toast({ kind: 'success', title: `${copy.name} créée`, text: 'Copie complète : mondes, options et packs de ressources.' });
+    toast({ kind: 'success', title: t('common.creee', { name: copy.name }), text: t('actions.copie_complete_mondes_options_et') });
   } catch (error) {
-    toastError('Copie impossible', error);
+    toastError(t('common.copie_impossible'), error);
   }
 }
 
@@ -173,13 +174,13 @@ export async function deleteInstance(id) {
   await api.deleteInstance(id);
   update((s) => { s.modal = null; });
   await refreshInstances();
-  toast({ kind: 'success', title: `${instance?.name ?? 'Instance'} supprimée`, text: 'Le dossier est dans la corbeille de Windows si tu changes d’avis.' });
+  toast({ kind: 'success', title: t('actions.supprimee', { name: instance?.name ?? t('common.instance') }), text: t('actions.le_dossier_est_dans_la') });
 }
 
 export function createShortcut(id) {
   api.createShortcut(id).then(
-    (file) => toast({ kind: 'success', title: 'Raccourci créé', text: `« ${file.replace(/\.lnk$/, '')} » est sur ton bureau : il lance directement l'instance.` }),
-    (error) => toastError('Raccourci impossible', error),
+    (file) => toast({ kind: 'success', title: t('actions.raccourci_cree'), text: t('actions.est_sur_ton_bureau_il', { file: file.replace(/\.lnk$/, '') }) }),
+    (error) => toastError(t('actions.raccourci_impossible'), error),
   );
 }
 
@@ -206,18 +207,18 @@ export function saveSettings(scope, instanceId) {
           });
         }
       } catch (error) {
-        toastError('Réglages non enregistrés', error);
+        toastError(t('common.reglages_non_enregistres'), error);
       }
     }, 400),
   );
 }
 
 export function openInstanceFolder(id) {
-  api.openInstanceFolder(id).catch((error) => toastError("Impossible d'ouvrir le dossier", error));
+  api.openInstanceFolder(id).catch((error) => toastError(t('common.impossible_ouvrir_le_dossier'), error));
 }
 
 export function openLauncherFolder() {
-  api.openLauncherFolder().catch((error) => toastError("Impossible d'ouvrir le dossier", error));
+  api.openLauncherFolder().catch((error) => toastError(t('common.impossible_ouvrir_le_dossier'), error));
 }
 
 // ---------- Comptes ----------
@@ -229,15 +230,15 @@ export async function addOfflineAccount(name) {
   update((s) => {
     if (s.modal?.type === 'accounts') s.modal = null;
   });
-  toast({ kind: 'success', title: `Bienvenue, ${name.trim()}`, text: 'Compte hors-ligne ajouté et sélectionné.' });
+  toast({ kind: 'success', title: t('actions.bienvenue', { name: name.trim() }), text: t('actions.compte_hors_ligne_ajoute_et') });
 }
 
 /** Ouvre la page de connexion Microsoft ; sert aussi à reconnecter un compte expiré. */
 export async function addMicrosoftAccount() {
   if (!state.microsoftReady) {
     toast({
-      title: 'Connexion Microsoft bientôt disponible',
-      text: "Il manque l'identifiant de l'application Azure approuvée par Mojang (voir docs/MICROSOFT.md).",
+      title: t('actions.connexion_microsoft_bientot_disponible'),
+      text: t('actions.il_manque_identifiant_de_application'),
       timeout: 9000,
     });
     return;
@@ -250,9 +251,9 @@ export async function addMicrosoftAccount() {
     update((s) => {
       if (s.modal?.type === 'accounts') s.modal = null;
     });
-    toast({ kind: 'success', title: `Connecté : ${data.name}`, text: 'Compte Microsoft ajouté et sélectionné.' });
+    toast({ kind: 'success', title: t('actions.connecte', { name: data.name }), text: t('actions.compte_microsoft_ajoute_et_selectionne') });
   } catch (error) {
-    if (error.message !== 'Connexion annulée.') toastError('Connexion Microsoft impossible', error);
+    if (error.message !== t('actions.connexion_annulee')) toastError(t('actions.connexion_microsoft_impossible'), error);
   } finally {
     update((s) => { s.signingIn = false; });
   }
@@ -264,12 +265,12 @@ export function removeAccount(id) {
       refreshAccounts(data);
       if (!data.accounts.length) update((s) => { s.modal = null; });
     },
-    (error) => toastError('Compte non retiré', error),
+    (error) => toastError(t('actions.compte_non_retire'), error),
   );
 }
 
 export function setActiveAccount(id) {
-  api.setActiveAccount(id).then(refreshAccounts, (error) => toastError('Compte non sélectionné', error));
+  api.setActiveAccount(id).then(refreshAccounts, (error) => toastError(t('actions.compte_non_selectionne'), error));
 }
 
 // ---------- Lancement ----------
@@ -304,10 +305,10 @@ export async function fixModProblem(problem) {
     if (problems.length) update((s) => { if (s.modal?.type === 'mod-check') s.modal.problems = problems; });
     else {
       update((s) => { s.modal = null; });
-      toast({ kind: 'success', title: 'Mods corrigés', text: 'Plus aucun problème détecté.' });
+      toast({ kind: 'success', title: t('actions.mods_corriges'), text: t('actions.plus_aucun_probleme_detecte') });
     }
   } catch (error) {
-    toastError('Correction impossible', error);
+    toastError(t('actions.correction_impossible'), error);
   }
 }
 
@@ -319,7 +320,7 @@ export async function fixAllAndLaunch() {
   try {
     for (const file of files) await api.toggleContent(modal.instanceId, 'mods', file);
   } catch (error) {
-    toastError('Correction impossible', error);
+    toastError(t('actions.correction_impossible'), error);
     return;
   }
   const instance = state.instances.find((i) => i.id === modal.instanceId);
@@ -344,7 +345,7 @@ async function continueLaunch(instance, options) {
 
 export function startLaunch(instanceId, options = {}) {
   update((s) => { s.modal = null; });
-  api.startLaunch(instanceId, options).catch((error) => toastError('Lancement impossible', error));
+  api.startLaunch(instanceId, options).catch((error) => toastError(t('actions.lancement_impossible'), error));
 }
 
 export function verifyInstance(instanceId) {
@@ -352,7 +353,7 @@ export function verifyInstance(instanceId) {
 }
 
 export function stopGame() {
-  api.stopLaunch().catch((error) => toastError("Impossible d'arrêter", error));
+  api.stopLaunch().catch((error) => toastError(t('actions.impossible_arreter'), error));
 }
 
 export function disableLowRamWarning(instanceId) {
@@ -386,30 +387,30 @@ function listenToLaunches() {
       refreshAccounts().catch(() => {}); // une session Microsoft expirée est signalée dans la liste des comptes
       toast({
         kind: 'error',
-        title: 'Le lancement a échoué',
+        title: t('actions.le_lancement_echoue'),
         text: status.error,
         timeout: 12000,
-        actions: [{ label: 'Voir la console', run: () => update((s) => { s.view = 'console'; }) }],
+        actions: [{ label: t('actions.voir_la_console'), run: () => update((s) => { s.view = 'console'; }) }],
       });
     }
-    if (status.prepared) toast({ kind: 'success', title: `${name} est prête`, text: 'Tous les fichiers ont été vérifiés.' });
+    if (status.prepared) toast({ kind: 'success', title: t('actions.est_prete', { name }), text: t('actions.tous_les_fichiers_ont_ete') });
     if (status.crashed) {
       const report = status.crash && { instanceId: status.instanceId, ...status.crash };
       toast({
         kind: 'error',
-        title: 'Le jeu a planté',
-        text: `${name} · code de sortie ${status.code}. ${report ? 'Le launcher a lu le rapport et explique l’erreur.' : 'Le rapport est dans la console.'}`,
+        title: t('actions.le_jeu_plante'),
+        text: t(report ? 'actions.crash_report_read' : 'actions.crash_report_console', { name, code: status.code }),
         timeout: 0,
         actions: report
-          ? [{ label: 'Voir l’explication', run: () => openCrashes(report) }]
-          : [{ label: 'Voir la console', run: () => update((s) => { s.view = 'console'; s.console.tab = 'logs'; }) }],
+          ? [{ label: t('actions.voir_explication'), run: () => openCrashes(report) }]
+          : [{ label: t('actions.voir_la_console'), run: () => update((s) => { s.view = 'console'; s.console.tab = 'logs'; }) }],
       });
     }
     if (status.exited) {
       loadCrashes(); // le jeu a pu laisser un rapport de crash
     }
     if (status.run?.phase === 'running' && instance && !instance.installed) {
-      toast({ kind: 'success', title: `${name} est prête`, text: `Minecraft ${instance.version} installé.` });
+      toast({ kind: 'success', title: t('actions.est_prete', { name }), text: t('actions.minecraft_installe', { version: instance.version }) });
     }
     if (status.exited || status.prepared || status.run?.phase === 'running') await refreshInstances();
   });

@@ -1,6 +1,7 @@
 'use strict';
 
 // Instances : un dossier par instance (instance.json + dossier du jeu « minecraft »).
+const { t } = require('../i18n');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
@@ -25,9 +26,9 @@ const ICONS = new Set(['grass', 'diamond', 'stone', 'netherrack', 'sand', 'end']
 const LOADERS = new Set(['vanilla', 'fabric', 'quilt', 'forge', 'neoforge']);
 
 function checkLoader(loader = 'vanilla', loaderVersion = null) {
-  if (!LOADERS.has(loader)) throw new Error('Loader de mods inconnu.');
+  if (!LOADERS.has(loader)) throw new Error(t('instances.loader_de_mods_inconnu'));
   if (loader === 'vanilla') return { loader, loaderVersion: null };
-  if (typeof loaderVersion !== 'string' || !/^[\w.+-]{1,64}$/.test(loaderVersion)) throw new Error('Choisis une version du loader.');
+  if (typeof loaderVersion !== 'string' || !/^[\w.+-]{1,64}$/.test(loaderVersion)) throw new Error(t('instances.choisis_une_version_du_loader'));
   return { loader, loaderVersion };
 }
 
@@ -91,7 +92,7 @@ class InstanceStore {
   }
 
   dir(id) {
-    if (!/^[a-z0-9-]+$/.test(id)) throw new Error('Instance invalide.');
+    if (!/^[a-z0-9-]+$/.test(id)) throw new Error(t('instances.instance_invalide'));
     return path.join(this.dirs.instances, id);
   }
 
@@ -105,7 +106,7 @@ class InstanceStore {
 
   get(id) {
     const data = readJson(this.file(id), null);
-    if (!data) throw new Error('Instance introuvable.');
+    if (!data) throw new Error(t('instances.instance_introuvable'));
     const loader = LOADERS.has(data.loader) ? data.loader : 'vanilla';
     const done = data.loaderInstalled;
     const loaderReady =
@@ -124,7 +125,7 @@ class InstanceStore {
   /** Ensembles de mods (validés) et ensemble actif. */
   saveModSets(id, sets, active) {
     const current = readJson(this.file(id), null);
-    if (!current) throw new Error('Instance introuvable.');
+    if (!current) throw new Error(t('instances.instance_introuvable'));
     Object.assign(current, modSets.sanitize(sets, active));
     writeJson(this.file(id), current);
   }
@@ -132,7 +133,7 @@ class InstanceStore {
   /** Modpack d'origine : { projectId, versionId, name, version, icon, files } (null pour l'effacer). */
   setModpack(id, modpack) {
     const current = readJson(this.file(id), null);
-    if (!current) throw new Error('Instance introuvable.');
+    if (!current) throw new Error(t('instances.instance_introuvable'));
     current.modpack = modpack;
     writeJson(this.file(id), current);
   }
@@ -140,7 +141,7 @@ class InstanceStore {
   /** Instance importée d'un autre launcher : origine ({ launcher, path, name }) et temps de jeu repris. */
   markImported(id, { from, playtime = 0, lastPlayedAt = null }) {
     const current = readJson(this.file(id), null);
-    if (!current) throw new Error('Instance introuvable.');
+    if (!current) throw new Error(t('instances.instance_introuvable'));
     current.importedFrom = from;
     current.playtime = Math.max(0, Math.round(playtime));
     current.lastPlayedAt = lastPlayedAt;
@@ -177,8 +178,8 @@ class InstanceStore {
 
   create({ name, icon, version, loader, loaderVersion, group, accountId }, defaults) {
     const cleanName = String(name ?? '').trim().slice(0, 40);
-    if (!cleanName) throw new Error('Donne un nom à ton instance.');
-    if (!version) throw new Error('Choisis une version de Minecraft.');
+    if (!cleanName) throw new Error(t('instances.donne_un_nom_ton_instance'));
+    if (!version) throw new Error(t('instances.choisis_une_version_de_minecraft'));
     const id = this.freeId(cleanName);
 
     const data = {
@@ -202,7 +203,7 @@ class InstanceStore {
 
   update(id, patch) {
     const current = readJson(this.file(id), null);
-    if (!current) throw new Error('Instance introuvable.');
+    if (!current) throw new Error(t('instances.instance_introuvable'));
     const next = { ...current };
     if (typeof patch.name === 'string' && patch.name.trim()) next.name = patch.name.trim().slice(0, 40);
     if (ICONS.has(patch.icon)) next.icon = patch.icon;
@@ -220,20 +221,20 @@ class InstanceStore {
   /** Fond de l'instance : { kind, dim, image? } ; null = décor par défaut. */
   cleanBackground(id, value) {
     if (value == null) return null;
-    if (!BACKGROUNDS.has(value.kind)) throw new Error('Fond inconnu.');
+    if (!BACKGROUNDS.has(value.kind)) throw new Error(t('instances.fond_inconnu'));
     const dim = Number.isFinite(value.dim) ? Math.min(100, Math.max(0, Math.round(value.dim))) : 0;
     if (value.kind !== 'image') return { kind: value.kind, dim };
-    if (typeof value.image !== 'string' || !BACKGROUND_FILE.test(value.image) || !exists(path.join(this.dir(id), value.image))) throw new Error('Image de fond introuvable.');
+    if (typeof value.image !== 'string' || !BACKGROUND_FILE.test(value.image) || !exists(path.join(this.dir(id), value.image))) throw new Error(t('instances.image_de_fond_introuvable'));
     return { kind: 'image', dim, image: value.image };
   }
 
   /** Copie une image choisie dans le dossier de l'instance (png, jpeg ou webp, 10 Mo au maximum). Renvoie le nom du fichier. */
   async importBackground(id, file) {
-    if (typeof file !== 'string' || !path.isAbsolute(file)) throw new Error('Fichier invalide.');
-    if (!/\.(png|jpe?g|webp)$/i.test(file)) throw new Error('Choisis une image PNG, JPEG ou WebP.');
+    if (typeof file !== 'string' || !path.isAbsolute(file)) throw new Error(t('instances.fichier_invalide'));
+    if (!/\.(png|jpe?g|webp)$/i.test(file)) throw new Error(t('instances.choisis_une_image_png_jpeg'));
     const stat = await fsp.stat(file);
-    if (!stat.isFile()) throw new Error('Fichier invalide.');
-    if (stat.size > BACKGROUND_MAX) throw new Error('Cette image est trop lourde (10 Mo au maximum).');
+    if (!stat.isFile()) throw new Error(t('instances.fichier_invalide'));
+    if (stat.size > BACKGROUND_MAX) throw new Error(t('instances.cette_image_est_trop_lourde'));
     const handle = await fsp.open(file, 'r');
     let head;
     try {
@@ -244,7 +245,7 @@ class InstanceStore {
       await handle.close();
     }
     const ext = imageExtension(head);
-    if (!ext) throw new Error("Ce fichier n'est pas une image PNG, JPEG ou WebP valide.");
+    if (!ext) throw new Error(t('instances.ce_fichier_est_pas_une'));
     const name = `fond-${Date.now()}.${ext}`;
     await fsp.copyFile(file, path.join(this.dir(id), name));
     return name;
@@ -304,7 +305,7 @@ class InstanceStore {
   /** Copie complète (mondes, options, packs…) sous un nouveau nom. Les natives sont réextraites au lancement. */
   async duplicate(id, name) {
     const source = readJson(this.file(id), null);
-    if (!source) throw new Error('Instance introuvable.');
+    if (!source) throw new Error(t('instances.instance_introuvable'));
     const cleanName = String(name ?? '').trim().slice(0, 40) || `${source.name} (copie)`.slice(0, 40);
     const copyId = this.freeId(cleanName);
     await fsp.cp(this.dir(id), this.dir(copyId), {

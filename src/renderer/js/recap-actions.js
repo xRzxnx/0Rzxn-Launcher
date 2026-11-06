@@ -1,9 +1,9 @@
 // Bilan mensuel du temps de jeu, toutes instances confondues : calculs à partir de stats.days, navigation et enregistrement en image.
+import { formatDateTime, t } from './i18n.js';
 import { api } from './api.js';
 import { state, toast, toastError, update } from './state.js';
 
 const pad = (n) => String(n).padStart(2, '0');
-const MONTH_NAME = new Intl.DateTimeFormat('fr-FR', { month: 'long' });
 
 export const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 const parseMonth = (key) => {
@@ -19,9 +19,17 @@ const shiftKey = (key, delta) => {
   return monthKey(new Date(y, m - 1 + delta, 1));
 };
 
-export const monthName = (key) => MONTH_NAME.format(new Date(parseMonth(key).y, parseMonth(key).m - 1, 1));
-/** « de novembre », « d’avril » */
-export const withDe = (name) => (/^[aeiouhéèêàâîôû]/i.test(name) ? `d’${name}` : `de ${name}`);
+export const monthName = (key) => formatDateTime(new Date(parseMonth(key).y, parseMonth(key).m - 1, 1), { month: 'long' });
+/** « Ton mois de novembre », « Ton mois d’avril » : deux clés, pour l'élision française. */
+export const recapTitle = (name, year = '') => t(/^[aeiouhéèêàâîôû]/i.test(name) ? 'recap.title_vowel' : 'recap.title', { month: `${name}${year}` });
+
+/** Libellé sous le nombre de jours joués : « sur 6 écoulés », ou « sur 30 » pour un mois fini. */
+export const recapDaysLabel = (recap) => (recap.current ? t('recap.days_elapsed', { count: recap.elapsed }) : t('recap.days_month', { count: recap.length }));
+
+export const recapDays = (count) => t('recap.days', { count });
+
+/** Évolution : « par rapport à octobre », et « à la même date » pendant le mois en cours. */
+export const recapDeltaLabel = (recap) => t(recap.current ? 'recap.delta_same_date' : 'recap.delta', { month: recap.prevName });
 
 /** Total par jour (toutes instances) d'un mois : tableau indexé par jour - 1. */
 function dayTotals(key) {
@@ -130,9 +138,9 @@ export async function saveRecapImage(modal) {
     const blob = await renderRecapPng(computeRecap(modal.month));
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const file = await api.saveRecapImage(modal.month, bytes);
-    if (file) toast({ kind: 'success', title: 'Bilan enregistré', text: file });
+    if (file) toast({ kind: 'success', title: t('recap.bilan_enregistre'), text: file });
   } catch (error) {
-    toastError('Bilan non enregistré', error);
+    toastError(t('recap.bilan_non_enregistre'), error);
   } finally {
     update(() => { modal.saving = false; });
   }

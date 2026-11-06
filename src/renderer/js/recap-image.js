@@ -1,6 +1,7 @@
 // Bilan du mois dessiné sur un canvas 1200 x 630 (fond sombre du launcher, Geist), sans dépendance.
+import { t } from './i18n.js';
 import { shortTime } from './views/home.js';
-import { withDe } from './recap-actions.js';
+import { recapDays, recapDaysLabel, recapDeltaLabel, recapTitle } from './recap-actions.js';
 
 export const RECAP_WIDTH = 1200;
 export const RECAP_HEIGHT = 630;
@@ -16,12 +17,12 @@ function fit(ctx, text, width) {
 
 function stats(recap) {
   const list = [
-    [shortTime(recap.total), 'de jeu'],
-    [`${recap.played} ${recap.played > 1 ? 'jours' : 'jour'}`, `sur ${recap.current ? recap.elapsed : recap.length}${recap.current ? ' écoulés' : ''}`],
+    [shortTime(recap.total), t('common.de_jeu')],
+    [recapDays(recap.played), recapDaysLabel(recap)],
   ];
-  if (recap.streak > 0) list.push([`${recap.streak} ${recap.streak > 1 ? 'jours' : 'jour'}`, recap.record ? 'de suite, ton record' : 'de suite au maximum']);
+  if (recap.streak > 0) list.push([recapDays(recap.streak), recap.record ? t('common.de_suite_ton_record') : t('common.de_suite_au_maximum')]);
   if (recap.delta !== null) {
-    list.push([`${recap.delta > 0 ? '+' : ''}${recap.delta} %`, `par rapport à ${recap.prevName}${recap.current ? ', à la même date' : ''}`]);
+    list.push([`${recap.delta > 0 ? '+' : ''}${recap.delta} %`, recapDeltaLabel(recap)]);
   }
   return list;
 }
@@ -48,7 +49,7 @@ export async function renderRecapPng(recap) {
   ctx.fillStyle = '#ffffff';
   ctx.font = `600 46px ${FONT}`;
   ctx.textAlign = 'left';
-  ctx.fillText(`Ton mois ${withDe(recap.name)}${recap.year === new Date().getFullYear() ? '' : ` ${recap.year}`}`, PAD, 96);
+  ctx.fillText(recapTitle(recap.name, recap.year === new Date().getFullYear() ? '' : ` ${recap.year}`), PAD, 96);
   ctx.font = `500 22px ${FONT}`;
   ctx.fillStyle = '#d9d9ec';
   ctx.textAlign = 'right';
@@ -123,5 +124,5 @@ export async function renderRecapPng(recap) {
   });
   ctx.textAlign = 'left';
 
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Image impossible à créer.'))), 'image/png'));
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error(t('recap_image.image_impossible_creer')))), 'image/png'));
 }

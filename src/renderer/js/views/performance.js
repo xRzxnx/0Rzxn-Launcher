@@ -1,46 +1,47 @@
 // Performances : sections des paramètres (instance, global, launcher) et fenêtre « Pack Performances ».
+import { num, t } from '../i18n.js';
 import { formatGo, h, icon } from '../dom.js';
 import { chosenPackMods, installPack, loadGpu, openPack, perfPreview, setGpu, togglePackMod, watchMetrics } from '../perf-actions.js';
 import { setLauncherPref } from '../launcher-actions.js';
 import { state, update } from '../state.js';
 import { close, dialog } from './modals.js';
 
-const GC_LABELS = { zgc: 'ZGC générationnel', g1: 'G1 réglé pour le jeu', none: 'celui de Java par défaut' };
+const GC_LABELS = { get zgc() { return t('performance.zgc_generationnel'); }, get g1() { return t('performance.g1_regle_pour_le_jeu'); }, get none() { return t('performance.celui_de_java_par_defaut'); } };
 
 function presetDetail(id, preview, settings) {
   const java = preview?.javaMajor;
   if (id === 'auto') {
-    if (!java) return 'ZGC avec Java 21+, 8 threads et 6 Go · sinon G1 réglé';
-    if (preview.gc === 'zgc') return `Java ${java} · ${java >= 25 ? 'ZGC + en-têtes compacts' : 'ZGC générationnel'}`;
+    if (!java) return t('performance.zgc_avec_java_21_threads');
+    if (preview.gc === 'zgc') return `Java ${java} · ${java >= 25 ? t('performance.zgc_en_tetes_compacts') : t('performance.zgc_generationnel')}`;
     // Pourquoi pas ZGC : le premier critère manquant.
-    const why = java < 21 ? '' : preview.cpus < 8 ? ` (ZGC demande 8 threads, ici ${preview.cpus})` : settings.ram < 6 ? ' (ZGC à partir de 6 Go)' : '';
-    return `Java ${java} · G1 réglé pour le jeu${why}`;
+    const why = java < 21 ? '' : preview.cpus < 8 ? t('performance.zgc_demande_threads_ici', { cpus: preview.cpus }) : settings.ram < 6 ? t('performance.zgc_partir_de_go') : '';
+    return t('performance.java_g1_regle_pour_le', { java, why });
   }
-  if (id === 'g1') return 'Pauses courtes, peu de processeur · tous les Java';
-  if (id === 'zgc') return java && java < 21 ? `Demande Java 21 ou plus (ici Java ${java}) : G1 sera utilisé` : 'Pauses quasi nulles, un peu plus de RAM et de processeur';
-  return java === 8 ? 'Comme avant · Java 8 utilise Parallel GC : saccades' : 'Comme avant · aucun réglage ajouté';
+  if (id === 'g1') return t('performance.pauses_courtes_peu_de_processeur');
+  if (id === 'zgc') return java && java < 21 ? t('performance.demande_java_21_ou_plus', { java }) : t('performance.pauses_quasi_nulles_un_peu');
+  return java === 8 ? t('performance.comme_avant_java_utilise_parallel') : t('performance.comme_avant_aucun_reglage_ajoute');
 }
 
 function gcHint(settings, preview) {
-  if (preview?.userGc) return { warn: true, text: 'Tes arguments JVM (section Avancé) choisissent déjà un ramasse-miettes : le launcher n’en ajoute pas.' };
-  if (settings.jvmPreset === 'none') return { warn: false, text: 'Le launcher n’ajoute rien. Tes arguments de la section Avancé restent envoyés.' };
-  if (preview?.javaMajor === 8) return { warn: false, text: 'Java 8 (Minecraft 1.16 et avant) fige le jeu par moments avec son réglage par défaut : G1 réglé corrige ça. C’est là que le gain se voit le plus.' };
-  return { warn: false, text: 'Les FPS moyens bougent peu ; ce sont surtout les petites saccades qui disparaissent. Tes arguments de la section Avancé passent après et gardent le dernier mot.' };
+  if (preview?.userGc) return { warn: true, text: t('performance.tes_arguments_jvm_section_avance') };
+  if (settings.jvmPreset === 'none') return { warn: false, text: t('performance.le_launcher_ajoute_rien_tes') };
+  if (preview?.javaMajor === 8) return { warn: false, text: t('performance.java_minecraft_16_et_avant') };
+  return { warn: false, text: t('performance.les_fps_moyens_bougent_peu') };
 }
 
 function javaArgsSection({ settings, save }, preview) {
   const choose = (id) => update(() => { settings.jvmPreset = id; save(); });
   const presets = [
-    { id: 'auto', title: 'Automatique', tag: 'Recommandé' },
-    { id: 'g1', title: 'G1 réglé' },
-    { id: 'zgc', title: 'ZGC générationnel' },
-    { id: 'none', title: 'Java par défaut' },
+    { id: 'auto', title: t('common.automatique'), tag: t('settings.recommande') },
+    { id: 'g1', title: t('performance.g1_regle') },
+    { id: 'zgc', title: t('performance.zgc_generationnel') },
+    { id: 'none', title: t('performance.java_par_defaut') },
   ];
   const hint = gcHint(settings, preview);
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'gc-title' },
-    h('div', { class: 'settings__title-row' }, h('h2', { class: 'settings__title', id: 'gc-title' }, 'Arguments Java'), h('span', { class: 'tag tag--beta' }, 'Moins de saccades')),
+    h('div', { class: 'settings__title-row' }, h('h2', { class: 'settings__title', id: 'gc-title' }, t('performance.arguments_java')), h('span', { class: 'tag tag--beta' }, t('performance.moins_de_saccades'))),
     h(
       'div',
       { role: 'radiogroup', 'aria-labelledby': 'gc-title', style: 'display:flex;flex-direction:column;gap:6px' },
@@ -58,7 +59,7 @@ function javaArgsSection({ settings, save }, preview) {
       h(
         'div',
         { class: 'field' },
-        h('span', { class: 'label' }, preview.javaMajor ? 'Envoyé à Java' : 'Envoyé à Java (exemple avec Java 21)'),
+        h('span', { class: 'label' }, preview.javaMajor ? t('performance.envoye_java') : t('performance.envoye_java_exemple_avec_java')),
         h('code', { class: 'perf-args' }, [...preview.args, settings.jvmArgs.trim()].filter(Boolean).join(' ')),
       ),
     h('p', { class: `hint${hint.warn ? ' hint--warn' : ''}` }, hint.text),
@@ -72,31 +73,31 @@ function ramAdviceSection({ settings, save }, preview) {
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'ram-advice-title' },
-    h('div', { class: 'settings__title-row' }, h('h2', { class: 'settings__title', id: 'ram-advice-title' }, 'Mémoire conseillée'), h('span', { class: 'ram-value' }, ram ? formatGo(ram) : '…')),
+    h('div', { class: 'settings__title-row' }, h('h2', { class: 'settings__title', id: 'ram-advice-title' }, t('common.memoire_conseillee')), h('span', { class: 'ram-value' }, ram ? formatGo(ram) : '…')),
     ram &&
       h(
         'p',
         { class: 'perf-text' },
-        `Tu as réglé ${formatGo(settings.ram)}. ${mods ? `Avec ${mods} mod${mods > 1 ? 's' : ''}` : 'Sans mods'}, ${formatGo(ram)} suffisent${settings.ram > ram ? ' : plus de mémoire ne donne pas plus de FPS.' : '.'}`,
+        [t('performance.ram_set', { ram: formatGo(settings.ram) }), mods ? t('performance.ram_with_mods', { count: mods, ram: formatGo(ram) }) : t('performance.ram_no_mods', { ram: formatGo(ram) }), settings.ram > ram && t('performance.ram_more_useless')].filter(Boolean).join(' '),
       ),
     h(
       'div',
       null,
-      h('button', { class: `btn${applied ? '' : ' btn--primary'}`, disabled: !ram || applied, onClick: () => update(() => { settings.ram = ram; save(); }) }, applied ? 'Déjà appliqué' : `Mettre ${ram ? formatGo(ram) : '…'}`),
+      h('button', { class: `btn${applied ? '' : ' btn--primary'}`, disabled: !ram || applied, onClick: () => update(() => { settings.ram = ram; save(); }) }, applied ? t('performance.deja_applique') : t('performance.mettre', { value: ram ? formatGo(ram) : '…' })),
     ),
-    h('p', { class: 'hint' }, `Calcul : loader, nombre de mods, shaders, marge si tu imposes ZGC, et limite de ce PC (${preview?.pc ?? formatGo(Math.round(state.memory.totalGb))}).`),
+    h('p', { class: 'hint' }, t('performance.calcul_loader_nombre_de_mods', { pc: preview?.pc ?? formatGo(Math.round(state.memory.totalGb)) })),
   );
 }
 
 function prioritySection({ settings, save }) {
   const options = [
-    { id: 'normal', label: 'Normale' },
-    { id: 'above', label: 'Au-dessus de la normale' },
+    { id: 'normal', label: t('performance.normale') },
+    { id: 'above', label: t('performance.au_dessus_de_la_normale') },
   ];
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'prio-title' },
-    h('h2', { class: 'settings__title', id: 'prio-title' }, 'Priorité du jeu'),
+    h('h2', { class: 'settings__title', id: 'prio-title' }, t('performance.priorite_du_jeu')),
     h(
       'div',
       { class: 'segmented segmented--fill', role: 'radiogroup', 'aria-labelledby': 'prio-title' },
@@ -104,7 +105,7 @@ function prioritySection({ settings, save }) {
         h('button', { role: 'radio', 'aria-checked': settings.priority === o.id ? 'true' : 'false', onClick: () => update(() => { settings.priority = o.id; save(); }) }, o.label),
       ),
     ),
-    h('p', { class: 'hint' }, 'Gain faible : Windows donne la main au jeu quand un autre programme charge le processeur (compilation, navigateur, enregistrement). Sinon, rien ne change.'),
+    h('p', { class: 'hint' }, t('performance.gain_faible_windows_donne_la')),
   );
 }
 
@@ -118,10 +119,10 @@ function packCard(instance, preview) {
     h(
       'span',
       { class: 'perf-pack-card__body' },
-      h('h2', { class: 'settings__title', id: 'pack-card-title' }, "Mods d'optimisation"),
-      h('span', { class: 'hint' }, vanilla ? 'Le plus gros gain de FPS. Il faut passer l’instance en Fabric.' : `Le plus gros gain de FPS. ${count ? `${count} mod${count > 1 ? 's' : ''} du pack déjà installé${count > 1 ? 's' : ''}.` : 'Aucun installé.'}`),
+      h('h2', { class: 'settings__title', id: 'pack-card-title' }, t('performance.mods_optimisation')),
+      h('span', { class: 'hint' }, vanilla ? t('performance.le_plus_gros_gain_de') : t(count ? 'performance.pack_count' : 'performance.pack_none', { count })),
     ),
-    h('button', { class: 'btn btn--primary', disabled: Boolean(state.run?.instanceId === instance.id), onClick: () => openPack(instance) }, 'Pack Performances'),
+    h('button', { class: 'btn btn--primary', disabled: Boolean(state.run?.instanceId === instance.id), onClick: () => openPack(instance) }, t('common.pack_performances')),
   );
 }
 
@@ -138,18 +139,18 @@ export function performanceSections(ctx, instance) {
 
 // ---------- Fenêtre Pack Performances ----------
 
-const IMPACTS = {
-  fps: ['Gros gain FPS', 'tag--ok'],
-  fps2: ['FPS · scènes chargées', 'tag--ok'],
-  tick: ['Logique du jeu', 'tag--beta'],
-  ram: ['Mémoire', 'tag--release'],
-  start: ['Démarrage', 'tag--release'],
-  eco: ['Économie', 'tag--warn'],
-};
+const IMPACTS = () => ({
+  fps: [t('performance.gros_gain_fps'), 'tag--ok'],
+  fps2: [t('performance.fps_scenes_chargees'), 'tag--ok'],
+  tick: [t('performance.logique_du_jeu'), 'tag--beta'],
+  ram: [t('common.memoire'), 'tag--release'],
+  start: [t('performance.demarrage'), 'tag--release'],
+  eco: [t('performance.economie'), 'tag--warn'],
+});
 
 function packRow(mod, modal) {
   const usable = mod.state === 'available';
-  const [label, cls] = usable ? IMPACTS[mod.impact] : mod.state === 'installed' ? ['Installé', 'tag--ok'] : mod.state === 'conflict' ? ['Équivalent présent', 'tag--warn'] : ['Pas pour cette version', 'tag--muted'];
+  const [label, cls] = usable ? IMPACTS()[mod.impact] : mod.state === 'installed' ? [t('common.installe'), 'tag--ok'] : mod.state === 'conflict' ? [t('performance.equivalent_present'), 'tag--warn'] : [t('performance.pas_pour_cette_version'), 'tag--muted'];
   return h(
     'label',
     { class: `cleanup__item${usable ? '' : ' cleanup__item--empty'}` },
@@ -167,35 +168,35 @@ export function packDialog(modal) {
   const chosen = chosenPackMods(modal);
   const none = data && !data.mods.some((m) => m.state !== 'unavailable');
   let body;
-  if (modal.loading) body = h('p', { class: 'hint' }, 'Recherche des mods compatibles sur Modrinth…');
-  else if (modal.error) body = h('p', { class: 'hint hint--error' }, `Modrinth injoignable : ${modal.error}`);
+  if (modal.loading) body = h('p', { class: 'hint' }, t('performance.recherche_des_mods_compatibles_sur'));
+  else if (modal.error) body = h('p', { class: 'hint hint--error' }, t('performance.modrinth_injoignable', { error: modal.error }));
   else
     body = [
       vanilla &&
         h(
           'div',
           { class: 'perf-callout' },
-          h('strong', null, "Les mods ont besoin d'un loader"),
-          h('span', null, `${instance.name} est en vanilla. Le launcher la passe en Fabric (version recommandée), puis installe le pack. Mondes, réglages et packs de ressources restent ; tu peux revenir en vanilla depuis « Modifier ».`),
+          h('strong', null, t('performance.les_mods_ont_besoin_un')),
+          h('span', null, t('performance.est_en_vanilla_le_launcher', { name: instance.name })),
         ),
       none &&
         h(
           'div',
           { class: 'perf-callout perf-callout--warn' },
-          h('strong', null, `Rien pour ${instance.loader === 'forge' ? 'Forge' : instance.loader} ${instance.version}`),
-          h('span', null, "Aucun mod d'optimisation n'est publié pour cette version sur Modrinth. Les arguments Java réglés s'appliquent quand même."),
+          h('strong', null, t('performance.nothing_for', { loader: instance.loader === 'forge' ? 'Forge' : instance.loader, version: instance.version })),
+          h('span', null, t('performance.aucun_mod_optimisation_est_publie')),
         ),
       h('div', { class: 'cleanup' }, data.mods.map((m) => packRow(m, modal))),
-      h('p', { class: 'hint' }, 'Depuis Modrinth, avec leurs dépendances. Les mods déjà présents, ou un équivalent comme OptiFine, sont sautés.'),
+      h('p', { class: 'hint' }, t('performance.depuis_modrinth_avec_leurs_dependances')),
     ];
-  const label = vanilla ? `Passer en Fabric et installer ${chosen.length} mod${chosen.length > 1 ? 's' : ''}` : chosen.length ? `Installer ${chosen.length} mod${chosen.length > 1 ? 's' : ''}` : 'Rien à installer';
+  const label = vanilla ? t('performance.passer_en_fabric_et_installer', { count: chosen.length }) : chosen.length ? t('performance.installer_mods', { count: chosen.length }) : t('performance.rien_installer');
   return dialog({
-    title: 'Pack Performances',
+    title: t('common.pack_performances'),
     labelId: 'pack-title',
     size: 'dialog--wide',
     body: [h('p', { class: 'label', style: 'margin:0 0 10px' }, `${instance.name} · ${instance.loader === 'vanilla' ? 'Vanilla' : instance.loader} · Minecraft ${instance.version}`), body],
     foot: [
-      h('button', { class: 'btn btn--lg', onClick: close }, 'Annuler'),
+      h('button', { class: 'btn btn--lg', onClick: close }, t('common.annuler')),
       h('button', { class: 'btn btn--primary btn--lg', disabled: !chosen.length || Boolean(state.task), onClick: () => installPack(modal) }, label),
     ],
   });
@@ -203,7 +204,7 @@ export function packDialog(modal) {
 
 // ---------- Paramètres › Launcher ----------
 
-const fr = (n, digits = 1) => n.toLocaleString('fr-FR', { maximumFractionDigits: digits, minimumFractionDigits: digits });
+const fixed = (n, digits = 1) => num(n, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
 export function gameSection(prefs) {
   watchMetrics();
@@ -211,32 +212,32 @@ export function gameSection(prefs) {
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'light-title' },
-    h('h2', { class: 'settings__title', id: 'light-title' }, 'Pendant une partie'),
+    h('h2', { class: 'settings__title', id: 'light-title' }, t('performance.pendant_une_partie')),
     h(
       'div',
       { class: 'toggle-row' },
-      h('span', { id: 'light-label' }, 'Mode léger : le launcher se met en veille'),
+      h('span', { id: 'light-label' }, t('performance.mode_leger_le_launcher_se')),
       h('button', { class: 'toggle', 'aria-labelledby': 'light-label', 'aria-pressed': prefs.lightMode ? 'true' : 'false', onClick: () => setLauncherPref({ lightMode: !prefs.lightMode }) }),
     ),
     h(
       'ul',
       { class: 'perf-list' },
-      h('li', null, "Fenêtre réduite ou masquée : l'interface ne se redessine plus."),
-      h('li', null, "Les logs du jeu sont gardés et s'affichent quand tu reviens."),
-      h('li', null, 'Toujours : la console ne dessine que les 500 dernières lignes, et rien n’est redessiné pour les logs hors de la console.'),
+      h('li', null, t('performance.fenetre_reduite_ou_masquee_interface')),
+      h('li', null, t('performance.les_logs_du_jeu_sont')),
+      h('li', null, t('performance.toujours_la_console_ne_dessine')),
     ),
     h(
       'div',
       { class: 'perf-metrics' },
-      h('span', { class: 'label' }, m?.running ? 'Le launcher pendant ta partie' : 'Le launcher en ce moment'),
+      h('span', { class: 'label' }, m?.running ? t('performance.le_launcher_pendant_ta_partie') : t('performance.le_launcher_en_ce_moment')),
       h(
         'div',
         { class: 'perf-metrics__grid' },
-        h('span', null, h('strong', null, m ? `${fr(m.cpu)} %` : '…'), h('span', null, 'du processeur')),
-        h('span', null, h('strong', null, m ? `${fr(m.memoryMb, 0)} Mo` : '…'), h('span', null, 'de mémoire')),
+        h('span', null, h('strong', null, m ? `${fixed(m.cpu)} %` : '…'), h('span', null, t('performance.du_processeur'))),
+        h('span', null, h('strong', null, m ? `${fixed(m.memoryMb, 0)} ${t('unit.mb')}` : '…'), h('span', null, t('performance.de_memoire'))),
       ),
     ),
-    h('p', { class: 'hint' }, 'Gain modeste en FPS : le jeu et le launcher tournent sur des cœurs différents. Ça compte surtout sur un PC de 4 cœurs ou moins.'),
+    h('p', { class: 'hint' }, t('performance.gain_modeste_en_fps_le')),
   );
 }
 
@@ -249,43 +250,43 @@ export function gpuSection(prefs) {
   const on = prefs.gpuHighPerformance && g?.high > 0;
   let chip;
   if (!g) chip = h('span', { class: 'tag tag--muted' }, '…');
-  else if (!choice) chip = h('span', { class: 'tag tag--ok' }, 'Rien à faire');
-  else chip = on ? h('span', { class: 'tag tag--ok' }, 'Carte dédiée') : h('span', { class: 'tag tag--muted' }, 'Choix de Windows');
+  else if (!choice) chip = h('span', { class: 'tag tag--ok' }, t('performance.rien_faire'));
+  else chip = on ? h('span', { class: 'tag tag--ok' }, t('performance.carte_dediee')) : h('span', { class: 'tag tag--muted' }, t('performance.choix_de_windows'));
 
   let body;
-  if (!g) body = h('p', { class: 'hint' }, 'Détection des cartes graphiques…');
-  else if (!g.gpus.length) body = h('p', { class: 'hint' }, 'Cartes graphiques non détectées.');
+  if (!g) body = h('p', { class: 'hint' }, t('performance.detection_des_cartes_graphiques'));
+  else if (!g.gpus.length) body = h('p', { class: 'hint' }, t('performance.cartes_graphiques_non_detectees'));
   else if (!choice)
-    body = h('p', { class: 'perf-text' }, g.gpus.length === 1 ? "C'est la seule carte graphique de ce PC : le jeu l'utilise déjà. Rien à régler." : 'Aucune puce intégrée : le jeu utilise déjà une carte dédiée. Rien à régler.');
+    body = h('p', { class: 'perf-text' }, g.gpus.length === 1 ? t('performance.est_la_seule_carte_graphique') : t('performance.aucune_puce_integree_le_jeu'));
   else if (on)
     body = [
-      h('p', { class: 'perf-text' }, `${dedicated[0].name} choisie pour ${g.high} Java du launcher. Les nouveaux Java téléchargés la reçoivent aussi.`),
-      h('div', null, h('button', { class: 'btn', disabled: state.perf.gpuBusy, onClick: () => setGpu(false) }, 'Revenir au choix de Windows')),
+      h('p', { class: 'perf-text' }, t('performance.choisie_pour_java_du_launcher', { name: dedicated[0].name, high: g.high })),
+      h('div', null, h('button', { class: 'btn', disabled: state.perf.gpuBusy, onClick: () => setGpu(false) }, t('performance.revenir_au_choix_de_windows'))),
     ];
   else
     body = [
-      h('p', { class: 'perf-text' }, 'Sur un portable, Windows peut lancer Java sur la puce intégrée, bien plus lente.'),
-      h('div', null, h('button', { class: 'btn btn--primary', disabled: state.perf.gpuBusy, onClick: () => update((s) => { s.modal = { type: 'gpu-confirm', name: dedicated[0].name, javas: g.javas }; }) }, `Utiliser ${dedicated[0].name} pour Minecraft…`)),
+      h('p', { class: 'perf-text' }, t('performance.sur_un_portable_windows_peut')),
+      h('div', null, h('button', { class: 'btn btn--primary', disabled: state.perf.gpuBusy, onClick: () => update((s) => { s.modal = { type: 'gpu-confirm', name: dedicated[0].name, javas: g.javas }; }) }, t('performance.utiliser_pour_minecraft', { name: dedicated[0].name }))),
     ];
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'gpu-title' },
-    h('div', { class: 'settings__title-row' }, h('h2', { class: 'settings__title', id: 'gpu-title' }, 'Carte graphique'), chip),
-    g?.gpus.length > 0 && h('ul', { class: 'perf-gpus' }, g.gpus.map((x) => h('li', null, h('span', null, x.name), h('span', { class: 'label' }, x.integrated ? 'Intégrée' : 'Dédiée')))),
+    h('div', { class: 'settings__title-row' }, h('h2', { class: 'settings__title', id: 'gpu-title' }, t('performance.carte_graphique')), chip),
+    g?.gpus.length > 0 && h('ul', { class: 'perf-gpus' }, g.gpus.map((x) => h('li', null, h('span', null, x.name), h('span', { class: 'label' }, x.integrated ? t('performance.integree') : t('performance.dediee'))))),
     body,
   );
 }
 
 export function gpuConfirmDialog(modal) {
   return dialog({
-    title: 'Modifier un réglage de Windows ?',
+    title: t('performance.modifier_un_reglage_de_windows'),
     labelId: 'gpu-confirm-title',
     size: 'dialog--small',
     body: h(
       'p',
       { class: 'perf-text' },
-      `Le launcher écrit « Hautes performances » pour ses ${modal.javas} java.exe dans tes préférences graphiques Windows (le même réglage que Paramètres › Affichage › Graphiques). Rien d'autre n'est touché, et tu peux revenir en arrière depuis cette page.`,
+      t('performance.le_launcher_ecrit_hautes_performances', { javas: modal.javas }),
     ),
-    foot: [h('button', { class: 'btn btn--lg', onClick: close }, 'Annuler'), h('button', { class: 'btn btn--primary btn--lg', onClick: () => setGpu(true) }, 'Oui, modifier')],
+    foot: [h('button', { class: 'btn btn--lg', onClick: close }, t('common.annuler')), h('button', { class: 'btn btn--primary btn--lg', onClick: () => setGpu(true) }, t('performance.oui_modifier'))],
   });
 }

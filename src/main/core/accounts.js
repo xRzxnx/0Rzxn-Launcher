@@ -2,6 +2,7 @@
 
 // Comptes hors-ligne et Microsoft. Les jetons Microsoft sont chiffrés par un « coffre » fourni
 // par Electron (safeStorage, lié à la session Windows) : ce module reste en Node pur.
+const { t } = require('../i18n');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { readJson, writeJson } = require('./store');
@@ -53,7 +54,7 @@ class AccountStore {
 
   get(id) {
     const account = this.data.accounts.find((a) => a.id === id);
-    if (!account) throw new Error('Compte introuvable.');
+    if (!account) throw new Error(t('accounts.compte_introuvable'));
     return account;
   }
 
@@ -80,12 +81,12 @@ class AccountStore {
 
   addOffline(rawName) {
     if (!this.canAddOffline()) {
-      throw new Error("Connecte d'abord un compte Microsoft qui possède Minecraft: Java Edition. Les comptes hors-ligne se débloquent ensuite.");
+      throw new Error(t('accounts.connecte_abord_un_compte_microsoft'));
     }
     const name = String(rawName ?? '').trim();
-    if (!PSEUDO.test(name)) throw new Error('3 à 16 caractères : lettres, chiffres et _ uniquement.');
+    if (!PSEUDO.test(name)) throw new Error(t('accounts.16_caracteres_lettres_chiffres_et'));
     if (this.data.accounts.some((a) => a.type === 'offline' && a.name.toLowerCase() === name.toLowerCase())) {
-      throw new Error('Ce pseudo existe déjà.');
+      throw new Error(t('accounts.ce_pseudo_existe_deja'));
     }
     const uuid = offlineUuid(name);
     const account = { id: `offline-${uuid}`, type: 'offline', name, uuid };
@@ -129,7 +130,7 @@ class AccountStore {
   }
 
   setActive(id) {
-    if (!this.data.accounts.some((a) => a.id === id)) throw new Error('Compte introuvable.');
+    if (!this.data.accounts.some((a) => a.id === id)) throw new Error(t('accounts.compte_introuvable'));
     this.data.activeId = id;
     this.save();
     return this.list();
@@ -146,19 +147,19 @@ class AccountStore {
     } catch {
       account.needsLogin = true;
       this.save();
-      throw new Error(`Impossible de lire la session de ${account.name} : reconnecte ce compte.`);
+      throw new Error(t('accounts.impossible_de_lire_la_session', { name: account.name }));
     }
 
     if (force || Date.now() > secrets.expiresAt - RENEW_MARGIN_MS) {
-      if (!this.renew) throw new Error("La connexion Microsoft n'est pas configurée dans ce launcher.");
+      if (!this.renew) throw new Error(t('accounts.la_connexion_microsoft_est_pas'));
       try {
-        log('Renouvellement de la session Microsoft…');
+        log(t('accounts.renouvellement_de_la_session_microsoft'));
         const session = await this.renew(secrets.refreshToken);
         this.addMicrosoft(session, { activate: false }); // remplace l'entrée (et efface needsLogin)
         secrets = { refreshToken: session.refreshToken, accessToken: session.accessToken, expiresAt: session.expiresAt };
       } catch (error) {
         // Hors connexion : le dernier jeton suffit pour jouer en solo.
-        if (error.code === 'NETWORK') log(`Session non renouvelée (${error.message}) : le multijoueur en ligne risque de refuser la connexion.`);
+        if (error.code === 'NETWORK') log(t('accounts.session_non_renouvelee_le_multijoueur', { message: error.message }));
         else {
           account.needsLogin = true;
           this.save();
@@ -173,7 +174,7 @@ class AccountStore {
   /** Lance `action(jeton)` pour un compte Microsoft. Si Minecraft refuse le jeton (401), une seule reprise avec un jeton neuf. */
   async withToken(id, action) {
     const account = this.get(id);
-    if (account.type !== 'microsoft') throw new Error('Il faut un compte Microsoft pour cela.');
+    if (account.type !== 'microsoft') throw new Error(t('accounts.il_faut_un_compte_microsoft'));
     const { accessToken } = await this.freshSecrets(account);
     try {
       return await action(accessToken);
@@ -187,7 +188,7 @@ class AccountStore {
   /** Compte prêt pour le lancement : `id` (compte de l'instance) ou, à défaut, le compte actif. */
   async launchAccount(log = () => {}, id = this.data.activeId) {
     const account = this.data.accounts.find((a) => a.id === id);
-    if (!account) throw new Error('Ajoute un compte avant de jouer.');
+    if (!account) throw new Error(t('common.ajoute_un_compte_avant_de'));
 
     if (account.type === 'offline') {
       return { name: account.name, uuid: account.uuid, accessToken: crypto.randomBytes(16).toString('hex'), userType: 'legacy', xuid: '0', type: 'offline' };

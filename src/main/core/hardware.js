@@ -1,6 +1,7 @@
 'use strict';
 
 // Composants du PC : mémoire, processeur et carte graphique, lus une fois puis gardés en mémoire.
+const { gb, t } = require('../i18n');
 const { execFile } = require('node:child_process');
 const os = require('node:os');
 const gpu = require('./gpu');
@@ -34,11 +35,11 @@ function mainGpu(gpus) {
 }
 
 function describe({ totalGb, cpu, cores, threads, card }) {
-  const coreLabel = cores ? `${cores} cœurs` : `${threads} threads`;
-  const cardLabel = card ? (card.integrated ? 'carte intégrée' : shortGpuName(card.name)) : null;
+  const coreLabel = cores ? t('hardware.urs', { cores }) : t('hardware.threads', { threads });
+  const cardLabel = card ? (card.integrated ? t('hardware.carte_integree') : shortGpuName(card.name)) : null;
   return {
-    summary: [`${totalGb} Go`, coreLabel, cardLabel].filter(Boolean).join(' · '),
-    detail: [cpu, coreLabel, card?.name, `${totalGb} Go de RAM`].filter(Boolean).join(' · '),
+    summary: [gb(totalGb), coreLabel, cardLabel].filter(Boolean).join(' · '),
+    detail: [cpu, coreLabel, card?.name, t('hardware.ram_total', { ram: gb(totalGb) })].filter(Boolean).join(' · '),
   };
 }
 
@@ -47,13 +48,14 @@ async function loadHardware() {
   const list = os.cpus();
   const card = mainGpu(gpus);
   const totalGb = Math.round(os.totalmem() / 1024 ** 3);
-  const facts = { totalGb, cpu: list[0]?.model.trim() ?? null, cores, threads: list.length, card };
-  return { totalGb, integrated: Boolean(card?.integrated), ...describe(facts) };
+  return { totalGb, cpu: list[0]?.model.trim() ?? null, cores, threads: list.length, card };
 }
 
-function readHardware() {
+/** Seuls les faits sont gardés en mémoire : les libellés suivent la langue du moment. */
+async function readHardware() {
   cache ??= loadHardware();
-  return cache;
+  const facts = await cache;
+  return { totalGb: facts.totalGb, integrated: Boolean(facts.card?.integrated), ...describe(facts) };
 }
 
 module.exports = { readHardware, shortGpuName, mainGpu, describe };

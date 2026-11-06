@@ -1,4 +1,5 @@
 // Assistant de création d'instance : trois étapes (style de jeu, nom et version, récapitulatif).
+import { num, t } from '../i18n.js';
 import { openImport } from '../import-actions.js';
 import { LOADER_NAMES, VERSION_TYPES } from '../data.js';
 import { blockIcon, formatGo, h, slugify } from '../dom.js';
@@ -7,14 +8,14 @@ import { backToDetails, backToProfiles, createFromWizard, goToDetails, goToRecap
 import { BLOCKS, close, dialog } from './modals.js';
 
 function stepsBar(step) {
-  return h('div', { class: 'wizard-steps', role: 'img', 'aria-label': `Étape ${step} sur 3` }, [1, 2, 3].map((n) => h('span', { class: n <= step ? 'is-on' : '' })));
+  return h('div', { class: 'wizard-steps', role: 'img', 'aria-label': t('wizard.etape_sur', { step }) }, [1, 2, 3].map((n) => h('span', { class: n <= step ? 'is-on' : '' })));
 }
 
 function stepProfiles(wiz) {
   const isOffline = offline();
   return [
     stepsBar(1),
-    h('p', { class: 'hint', style: 'margin:0' }, 'Étape 1 sur 3 : quel style de jeu ?'),
+    h('p', { class: 'hint', style: 'margin:0' }, t('wizard.etape_sur_quel_style_de')),
     h(
       'div',
       { class: 'wizard-grid' },
@@ -29,21 +30,21 @@ function stepProfiles(wiz) {
             onClick: () => pickProfile(card.id),
           },
           h('b', null, card.title),
-          h('span', null, blocked ? 'Demande une connexion Internet pour télécharger les mods.' : card.text),
+          h('span', null, blocked ? t('wizard.demande_une_connexion_internet_pour') : card.text),
         );
       }),
     ),
-    isOffline && h('p', { class: 'hint hint--warn', role: 'status' }, 'Hors connexion : seules les cartes Créatif et Personnalisée restent disponibles.'),
+    isOffline && h('p', { class: 'hint hint--warn', role: 'status' }, t('wizard.hors_connexion_seules_les_cartes')),
   ];
 }
 
 function planLine(wiz) {
   const plan = wiz.plan;
-  if (!plan || plan.loading) return h('p', { class: 'hint', role: 'status' }, 'Recherche de la version compatible…');
-  if (plan.error) return h('p', { class: 'hint hint--error', role: 'alert' }, `Vérification impossible : ${plan.error}`);
+  if (!plan || plan.loading) return h('p', { class: 'hint', role: 'status' }, t('wizard.recherche_de_la_version_compatible'));
+  if (plan.error) return h('p', { class: 'hint hint--error', role: 'alert' }, t('wizard.verification_impossible', { error: plan.error }));
   const missing = plan.data.mods.filter((m) => !m.available);
-  if (!missing.length) return h('p', { class: 'hint' }, plan.data.mods.length ? `Les ${plan.data.mods.length} mods du profil existent pour cette version.` : 'Aucun mod à installer.');
-  return h('p', { class: 'hint hint--warn' }, `${missing.map((m) => m.title).join(', ')} : pas de version pour ${plan.data.version}, ignoré à l'installation.`);
+  if (!missing.length) return h('p', { class: 'hint' }, plan.data.mods.length ? t('wizard.les_mods_du_profil_existent', { mods: plan.data.mods.length }) : t('wizard.aucun_mod_installer'));
+  return h('p', { class: 'hint hint--warn' }, t('wizard.pas_de_version_pour_ignore', { missing: missing.map((m) => m.title).join(', '), version: plan.data.version }));
 }
 
 function stepDetails(wiz, draft) {
@@ -53,18 +54,18 @@ function stepDetails(wiz, draft) {
   const preview = h('strong', null, slugify(draft.name || 'nouvelle-instance'));
   return [
     stepsBar(2),
-    h('p', { class: 'hint', style: 'margin:0' }, 'Étape 2 sur 3 : nom, icône et version.'),
+    h('p', { class: 'hint', style: 'margin:0' }, t('wizard.etape_sur_nom_icone_et')),
     h(
       'div',
       { style: 'display:flex;gap:20px;align-items:flex-end' },
       h(
         'div',
         { class: 'field' },
-        h('span', { class: 'label', id: 'icon-label' }, 'Icône'),
+        h('span', { class: 'label', id: 'icon-label' }, t('common.icone')),
         h(
           'div',
           { class: 'icon-grid', role: 'radiogroup', 'aria-labelledby': 'icon-label' },
-          BLOCKS.map(([kind, label]) =>
+          BLOCKS().map(([kind, label]) =>
             h('button', { role: 'radio', 'aria-label': label, 'aria-checked': draft.icon === kind ? 'true' : 'false', onClick: () => update(() => { draft.icon = kind; }) }, blockIcon(kind, 'block--md')),
           ),
         ),
@@ -72,7 +73,7 @@ function stepDetails(wiz, draft) {
       h(
         'div',
         { class: 'field', style: 'flex:1' },
-        h('label', { class: 'label', for: 'instance-name' }, 'Nom'),
+        h('label', { class: 'label', for: 'instance-name' }, t('common.nom')),
         h('input', {
           id: 'instance-name',
           class: 'input input--pixel',
@@ -90,11 +91,11 @@ function stepDetails(wiz, draft) {
     h(
       'div',
       { class: 'field' },
-      h('label', { class: 'label', for: 'instance-version' }, 'Version de Minecraft'),
+      h('label', { class: 'label', for: 'instance-version' }, t('common.version_de_minecraft')),
       h(
         'select',
         { id: 'instance-version', class: 'select', disabled: Boolean(wiz.plan?.loading), onChange: (e) => setWizardVersion(e.target.value) },
-        choices.map((v) => h('option', { value: v.id, selected: v.id === draft.version }, `${v.id} · ${VERSION_TYPES[v.type] ?? v.type}${v.installed ? ' · installée' : ''}`)),
+        choices.map((v) => h('option', { value: v.id, selected: v.id === draft.version }, `${v.id} · ${VERSION_TYPES[v.type] ?? v.type}${v.installed ? t('common.installee') : ''}`)),
       ),
       planLine(wiz),
     ),
@@ -108,25 +109,25 @@ function stepRecap(wiz, draft) {
   const ram = plan.ram;
   return [
     stepsBar(3),
-    h('p', { class: 'hint', style: 'margin:0' }, 'Étape 3 sur 3 : récapitulatif.'),
+    h('p', { class: 'hint', style: 'margin:0' }, t('wizard.etape_sur_recapitulatif')),
     h(
       'ul',
       { class: 'wizard-recap' },
-      row('Nom', draft.name.trim()),
+      row(t('common.nom'), draft.name.trim()),
       row('Minecraft', plan.version),
-      row('Loader', plan.loader === 'vanilla' ? 'Vanilla (aucun)' : LOADER_NAMES[plan.loader]),
-      row('Mémoire conseillée', `${formatGo(ram.ideal)} (zone idéale ${ram.low} à ${ram.high} Go)`),
+      row(t('wizard.loader'), plan.loader === 'vanilla' ? t('wizard.vanilla_aucun') : LOADER_NAMES[plan.loader]),
+      row(t('common.memoire_conseillee'), t('wizard.ram_summary', { ideal: formatGo(ram.ideal), low: num(ram.low), high: formatGo(ram.high) })),
     ),
     plan.mods.length > 0
       ? h(
           'div',
           { class: 'field' },
-          h('span', { class: 'label' }, `Mods prévus (${plan.mods.filter((m) => m.available).length} sur ${plan.mods.length})`),
-          h('div', { class: 'wizard-mods' }, plan.mods.map((m) => h('span', { class: m.available ? '' : 'is-skipped', title: m.available ? m.number : 'Indisponible pour cette version : ignoré' }, m.title))),
-          plan.mods.some((m) => !m.available) && h('p', { class: 'hint hint--warn' }, `Ignoré, indisponible en ${plan.version} : ${plan.mods.filter((m) => !m.available).map((m) => m.title).join(', ')}.`),
-          h('p', { class: 'hint' }, 'Leurs dépendances (Fabric API par exemple) sont ajoutées automatiquement.'),
+          h('span', { class: 'label' }, t('wizard.mods_prevus_sur', { mods: plan.mods.filter((m) => m.available).length, mods2: plan.mods.length })),
+          h('div', { class: 'wizard-mods' }, plan.mods.map((m) => h('span', { class: m.available ? '' : 'is-skipped', title: m.available ? m.number : t('wizard.indisponible_pour_cette_version_ignore') }, m.title))),
+          plan.mods.some((m) => !m.available) && h('p', { class: 'hint hint--warn' }, t('wizard.ignore_indisponible_en', { version: plan.version, mods: plan.mods.filter((m) => !m.available).map((m) => m.title).join(', ') })),
+          h('p', { class: 'hint' }, t('wizard.leurs_dependances_fabric_api_par')),
         )
-      : h('p', { class: 'hint' }, 'Aucun mod : Minecraft tel quel.'),
+      : h('p', { class: 'hint' }, t('wizard.aucun_mod_minecraft_tel_quel')),
   ];
 }
 
@@ -137,7 +138,7 @@ export function wizardDialog(modal) {
   const busy = Boolean(modal.busy);
   const canNext = step === 1 ? Boolean(wiz.profile) : step === 2 ? Boolean(wiz.plan?.data) && !wiz.plan?.loading : true;
   return dialog({
-    title: 'Nouvelle instance',
+    title: t('common.nouvelle_instance'),
     size: 'dialog--wide',
     labelId: 'new-instance-title',
     body: [
@@ -146,12 +147,12 @@ export function wizardDialog(modal) {
     ],
     foot: [
       step === 1
-        ? h('button', { class: 'btn btn--ghost spacer', onClick: openImport }, 'Importer depuis un autre launcher…')
-        : h('button', { class: 'btn btn--ghost spacer', disabled: busy, onClick: step === 2 ? backToProfiles : backToDetails }, 'Retour'),
-      h('button', { class: 'btn btn--lg', onClick: close }, 'Annuler'),
+        ? h('button', { class: 'btn btn--ghost spacer', onClick: openImport }, t('common.importer_depuis_un_autre_launcher'))
+        : h('button', { class: 'btn btn--ghost spacer', disabled: busy, onClick: step === 2 ? backToProfiles : backToDetails }, t('common.retour')),
+      h('button', { class: 'btn btn--lg', onClick: close }, t('common.annuler')),
       step === 3
-        ? h('button', { class: 'btn btn--primary btn--lg', disabled: busy, onClick: createFromWizard }, busy ? 'Création…' : 'Créer')
-        : h('button', { class: 'btn btn--primary btn--lg', disabled: !canNext, onClick: step === 1 ? goToDetails : goToRecap }, 'Suivant'),
+        ? h('button', { class: 'btn btn--primary btn--lg', disabled: busy, onClick: createFromWizard }, busy ? t('wizard.creation') : t('common.creer'))
+        : h('button', { class: 'btn btn--primary btn--lg', disabled: !canNext, onClick: step === 1 ? goToDetails : goToRecap }, t('wizard.suivant')),
     ],
   });
 }

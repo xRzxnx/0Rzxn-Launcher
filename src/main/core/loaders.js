@@ -3,6 +3,7 @@
 // Loaders de mods : Fabric, Quilt, Forge, NeoForge.
 // Chacun produit un fichier de version qui « hérite » (inheritsFrom) de la version vanilla,
 // exactement comme avec le launcher officiel.
+const { t } = require('../i18n');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -38,7 +39,7 @@ async function jsonOrNull(url) {
   try {
     return await fetchJson(url);
   } catch (error) {
-    if (/Réponse (400|404)/.test(error.message)) return null;
+    if (error.status === 400 || error.status === 404) return null;
     throw error;
   }
 }
@@ -118,7 +119,7 @@ async function resolveLoaderVersion(loader, mc, packValue) {
   if (loader === 'forge') {
     const { versions } = await forgeVersions(mc);
     const match = versions.find((v) => v.label === packValue || v.id === packValue);
-    if (!match) throw new Error(`Forge ${packValue} introuvable pour Minecraft ${mc}.`);
+    if (!match) throw new Error(t('loaders.forge_introuvable_pour_minecraft', { packValue, mc }));
     return match.id;
   }
   if (loader === 'neoforge' && mc === '1.20.1' && !packValue.startsWith('1.20.1-')) return `1.20.1-${packValue}`;
@@ -143,7 +144,7 @@ async function installLoader(ctx) {
   if (ctx.loader === 'fabric') return installFabricLike(ctx, 'https://meta.fabricmc.net/v2');
   if (ctx.loader === 'quilt') return installFabricLike(ctx, 'https://meta.quiltmc.org/v3');
   if (ctx.loader === 'forge' || ctx.loader === 'neoforge') return installFromInstaller(ctx);
-  throw new Error(`Loader inconnu : ${ctx.loader}`);
+  throw new Error(t('loaders.loader_inconnu', { loader: ctx.loader }));
 }
 
 async function installFabricLike({ dirs, mc, loaderVersion, log }, base) {
@@ -153,7 +154,7 @@ async function installFabricLike({ dirs, mc, loaderVersion, log }, base) {
   const profile = await fetchJson(url);
   writeJson(versionFiles(dirs, profile.id).json, profile);
   rememberId(dirs, url, profile.id);
-  log(`Profil ${profile.id} installé`);
+  log(t('loaders.profil_installe', { id: profile.id }));
   return profile.id;
 }
 
@@ -174,7 +175,7 @@ async function installFromInstaller(ctx) {
   const known = readJson(path.join(dirs.cache, 'loaders.json'), {})[url];
   if (known && exists(path.join(dirs.versions, known, MARKER)) && exists(versionFiles(dirs, known).json)) return known;
 
-  log(`Téléchargement de l'installeur ${LOADER_NAMES[loader]} ${loaderVersion}`);
+  log(t('loaders.telechargement_de_installeur', { LOADER_NAMES: LOADER_NAMES[loader], loaderVersion }));
   const installer = path.join(dirs.cache, 'installers', path.basename(new URL(url).pathname));
   let sha1;
   try {
@@ -187,14 +188,14 @@ async function installFromInstaller(ctx) {
   const buffer = await fsp.readFile(installer);
   const entries = zip.listEntries(buffer);
   const profile = JSON.parse(zip.readFile(buffer, 'install_profile.json', entries)?.toString('utf8') ?? 'null');
-  if (!profile) throw new Error("Installeur invalide : install_profile.json introuvable.");
+  if (!profile) throw new Error(t('loaders.installeur_invalide_install_profile_json'));
 
   const id = profile.versionInfo
     ? await installLegacyForge(ctx, profile, buffer, entries)
     : await installModern(ctx, profile, buffer, entries, installer);
   fs.writeFileSync(path.join(dirs.versions, id, MARKER), url);
   rememberId(dirs, url, id);
-  log(`${LOADER_NAMES[loader]} ${loaderVersion} installé (${id})`);
+  log(t('loaders.installe', { LOADER_NAMES: LOADER_NAMES[loader], loaderVersion, id }));
   return id;
 }
 
@@ -204,7 +205,7 @@ async function installLegacyForge({ dirs }, profile, buffer, entries) {
   const universal = path.join(dirs.libraries, mavenPath(profile.install.path));
   if (!exists(universal)) {
     const data = zip.readFile(buffer, profile.install.filePath, entries);
-    if (!data) throw new Error('Installeur Forge incomplet (jar universel manquant).');
+    if (!data) throw new Error(t('loaders.installeur_forge_incomplet_jar_universel'));
     await fsp.mkdir(path.dirname(universal), { recursive: true });
     await fsp.writeFile(universal, data);
   }
@@ -285,11 +286,11 @@ async function installModern(ctx, profile, buffer, entries, installerPath) {
       const mainClass = mainClassOf(await fsp.readFile(jar));
       const classpath = [jar, ...(processor.classpath ?? []).map(libPath)].join(path.delimiter);
       const args = processor.args.map(resolve);
-      log(`Processeur ${index + 1}/${processors.length} : ${processor.jar.split(':')[1]}`);
+      log(t('loaders.processeur', { index: index + 1, processors: processors.length, jar: processor.jar.split(':')[1] }));
       await runJava(javaExe, ['-cp', classpath, mainClass, ...args], { cwd: work, signal, log });
 
       for (const [file, hash] of outputs) {
-        if (!(await sameSha1(file, hash))) throw new Error(`Le processeur ${processor.jar} a produit un fichier inattendu : ${path.basename(file)}`);
+        if (!(await sameSha1(file, hash))) throw new Error(t('loaders.le_processeur_produit_un_fichier', { jar: processor.jar, file: path.basename(file) }));
       }
     }
   } finally {
@@ -310,7 +311,7 @@ async function sameSha1(file, expected) {
 function mainClassOf(jarBuffer) {
   const manifest = zip.readFile(jarBuffer, 'META-INF/MANIFEST.MF')?.toString('utf8') ?? '';
   const main = manifest.match(/^Main-Class:\s*(.+)$/m)?.[1]?.trim();
-  if (!main) throw new Error('Processeur sans classe principale.');
+  if (!main) throw new Error(t('loaders.processeur_sans_classe_principale'));
   return main;
 }
 
@@ -329,13 +330,13 @@ function runJava(javaExe, args, { cwd, signal, log }) {
     child.stderr.on('data', keep);
     const abort = () => child.kill();
     signal?.addEventListener('abort', abort, { once: true });
-    child.on('error', (error) => reject(new Error(`Java ne démarre pas pour l'installation du loader (${error.message}).`)));
+    child.on('error', (error) => reject(new Error(t('loaders.java_ne_demarre_pas_pour', { message: error.message }))));
     child.on('close', (code) => {
       signal?.removeEventListener('abort', abort);
-      if (signal?.aborted) return reject(new Error('Installation annulée.'));
+      if (signal?.aborted) return reject(new Error(t('loaders.installation_annulee')));
       if (code === 0) return resolve();
       for (const line of tail.slice(-10)) log(line, 'LAUNCHER/ERROR');
-      reject(new Error(`L'installation du loader a échoué (code ${code}). Détails dans la console.`));
+      reject(new Error(t('loaders.installation_du_loader_echoue_code', { code })));
     });
   });
 }

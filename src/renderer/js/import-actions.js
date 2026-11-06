@@ -1,4 +1,5 @@
 // Actions de la fenêtre « Importer » : instances d'autres launchers.
+import { t } from './i18n.js';
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { LOADER_NAMES } from './data.js';
@@ -40,11 +41,11 @@ export async function importInstance(item) {
     });
     toast({
       kind: warnings.length ? 'info' : 'success',
-      title: `${instance.name} importée`,
-      text: [`${files} fichiers copiés, Minecraft ${instance.version}${instance.loader !== 'vanilla' ? ` · ${LOADER_NAMES[instance.loader]}` : ''}.`, ...warnings].join(' '),
+      title: t('import.importee', { name: instance.name }),
+      text: [t('import.files_copied', { files, version: [instance.version, instance.loader !== 'vanilla' && LOADER_NAMES[instance.loader]].filter(Boolean).join(' · ') }), ...warnings].join(' '),
       timeout: warnings.length ? 12000 : 6000,
     });
   } catch (error) {
-    toastError('Import impossible', error);
+    toastError(t('common.import_impossible'), error);
   }
 }

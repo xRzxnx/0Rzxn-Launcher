@@ -1,6 +1,7 @@
 'use strict';
 
 // Pipeline de lancement : chaque étape est annoncée pour la barre de progression.
+const { gb, num, t } = require('../i18n');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const EventEmitter = require('node:events');
@@ -17,7 +18,7 @@ const { getVersionJson } = require('./versions');
 
 const STEPS = ['account', 'components', 'files', 'java', 'loader', 'javaCheck', 'memory', 'natives', 'launch'];
 const LAUNCHER_NAME = '0Rzxn_Launcher';
-const GC_NAMES = { g1: 'G1 réglé', zgc: 'ZGC générationnel', none: 'celui de Java par défaut' };
+const GC_NAMES = { get g1() { return t('launch.g1_regle'); }, get zgc() { return t('launch.zgc_generationnel'); }, get none() { return t('launch.celui_de_java_par_defaut'); } };
 
 /**
  * Événements :
@@ -67,8 +68,8 @@ class LaunchSession extends EventEmitter {
       await this.run();
     } catch (error) {
       const cancelled = this.controller.signal.aborted;
-      if (!cancelled) this.log(`Échec : ${error.message}`, 'LAUNCHER/ERROR');
-      this.emit('failed', { message: cancelled ? 'Lancement annulé.' : error.message, cancelled });
+      if (!cancelled) this.log(t('launch.echec', { message: error.message }), 'LAUNCHER/ERROR');
+      this.emit('failed', { message: cancelled ? t('launch.lancement_annule') : error.message, cancelled });
     }
   }
 
@@ -89,7 +90,7 @@ class LaunchSession extends EventEmitter {
     this.account = account;
     this.secrets = [account.accessToken];
     signal.throwIfAborted();
-    this.log(`Instance ${instance.name} · Minecraft ${instance.version} · compte ${account.name} (${account.type === 'offline' ? 'hors-ligne' : 'Microsoft'})`);
+    this.log(t('launch.summary', { name: instance.name, version: instance.version, account: account.name, type: account.type === 'offline' ? t('launch.offline') : 'Microsoft' }));
 
     // 2. Composants
     this.progress(1);
@@ -103,14 +104,14 @@ class LaunchSession extends EventEmitter {
     const tasks = [install.clientTask(version, dirs), install.loggingTask(version, dirs), ...libraries.tasks, ...assets.tasks].filter(Boolean);
     const started = Date.now();
     await downloadAll(tasks, { signal, verify: this.verify, onProgress: (p) => this.progress(2, p.done, p.total) });
-    this.log(`${tasks.length.toLocaleString('fr-FR')} fichiers prêts (${((Date.now() - started) / 1000).toFixed(1)} s)`);
+    this.log(t('launch.files_ready', { count: tasks.length, seconds: num((Date.now() - started) / 1000, { maximumFractionDigits: 1, minimumFractionDigits: 1 }) }));
 
     // 4. Java
     this.progress(3);
     const required = version.javaVersion?.majorVersion ?? 8;
     let javaExe;
     if (settings.java === 'custom' && settings.javaPath) {
-      if (!fs.existsSync(settings.javaPath)) throw new Error(`Java personnalisé introuvable : ${settings.javaPath}`);
+      if (!fs.existsSync(settings.javaPath)) throw new Error(t('launch.java_personnalise_introuvable', { javaPath: settings.javaPath }));
       javaExe = settings.javaPath;
     } else {
       const component = version.javaVersion?.component ?? 'jre-legacy';
@@ -147,23 +148,23 @@ class LaunchSession extends EventEmitter {
       gameLibraries = install.resolveLibraries(game, dirs);
       const loaderTasks = [install.clientTask(game, dirs), ...gameLibraries.tasks].filter(Boolean);
       await downloadAll(loaderTasks, { signal, verify: this.verify, onProgress: (p) => this.progress(4, p.done, p.total) });
-      this.log(`${LOADER_NAMES[instance.loader]} ${instance.loaderVersion} prêt (${game.id})`);
+      this.log(t('launch.pret', { LOADER_NAMES: LOADER_NAMES[instance.loader], loaderVersion: instance.loaderVersion, id: game.id }));
     }
     signal.throwIfAborted();
 
     // 6. Vérification de Java
     this.progress(5);
     const java = await probeJava(javaExe);
-    this.log(`Java ${java.major} (${java.description}) · ${javaExe}`);
-    if (java.major < required) throw new Error(`Minecraft ${instance.version} demande Java ${required}, mais ce Java est la version ${java.major}.`);
-    if (java.major !== required) this.log(`Attention : Java ${required} est recommandé pour cette version (Java ${java.major} utilisé).`, 'LAUNCHER/WARN');
+    this.log(t('launch.java', { major: java.major, description: java.description, javaExe }));
+    if (java.major < required) throw new Error(t('launch.minecraft_demande_java_mais_ce', { version: instance.version, required, major: java.major }));
+    if (java.major !== required) this.log(t('launch.attention_java_est_recommande_pour', { required, major: java.major }), 'LAUNCHER/WARN');
     this.javaMajor = java.major;
-    if (this.prepareJava) await this.prepareJava(javaExe, (msg) => this.log(msg)).catch((error) => this.log(`Carte graphique : ${error.message}`, 'LAUNCHER/WARN'));
+    if (this.prepareJava) await this.prepareJava(javaExe, (msg) => this.log(msg)).catch((error) => this.log(t('launch.carte_graphique', { message: error.message }), 'LAUNCHER/WARN'));
 
     // 7. Mémoire disponible (l'avertissement est affiché par l'interface avant le lancement)
     this.progress(6);
     const freeGb = os.freemem() / 1024 ** 3;
-    this.log(`Mémoire : ${settings.ram} Go demandés, ${freeGb.toFixed(1)} Go libres`);
+    this.log(t('launch.memory', { ram: gb(settings.ram), free: gb(freeGb.toFixed(1)) }));
 
     // 8. Natives et assets anciens
     this.progress(7);
@@ -195,13 +196,13 @@ class LaunchSession extends EventEmitter {
     };
     const loggingConfig = install.loggingTask(game, dirs)?.path;
     const { jvm, game: gameArgs, librarySearchPath, gc } = buildArguments({ version: game, vars, settings, loggingConfig, javaMajor: this.javaMajor });
-    this.log(`Ramasse-miettes : ${GC_NAMES[gc]}${settings.jvmPreset === 'auto' ? ' (automatique)' : ''}`);
+    this.log(t(settings.jvmPreset === 'auto' ? 'launch.gc_auto' : 'launch.gc', { gc: GC_NAMES[gc] }));
     const extracted = await install.extractNatives(gameLibraries.natives, librarySearchPath);
-    this.log(`${extracted} natives extraites`);
+    this.log(t('launch.natives_extraites', { extracted }));
     signal.throwIfAborted();
 
     if (this.prepareOnly) {
-      this.log('Fichiers vérifiés, Java et natives prêts.');
+      this.log(t('launch.fichiers_verifies_java_et_natives'));
       this.emit('prepared');
       return;
     }
@@ -209,7 +210,7 @@ class LaunchSession extends EventEmitter {
     // 9. Lancement
     this.progress(8);
     const args = [...jvm, game.mainClass, ...gameArgs];
-    this.log(`Arguments du jeu : ${gameArgs.join(' ')}`);
+    this.log(t('launch.arguments_du_jeu', { gameArgs: gameArgs.join(' ') }));
     this.spawnGame(javaExe, args, settings.priority);
   }
 
@@ -225,13 +226,13 @@ class LaunchSession extends EventEmitter {
 
     let reported = false;
     child.once('spawn', () => {
-      this.log(`Minecraft démarré (processus ${child.pid})`);
+      this.log(t('launch.minecraft_demarre_processus', { pid: child.pid }));
       if (priority === 'above') {
         try {
           os.setPriority(child.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL);
-          this.log('Priorité du jeu : au-dessus de la normale');
+          this.log(t('launch.priorite_du_jeu_au_dessus'));
         } catch (error) {
-          this.log(`Priorité du jeu inchangée (${error.code ?? error.message})`, 'LAUNCHER/WARN');
+          this.log(t('launch.priorite_du_jeu_inchangee', { code: error.code ?? error.message }), 'LAUNCHER/WARN');
         }
       }
       this.emit('running', { pid: child.pid });
@@ -239,8 +240,8 @@ class LaunchSession extends EventEmitter {
     child.once('error', (error) => {
       if (reported) return;
       reported = true;
-      this.log(`Impossible de démarrer Java : ${error.message}`, 'LAUNCHER/ERROR');
-      this.emit('failed', { message: `Impossible de démarrer Java (${error.code ?? error.message}).`, cancelled: false });
+      this.log(t('launch.impossible_de_demarrer_java', { message: error.message }), 'LAUNCHER/ERROR');
+      this.emit('failed', { message: t('launch.impossible_de_demarrer_java_2', { code: error.code ?? error.message }), cancelled: false });
     });
     child.once('close', (code, signalName) => {
       if (reported) return;
@@ -249,7 +250,7 @@ class LaunchSession extends EventEmitter {
       stderr.flush();
       const minutes = Math.max(0, Math.round((Date.now() - startedAt) / 60000));
       const crashed = !this.stopped && code !== 0;
-      this.log(this.stopped ? 'Jeu arrêté depuis le launcher.' : `Jeu fermé (code de sortie ${code ?? signalName}).`, crashed ? 'LAUNCHER/ERROR' : 'LAUNCHER');
+      this.log(this.stopped ? t('launch.jeu_arrete_depuis_le_launcher') : t('launch.jeu_ferme_code_de_sortie', { code: code ?? signalName }), crashed ? 'LAUNCHER/ERROR' : 'LAUNCHER');
       this.emit('exit', { code, crashed, minutes });
     });
   }

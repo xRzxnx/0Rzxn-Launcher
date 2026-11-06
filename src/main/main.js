@@ -18,6 +18,7 @@ const COLORS = {
 let mainWindow = null;
 
 function createWindow() {
+  const { lang, locale } = ipc.language();
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -29,6 +30,8 @@ function createWindow() {
     titleBarOverlay: { color: COLORS.titlebar, symbolColor: COLORS.symbols, height: 34 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      // La langue arrive avec la page : le premier rendu est déjà dans la bonne langue.
+      additionalArguments: [`--ui-language=${lang}`, `--ui-locale=${locale}`],
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

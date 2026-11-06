@@ -3,6 +3,7 @@
 // Ensembles de mods d'une instance : des groupes de mods actifs, sans rien désinstaller.
 // Un mod est repéré par un identifiant stable (id du mod lu dans le jar, sinon nom de fichier
 // sans « .disabled »), pour rester dans son ensemble quand une mise à jour change le nom du fichier.
+const { t } = require('../i18n');
 const crypto = require('node:crypto');
 const content = require('./content');
 
@@ -35,7 +36,7 @@ function sanitize(modSets, activeModSet) {
 }
 
 function assertModded(instance) {
-  if (instance.loader === 'vanilla') throw new Error('Les ensembles de mods demandent un loader (Fabric, Quilt, Forge ou NeoForge).');
+  if (instance.loader === 'vanilla') throw new Error(t('mod_sets.les_ensembles_de_mods_demandent'));
 }
 
 async function items(gameDir, instance) {
@@ -44,8 +45,8 @@ async function items(gameDir, instance) {
 
 function uniqueName(sets, name, exceptId = null) {
   const clean = cleanName(name);
-  if (!clean) throw new Error('Donne un nom à ton ensemble.');
-  if (sets.some((s) => s.id !== exceptId && s.name.toLowerCase() === clean.toLowerCase())) throw new Error('Un ensemble porte déjà ce nom.');
+  if (!clean) throw new Error(t('mod_sets.donne_un_nom_ton_ensemble'));
+  if (sets.some((s) => s.id !== exceptId && s.name.toLowerCase() === clean.toLowerCase())) throw new Error(t('mod_sets.un_ensemble_porte_deja_ce'));
   return clean;
 }
 
@@ -53,7 +54,7 @@ function uniqueName(sets, name, exceptId = null) {
 async function create({ store, instance, gameDir, name }) {
   assertModded(instance);
   const sets = instance.modSets ?? [];
-  if (sets.length >= MAX_SETS) throw new Error(`${MAX_SETS} ensembles au maximum.`);
+  if (sets.length >= MAX_SETS) throw new Error(t('mod_sets.ensembles_au_maximum', { MAX_SETS }));
   const clean = uniqueName(sets, name);
   const mods = [...new Set((await items(gameDir, instance)).filter((i) => i.enabled).map(stableId))];
   const set = { id: crypto.randomBytes(4).toString('hex'), name: clean, mods };
@@ -63,7 +64,7 @@ async function create({ store, instance, gameDir, name }) {
 
 function rename({ store, instance, setId, name }) {
   const sets = instance.modSets ?? [];
-  if (!sets.some((s) => s.id === setId)) throw new Error('Ensemble introuvable.');
+  if (!sets.some((s) => s.id === setId)) throw new Error(t('mod_sets.ensemble_introuvable'));
   const clean = uniqueName(sets, name, setId);
   store.saveModSets(instance.id, sets.map((s) => (s.id === setId ? { ...s, name: clean } : s)), instance.activeModSet);
 }
@@ -71,7 +72,7 @@ function rename({ store, instance, setId, name }) {
 /** Supprime l'ensemble seulement : aucun mod n'est touché. */
 function remove({ store, instance, setId }) {
   const sets = instance.modSets ?? [];
-  if (!sets.some((s) => s.id === setId)) throw new Error('Ensemble introuvable.');
+  if (!sets.some((s) => s.id === setId)) throw new Error(t('mod_sets.ensemble_introuvable'));
   store.saveModSets(instance.id, sets.filter((s) => s.id !== setId), instance.activeModSet === setId ? null : instance.activeModSet);
 }
 
@@ -83,7 +84,7 @@ async function apply({ store, instance, gameDir, setId }) {
   assertModded(instance);
   const sets = instance.modSets ?? [];
   const set = setId == null ? null : sets.find((s) => s.id === setId);
-  if (setId != null && !set) throw new Error('Ensemble introuvable.');
+  if (setId != null && !set) throw new Error(t('mod_sets.ensemble_introuvable'));
   const wanted = set ? new Set(set.mods) : null;
   const failed = [];
   let changed = 0;

@@ -1,4 +1,5 @@
 // Recherche globale (Ctrl+K) : calcul des résultats, requêtes Modrinth temporisées et actions.
+import { t } from './i18n.js';
 import { openBackground } from './background-actions.js';
 import { openImport } from './import-actions.js';
 import { openLauncherFolder, requestLaunch, verifyInstance } from './actions.js';
@@ -141,9 +142,9 @@ function instanceItems(query) {
     const status = instanceStatus(instance);
     const blocked = Boolean(state.run);
     const base = `${LOADER_NAMES[instance.loader] ?? instance.loader} ${instance.version}`;
-    let hint = instance.installed ? 'Entrée pour jouer' : 'Entrée pour installer et jouer';
-    if (status.kind === 'running') hint = 'Déjà en jeu · Entrée pour sélectionner';
-    else if (blocked) hint = 'Partie en cours · Entrée pour sélectionner';
+    let hint = instance.installed ? t('palette.entree_pour_jouer') : t('palette.entree_pour_installer_et_jouer');
+    if (status.kind === 'running') hint = t('palette.deja_en_jeu_entree_pour');
+    else if (blocked) hint = t('palette.partie_en_cours_entree_pour');
     return {
       id: `instance:${instance.id}`,
       kind: 'instance',
@@ -181,7 +182,7 @@ function modItems(query) {
       id: `mod:${entry.title}`,
       kind: 'mod',
       label: entry.title,
-      meta: entry.instances.length === 1 ? `installé dans ${first}` : `installé dans ${entry.instances.length} instances`,
+      meta: entry.instances.length === 1 ? t('palette.installe_dans', { first }) : t('palette.installe_dans_instances', { instances: entry.instances.length }),
       run: () => openInstalledMod(target, entry.title),
     };
   });
@@ -192,7 +193,7 @@ function modItems(query) {
       id: `modrinth:${hit.id}`,
       kind: 'mod',
       label: hit.title,
-      meta: 'installer depuis Modrinth',
+      meta: t('palette.installer_depuis_modrinth'),
       run: () => openDiscover(hit),
     }));
   return [...installed, ...remote];
@@ -203,20 +204,20 @@ function actionItems(query) {
   const name = instance?.name ?? '';
   const busy = Boolean(state.run);
   const list = [
-    { id: 'a:new', icon: 'plus', label: 'Nouvelle instance', keys: 'creer ajouter instance nouvelle', run: plain(() => openNewInstance()), main: true },
-    { id: 'a:import', icon: 'download', label: 'Importer une instance', keys: 'importer instance modpack mrpack', run: plain(openImport), main: true },
-    { id: 'a:console', icon: 'console', label: 'Ouvrir la console', keys: 'console journaux logs crash', run: plain(() => go('console')), main: true },
-    { id: 'a:folder', icon: 'folder', label: 'Dossier du launcher', keys: 'dossier launcher ouvrir', run: plain(openLauncherFolder) },
+    { id: 'a:new', icon: 'plus', label: t('common.nouvelle_instance'), keys: t('palette.creer_ajouter_instance_nouvelle'), run: plain(() => openNewInstance()), main: true },
+    { id: 'a:import', icon: 'download', label: t('palette.importer_une_instance'), keys: t('palette.importer_instance_modpack_mrpack'), run: plain(openImport), main: true },
+    { id: 'a:console', icon: 'console', label: t('palette.ouvrir_la_console'), keys: t('palette.console_journaux_logs_crash'), run: plain(() => go('console')), main: true },
+    { id: 'a:folder', icon: 'folder', label: t('common.dossier_du_launcher'), keys: t('palette.dossier_launcher_ouvrir'), run: plain(openLauncherFolder) },
     instance && {
       id: 'a:verify',
       icon: 'shield',
-      label: `Vérifier les fichiers de ${name}`,
-      keys: 'verifier fichiers instance reparer',
-      meta: !instance.installed ? 'à installer d’abord' : busy ? 'indisponible pendant une partie' : 'action',
+      label: t('palette.verifier_les_fichiers_de', { name }),
+      keys: t('palette.verifier_fichiers_instance_reparer'),
+      meta: !instance.installed ? t('palette.installer_abord') : busy ? t('palette.indisponible_pendant_une_partie') : 'action',
       run: instance.installed && !busy ? plain(() => verifyInstance(instance.id)) : () => {},
     },
-    { id: 'a:recap', icon: 'bolt', label: 'Bilan du mois', keys: 'bilan mois recap statistiques temps de jeu', run: plain(openRecap), main: true },
-    instance && { id: 'a:background', icon: 'edit', label: `Fond de ${name}`, keys: 'fond arriere plan decor image instance', run: plain(() => openBackground(instance)) },
+    { id: 'a:recap', icon: 'bolt', label: t('common.bilan_du_mois'), keys: t('palette.bilan_mois_recap_statistiques_temps'), run: plain(openRecap), main: true },
+    instance && { id: 'a:background', icon: 'edit', label: t('common.fond_de', { name }), keys: t('palette.keys_background'), run: plain(() => openBackground(instance)) },
   ].filter(Boolean);
   const text = query.trim();
   return list
@@ -230,21 +231,21 @@ function settingItems(query) {
   const instance = selectedInstance();
   const scope = instance ? 'instance' : 'global';
   const list = [
-    { id: 's:ram', label: instance ? `Mémoire de ${instance.name}` : 'Mémoire', keys: 'memoire ram go allocation', run: () => openSettings(scope, 'ram') },
-    { id: 's:java', label: instance ? `Java de ${instance.name}` : 'Java', keys: 'java runtime jvm', run: () => openSettings(scope, 'java-title') },
-    { id: 's:launcher', label: 'Paramètres du launcher', keys: 'parametres launcher reglages theme accent', run: () => openSettings('launcher') },
-    { id: 's:storage', label: 'Stockage', keys: 'stockage disque nettoyer espace java installes', run: () => openSettings('storage') },
+    { id: 's:ram', label: instance ? t('palette.memoire_de', { name: instance.name }) : t('common.memoire'), keys: t('palette.memoire_ram_go_allocation'), run: () => openSettings(scope, 'ram') },
+    { id: 's:java', label: instance ? t('palette.java_de', { name: instance.name }) : 'Java', keys: t('palette.java_runtime_jvm'), run: () => openSettings(scope, 'java-title') },
+    { id: 's:launcher', label: t('palette.parametres_du_launcher'), keys: t('palette.parametres_launcher_reglages_theme_accent'), run: () => openSettings('launcher') },
+    { id: 's:storage', label: t('palette.stockage'), keys: t('palette.stockage_disque_nettoyer_espace_java'), run: () => openSettings('storage') },
   ];
-  return list.filter((a) => hasAll(`${a.label} ${a.keys}`, text)).map((a) => ({ id: a.id, kind: 'setting', icon: 'settings', label: a.label, meta: 'réglage', run: a.run }));
+  return list.filter((a) => hasAll(`${a.label} ${a.keys}`, text)).map((a) => ({ id: a.id, kind: 'setting', icon: 'settings', label: a.label, meta: t('palette.reglage'), run: a.run }));
 }
 
 /** Groupes affichés, dans l'ordre, sans les groupes vides. Chaque ligne reçoit un numéro à plat. */
 export function paletteGroups(query = state.modal?.query ?? '') {
   const groups = [
-    { id: 'instances', title: 'Instances', items: instanceItems(query) },
+    { id: 'instances', title: t('common.instances'), items: instanceItems(query) },
     { id: 'mods', title: 'Mods', items: modItems(query) },
-    { id: 'actions', title: 'Actions', items: actionItems(query) },
-    { id: 'settings', title: 'Réglages', items: settingItems(query) },
+    { id: 'actions', title: t('palette.actions'), items: actionItems(query) },
+    { id: 'settings', title: t('palette.reglages'), items: settingItems(query) },
   ].filter((g) => g.items.length > 0);
   let index = 0;
   for (const group of groups) for (const item of group.items) item.index = index++;

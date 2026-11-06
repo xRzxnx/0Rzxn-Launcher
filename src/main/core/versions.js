@@ -1,6 +1,7 @@
 'use strict';
 
 // Versions de Minecraft (manifeste officiel Mojang).
+const { t } = require('../i18n');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { downloadFile, fetchJson } = require('./download');
@@ -22,7 +23,7 @@ async function getManifest(dirs, { refresh = false } = {}) {
     manifest = { ...data, offline: false };
   } catch (error) {
     const cached = readJson(cacheFile, null);
-    if (!cached) throw new Error(`Impossible de récupérer la liste des versions (${error.message}).`);
+    if (!cached) throw new Error(t('versions.impossible_de_recuperer_la_liste', { message: error.message }));
     manifest = { ...cached, offline: true };
   }
   return manifest;
@@ -92,11 +93,11 @@ async function getVersionJson(dirs, id) {
     try {
       await downloadFile({ url: entry.url, path: files.json, sha1: entry.sha1 });
     } catch (error) {
-      if (!exists(files.json)) throw new Error(`Impossible de télécharger la version ${id} (${error.message}).`);
+      if (!exists(files.json)) throw new Error(t('versions.impossible_de_telecharger_la_version', { id, message: error.message }));
     }
   }
   const json = readJson(files.json, null);
-  if (!json) throw new Error(`La version ${id} est introuvable.`);
+  if (!json) throw new Error(t('versions.la_version_est_introuvable', { id }));
   if (json.inheritsFrom) return mergeVersions(await getVersionJson(dirs, json.inheritsFrom), json);
   return json;
 }

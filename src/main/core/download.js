@@ -1,6 +1,7 @@
 'use strict';
 
 // Téléchargements vérifiés : SHA-1, taille, 3 essais, plusieurs fichiers en parallèle.
+const { t } = require('../i18n');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
@@ -15,7 +16,7 @@ async function request(url, { signal } = {}) {
     headers: { 'User-Agent': USER_AGENT },
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
-  if (!res.ok) throw new Error(`Réponse ${res.status} de ${new URL(url).host}`);
+  if (!res.ok) throw Object.assign(new Error(t('download.reponse_de', { status: res.status, host: new URL(url).host })), { status: res.status });
   return res;
 }
 
@@ -64,8 +65,8 @@ async function downloadFile(task, { signal, verify = false, retries = 3 } = {}) 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const data = await fetchBuffer(task.url, { signal });
-      if (task.size != null && data.length !== task.size) throw new Error(`Taille inattendue pour ${path.basename(task.path)}`);
-      if (task.sha1 && sha1(data) !== task.sha1) throw new Error(`Fichier corrompu (SHA-1) : ${path.basename(task.path)}`);
+      if (task.size != null && data.length !== task.size) throw new Error(t('download.taille_inattendue_pour', { path: path.basename(task.path) }));
+      if (task.sha1 && sha1(data) !== task.sha1) throw new Error(t('download.fichier_corrompu_sha', { path: path.basename(task.path) }));
       await fsp.mkdir(path.dirname(task.path), { recursive: true });
       const tmp = `${task.path}.${process.pid}.${attempt}.tmp`;
       await fsp.writeFile(tmp, data);
@@ -123,7 +124,7 @@ async function downloadAll(tasks, { concurrency = 16, signal, verify = false, on
   if (errors.length) {
     const first = errors[0];
     const error = new Error(
-      `${errors.length} fichier(s) n'ont pas pu être téléchargés (${path.basename(first.task.path)} : ${first.error.message}). Vérifie ta connexion puis réessaie.`,
+      t('download.failed', { count: errors.length, file: path.basename(first.task.path), error: first.error.message }),
     );
     error.code = 'DOWNLOAD_FAILED';
     throw error;

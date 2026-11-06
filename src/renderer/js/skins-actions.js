@@ -1,4 +1,5 @@
 // Fenêtre « Skin et cape » : charge l'état du compte et applique les changements.
+import { t } from './i18n.js';
 import { refreshAccounts } from './actions.js';
 import { api } from './api.js';
 import { state, toast, toastError, update } from './state.js';
@@ -79,7 +80,7 @@ export function setVariant(modal, variant) {
   if (modal.pick?.kind !== 'library') return;
   api.setSkinVariant(modal.pick.id, variant).then(
     (library) => update(() => { modal.data.library = library; }),
-    (error) => toastError('Modèle non enregistré', error),
+    (error) => toastError(t('skins.modele_non_enregistre'), error),
   );
 }
 
@@ -90,15 +91,15 @@ function addedToLibrary(modal, result, label) {
     modal.variant = variantOf(modal, modal.pick);
     modal.done = false;
   });
-  if (!result.added) toast({ title: 'Déjà dans Mes skins', text: label });
+  if (!result.added) toast({ title: t('skins.deja_dans_mes_skins'), text: label });
 }
 
 export async function importSkin(modal) {
   try {
     const result = await api.importSkin();
-    if (result) addedToLibrary(modal, result, 'Ce fichier est déjà dans ta liste.');
+    if (result) addedToLibrary(modal, result, t('skins.ce_fichier_est_deja_dans'));
   } catch (error) {
-    toastError('Skin non importé', error);
+    toastError(t('skins.skin_non_importe'), error);
   }
 }
 
@@ -109,9 +110,9 @@ export async function copyPlayerSkin(modal, input) {
   try {
     const result = await api.copyPlayerSkin(name);
     input.value = '';
-    addedToLibrary(modal, result, `Le skin de ${result.name} est déjà dans ta liste.`);
+    addedToLibrary(modal, result, t('skins.le_skin_de_est_deja', { name: result.name }));
   } catch (error) {
-    toastError('Skin non copié', error);
+    toastError(t('skins.skin_non_copie'), error);
   } finally {
     update(() => { modal.copying = false; });
   }
@@ -128,7 +129,7 @@ export async function removeLibrarySkin(modal, id) {
       }
     });
   } catch (error) {
-    toastError('Skin non retiré', error);
+    toastError(t('skins.skin_non_retire'), error);
   }
 }
 

@@ -1,4 +1,6 @@
 // Réglages du launcher (thème, Discord, zone de notification) et onglet Java et stockage.
+import { loadCrashes } from './crash-actions.js';
+import { setLanguage, t } from './i18n.js';
 import { api } from './api.js';
 import { formatSize } from './dom.js';
 import { applyAccent } from './theme.js';
@@ -8,6 +10,26 @@ export async function loadLauncherPrefs() {
   const prefs = await api.launcherPrefs();
   applyAccent(prefs.accent);
   update((s) => { s.launcherPrefs = prefs; });
+}
+
+/**
+ * Change la langue sans toucher à l'écran ouvert. Les textes préparés par le processus principal
+ * et gardés en mémoire sont oubliés : ils sont redemandés dans la nouvelle langue.
+ */
+export async function changeLanguage(language) {
+  try {
+    await setLanguage(await api.setLanguage(language));
+    update((s) => {
+      s.launcherPrefs.language = language;
+      s.perf.guides = {};
+      s.perf.previews = {};
+      s.crashes.reports = {};
+    });
+    loadCrashes().catch(() => {});
+    if (state.storage.usage) loadStorage().catch(() => {});
+  } catch (error) {
+    toastError(t('common.reglages_non_enregistres'), error);
+  }
 }
 
 let saveTimer = null;
@@ -23,7 +45,7 @@ export function setLauncherPref(patch) {
       await api.saveLauncherPrefs(state.launcherPrefs);
       if ('discord' in patch || 'discordShowName' in patch) setTimeout(refreshDiscord, 800);
     } catch (error) {
-      toastError('Réglages non enregistrés', error);
+      toastError(t('common.reglages_non_enregistres'), error);
     }
   }, 250);
 }
@@ -81,10 +103,10 @@ export async function removeRuntime(runtime) {
   update((s) => { s.storage.busy = true; });
   try {
     const freed = await api.removeRuntime(runtime.component);
-    toast({ kind: 'success', title: `Java ${runtime.major ?? runtime.component} supprimé`, text: `${formatSize(freed)} libérés. Il sera retéléchargé si une instance en a besoin.` });
+    toast({ kind: 'success', title: t('launcher.java_supprime', { major: runtime.major ?? runtime.component }), text: t('launcher.liberes_il_sera_retelecharge_si', { freed: formatSize(freed) }) });
     update((s) => { s.modal = null; });
   } catch (error) {
-    toastError('Suppression impossible', error);
+    toastError(t('common.suppression_impossible'), error);
   } finally {
     update((s) => { s.storage.busy = false; });
     loadStorage();
@@ -98,11 +120,11 @@ export async function cleanStorage(ids) {
     update((s) => { s.modal = null; });
     toast({
       kind: result.failed ? 'error' : 'success',
-      title: `${formatSize(result.freed)} libérés`,
-      text: result.failed ? `${result.failed} fichier${result.failed > 1 ? 's' : ''} n'ont pas pu être supprimés (utilisés par un autre programme ?).` : 'Tout se retéléchargera si une instance en a besoin.',
+      title: t('launcher.liberes', { freed: formatSize(result.freed) }),
+      text: result.failed ? t('launcher.fichiers_ont_pas_pu_etre', { count: result.failed }) : t('launcher.tout_se_retelechargera_si_une'),
     });
   } catch (error) {
-    toastError('Nettoyage impossible', error);
+    toastError(t('launcher.nettoyage_impossible'), error);
   } finally {
     update((s) => { s.storage.busy = false; });
     loadStorage();

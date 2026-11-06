@@ -1,4 +1,5 @@
 // Onglet Versions : liste officielle Mojang, filtrable, avec panneau de détail.
+import { t } from '../i18n.js';
 import { versionDetails } from '../actions.js';
 import { VERSION_TYPES, formatDate } from '../data.js';
 import { h, icon } from '../dom.js';
@@ -6,7 +7,7 @@ import { state, update } from '../state.js';
 import { openNewInstance } from './chrome.js';
 
 const FILTERS = ['release', 'snapshot', 'beta', 'alpha'];
-const FILTER_LABELS = { release: 'Releases', snapshot: 'Snapshots', beta: 'Bêta', alpha: 'Alpha' };
+const FILTER_LABELS = { get release() { return t('versions.releases'); }, get snapshot() { return t('versions.snapshots'); }, get beta() { return t('common.beta'); }, alpha: 'Alpha' };
 
 function visibleVersions() {
   const { list, filters, query } = state.versions;
@@ -22,17 +23,17 @@ function usedBy(versionId) {
 function table() {
   const rows = visibleVersions();
   let message = null;
-  if (state.versions.loading) message = 'Chargement de la liste Mojang…';
+  if (state.versions.loading) message = t('versions.chargement_de_la_liste_mojang');
   else if (state.versions.error) message = state.versions.error;
-  else if (rows.length === 0) message = 'Aucune version ne correspond.';
+  else if (rows.length === 0) message = t('versions.aucune_version_ne_correspond');
 
   return h(
     'div',
-    { class: 'vtable', role: 'grid', 'aria-label': 'Versions de Minecraft' },
+    { class: 'vtable', role: 'grid', 'aria-label': t('versions.versions_de_minecraft') },
     h(
       'div',
       { class: 'vtable__row vtable__head', role: 'row' },
-      ['Version', 'Type', 'Sortie', 'Installée', 'Instance'].map((label) => h('span', { role: 'columnheader' }, label)),
+      [t('common.version'), t('versions.type'), t('versions.sortie'), t('versions.installee'), t('common.instance')].map((label) => h('span', { role: 'columnheader' }, label)),
     ),
     h(
       'div',
@@ -51,7 +52,7 @@ function table() {
           h('span', { class: 'vtable__id', role: 'gridcell' }, v.id),
           h('span', { role: 'gridcell' }, h('span', { class: `tag tag--${FILTERS.includes(v.type) ? v.type : 'release'}` }, VERSION_TYPES[v.type] ?? v.type)),
           h('span', { class: 'vtable__cell', role: 'gridcell' }, formatDate(v.releaseTime)),
-          h('span', { class: 'vtable__cell vtable__cell--mono', role: 'gridcell' }, v.installed ? 'Oui' : '—'),
+          h('span', { class: 'vtable__cell vtable__cell--mono', role: 'gridcell' }, v.installed ? t('versions.oui') : '—'),
           h('span', { class: 'vtable__cell vtable__cell--strong', role: 'gridcell' }, usedBy(v.id).join(', ') || '—'),
         ),
       ),
@@ -61,14 +62,14 @@ function table() {
 
 function detail() {
   const v = state.versions.list.find((x) => x.id === state.versions.selected);
-  if (!v) return h('aside', { class: 'detail', 'aria-label': 'Détails de la version' }, h('span', { class: 'label' }, 'Aucune version sélectionnée'));
+  if (!v) return h('aside', { class: 'detail', 'aria-label': t('versions.details_de_la_version') }, h('span', { class: 'label' }, t('versions.aucune_version_selectionnee')));
   const details = versionDetails(v.id);
   const errored = state.versionDetails[v.id]?.error;
   const instances = usedBy(v.id);
   return h(
     'aside',
-    { class: 'detail', 'aria-label': 'Détails de la version' },
-    h('span', { class: 'label' }, 'Version sélectionnée'),
+    { class: 'detail', 'aria-label': t('versions.details_de_la_version') },
+    h('span', { class: 'label' }, t('versions.version_selectionnee')),
     h(
       'div',
       { style: 'display:flex;flex-direction:column;gap:10px;align-items:flex-start' },
@@ -78,17 +79,17 @@ function detail() {
     h(
       'dl',
       { class: 'detail__list' },
-      h('dt', null, 'Sortie'),
+      h('dt', null, t('versions.sortie')),
       h('dd', null, formatDate(v.releaseTime)),
-      h('dt', null, 'Java requis'),
-      h('dd', null, details ? `Java ${details.java} (auto)` : errored ? 'inconnu' : '…'),
-      h('dt', null, 'Installée'),
-      h('dd', null, v.installed ? 'Oui' : 'Non'),
-      h('dt', null, 'Instance'),
-      h('dd', null, instances.join(', ') || "Aucune pour l'instant"),
+      h('dt', null, t('versions.java_requis')),
+      h('dd', null, details ? t('versions.java_auto', { java: details.java }) : errored ? t('versions.unknown') : '…'),
+      h('dt', null, t('versions.installee')),
+      h('dd', null, v.installed ? t('versions.oui') : t('versions.non')),
+      h('dt', null, t('common.instance')),
+      h('dd', null, instances.join(', ') || t('versions.aucune_pour_instant')),
     ),
     h('div', { class: 'detail__spacer' }),
-    h('button', { class: 'btn btn--primary btn--lg', onClick: () => openNewInstance(v.id) }, icon('plus'), 'Créer une instance'),
+    h('button', { class: 'btn btn--primary btn--lg', onClick: () => openNewInstance(v.id) }, icon('plus'), t('common.creer_une_instance')),
   );
 }
 
@@ -104,8 +105,8 @@ export function renderVersions() {
       h(
         'div',
         { class: 'page__head' },
-        h('h1', { class: 'page__title' }, 'Versions'),
-        h('span', { class: 'page__meta' }, `${list.length} versions · liste officielle Mojang${offline ? ' · hors connexion (cache)' : ''}`),
+        h('h1', { class: 'page__title' }, t('common.versions')),
+        h('span', { class: 'page__meta' }, t('versions.versions_liste_officielle_mojang', { list: list.length, value: offline ? t('versions.hors_connexion_cache') : '' })),
       ),
       h(
         'div',
@@ -114,18 +115,18 @@ export function renderVersions() {
           'label',
           { class: 'search' },
           icon('search'),
-          h('span', { class: 'visually-hidden' }, 'Rechercher une version'),
+          h('span', { class: 'visually-hidden' }, t('versions.rechercher_une_version')),
           h('input', {
             id: 'versions-search',
             type: 'search',
-            placeholder: 'Rechercher : 26.3, 1.21, snapshot…',
+            placeholder: t('versions.rechercher_26_21_snapshot'),
             value: query,
             onInput: (e) => update((s) => { s.versions.query = e.target.value; }),
           }),
         ),
         h(
           'div',
-          { role: 'group', 'aria-label': 'Filtres', style: 'display:flex;gap:6px' },
+          { role: 'group', 'aria-label': t('versions.filtres'), style: 'display:flex;gap:6px' },
           FILTERS.map((f) =>
             h(
               'button',

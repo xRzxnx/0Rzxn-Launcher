@@ -36,6 +36,7 @@ Les icônes sont générées depuis `src/renderer/assets/logo-mark.svg` par `npm
 - **Modpacks** : installer depuis Modrinth ou importer un `.mrpack` (nouvelle instance), mettre à jour (réglages et mondes conservés), exporter une instance en `.mrpack`.
 - Comptes **Microsoft** et **hors-ligne**. Un nouveau compte hors-ligne demande d'abord un compte Microsoft qui possède le jeu. La connexion Microsoft attend l'accord de Mojang : voir [docs/MICROSOFT.md](docs/MICROSOFT.md).
 - Console en direct (logs XML de Minecraft convertis, jeton masqué), arrêt du jeu, détection des crashs.
+- **Langues** : français, anglais et espagnol, selon la langue de Windows, et changement immédiat dans Paramètres › Launcher.
 - **Confort** : couleur d'accent au choix, statut Discord pendant une partie (désactivé par défaut, voir [docs/DISCORD.md](docs/DISCORD.md)), icône dans la zone de notification, raccourcis clavier (Ctrl+/ pour l'aide), gestion des Java et nettoyage de l'espace disque (Paramètres › Java et stockage).
 
 Testé en vrai : 1.8.9 (Java 8), 1.12.2 (Java 8), 1.21.11 (Java 21) et 26.3 (Java 25).
@@ -53,6 +54,7 @@ src/
 │  ├─ main.js        fenêtre Electron et sécurité
 │  ├─ preload.js     API exposée à l'interface (rien d'autre)
 │  ├─ ipc.js         canaux interface ↔ cœur, gestion de la partie en cours
+│  ├─ i18n/          messages du processus principal (fr, en, es)
 │  ├─ microsoft-config.js  client ID de l'application Azure
 │  ├─ microsoft-login.js   fenêtre de connexion Microsoft
 │  └─ core/          cœur en Node pur (testable sans Electron)

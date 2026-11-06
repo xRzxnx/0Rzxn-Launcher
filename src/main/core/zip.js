@@ -1,6 +1,7 @@
 'use strict';
 
 // ZIP minimal en mémoire : lecture (natives, mods, modpacks) et écriture (export de modpacks).
+const { t } = require('../i18n');
 const zlib = require('node:zlib');
 
 const EOCD = 0x06054b50;
@@ -14,7 +15,7 @@ function listEntries(buffer) {
       break;
     }
   }
-  if (eocd < 0) throw new Error('Archive ZIP invalide');
+  if (eocd < 0) throw new Error(t('zip.archive_zip_invalide'));
 
   const count = buffer.readUInt16LE(eocd + 10);
   let offset = buffer.readUInt32LE(eocd + 16);
@@ -39,7 +40,7 @@ function readEntry(buffer, entry) {
   const data = buffer.subarray(start, start + entry.compressedSize);
   if (entry.method === 0) return data;
   if (entry.method === 8) return zlib.inflateRawSync(data);
-  throw new Error(`Compression ZIP non gérée (${entry.method}) pour ${entry.name}`);
+  throw new Error(t('zip.compression_zip_non_geree_pour', { method: entry.method, name: entry.name }));
 }
 
 /** Contenu d'un fichier de l'archive par son nom, ou null s'il n'existe pas. */

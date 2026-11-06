@@ -1,3 +1,4 @@
+import { num, t } from './i18n.js';
 import { ICONS } from './icons.js';
 
 /**
@@ -59,14 +60,22 @@ export function avatar(variant, size) {
 }
 
 export function formatPlaytime(minutes) {
-  if (!minutes) return 'jamais lancée';
+  if (!minutes) return t('time.never_played');
   const h_ = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return h_ ? `${h_} h ${String(m).padStart(2, '0')} min` : `${m} min`;
+  return h_ ? t('dom.min', { h_, m: String(m).padStart(2, '0') }) : `${m} min`;
+}
+
+/** Durée compacte des tuiles et du bilan : « 25 h 30 », ou « 12 min » sous une heure. */
+export function formatShortTime(minutes) {
+  if (!minutes) return t('dom.min_2');
+  const total = Math.round(minutes);
+  const hours = Math.floor(total / 60);
+  return hours ? `${hours} h ${String(total % 60).padStart(2, '0')}` : `${total} min`;
 }
 
 export function formatGo(value) {
-  return `${String(value).replace('.', ',')} Go`;
+  return `${num(Number(value))} ${t('unit.gb')}`;
 }
 
 export function slugify(name) {
@@ -80,10 +89,10 @@ export function slugify(name) {
   );
 }
 
-/** « 96 Ko », « 412 Mo », « 1,6 Go ». */
+/** « 96 Ko », « 412 Mo », « 1,6 Go » en français. */
 export function formatSize(bytes) {
   if (!Number.isFinite(bytes)) return '—';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  const units = ['unit.b', 'unit.kb', 'unit.mb', 'unit.gb', 'unit.tb'];
   let value = bytes;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
@@ -91,5 +100,5 @@ export function formatSize(bytes) {
     unit++;
   }
   const digits = unit >= 3 || (value < 10 && unit > 0) ? 1 : 0;
-  return `${value.toFixed(digits).replace('.', ',').replace(/,0$/, '')} ${units[unit]}`;
+  return `${num(Number(value.toFixed(digits)), { maximumFractionDigits: digits })} ${t(units[unit])}`;
 }

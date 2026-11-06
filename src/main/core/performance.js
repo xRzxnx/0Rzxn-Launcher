@@ -1,6 +1,7 @@
 'use strict';
 
 // Performances : arguments Java selon la version de Java, mémoire conseillée et Pack Performances (mods Modrinth).
+const { t } = require('../i18n');
 const os = require('node:os');
 const content = require('./content');
 const modrinth = require('./modrinth');
@@ -98,16 +99,16 @@ function ramGuide({ loader = 'vanilla', version = '', mods = 0, shaders = 0, zgc
  * `conflicts` les mods qui font le même travail. `alt` : remplaçant quand le mod n'existe pas pour l'instance.
  */
 const PACK = [
-  { slug: 'sodium', title: 'Sodium', impact: 'fps', what: 'Nouveau moteur de rendu du monde : souvent 2 à 3 fois plus de FPS', modIds: ['sodium'], conflicts: ['embeddium', 'rubidium', 'optifine'], alt: 'embeddium' },
-  { slug: 'embeddium', title: 'Embeddium', impact: 'fps', what: 'La version Forge de Sodium : même principe', modIds: ['embeddium'], conflicts: ['sodium', 'rubidium', 'optifine'], altOnly: true },
-  { slug: 'entityculling', title: 'Entity Culling', impact: 'fps2', what: 'Ne dessine pas les entités et coffres cachés derrière les murs', modIds: ['entityculling'] },
-  { slug: 'moreculling', title: 'More Culling', impact: 'fps2', what: 'Ne dessine pas les faces cachées des feuilles et des blocs', modIds: ['moreculling'], conflicts: ['optifine'] },
-  { slug: 'immediatelyfast', title: 'ImmediatelyFast', impact: 'fps2', what: "Accélère l'interface, les textes, les cartes et les panneaux", modIds: ['immediatelyfast'] },
-  { slug: 'lithium', title: 'Lithium', impact: 'tick', what: 'Accélère la logique du monde en solo (mobs, redstone, chunks)', modIds: ['lithium'], conflicts: ['canary', 'radium'] },
-  { slug: 'ferrite-core', title: 'FerriteCore', impact: 'ram', what: 'Réduit la mémoire utilisée, donc moins de pauses', modIds: ['ferritecore'] },
-  { slug: 'modernfix', title: 'ModernFix', impact: 'start', what: 'Démarrage plus rapide et moins de mémoire', modIds: ['modernfix'] },
-  { slug: 'dynamic-fps', title: 'Dynamic FPS', impact: 'eco', what: "Baisse les FPS quand la fenêtre n'est pas active : PC plus frais", modIds: ['dynamic_fps', 'dynamicfps'] },
-  { slug: 'c2me-fabric', title: 'C2ME (avancé)', impact: 'tick', what: 'Génère les chunks sur plusieurs cœurs. Décoché : quelques conflits connus', modIds: ['c2me'], optional: true },
+  { slug: 'sodium', title: 'Sodium', impact: 'fps', get what() { return t('performance.nouveau_moteur_de_rendu_du'); }, modIds: ['sodium'], conflicts: ['embeddium', 'rubidium', 'optifine'], alt: 'embeddium' },
+  { slug: 'embeddium', title: 'Embeddium', impact: 'fps', get what() { return t('performance.la_version_forge_de_sodium'); }, modIds: ['embeddium'], conflicts: ['sodium', 'rubidium', 'optifine'], altOnly: true },
+  { slug: 'entityculling', title: 'Entity Culling', impact: 'fps2', get what() { return t('performance.ne_dessine_pas_les_entites'); }, modIds: ['entityculling'] },
+  { slug: 'moreculling', title: 'More Culling', impact: 'fps2', get what() { return t('performance.ne_dessine_pas_les_faces'); }, modIds: ['moreculling'], conflicts: ['optifine'] },
+  { slug: 'immediatelyfast', title: 'ImmediatelyFast', impact: 'fps2', get what() { return t('performance.accelere_interface_les_textes_les'); }, modIds: ['immediatelyfast'] },
+  { slug: 'lithium', title: 'Lithium', impact: 'tick', get what() { return t('performance.accelere_la_logique_du_monde'); }, modIds: ['lithium'], conflicts: ['canary', 'radium'] },
+  { slug: 'ferrite-core', title: 'FerriteCore', impact: 'ram', get what() { return t('performance.reduit_la_memoire_utilisee_donc'); }, modIds: ['ferritecore'] },
+  { slug: 'modernfix', title: 'ModernFix', impact: 'start', get what() { return t('performance.demarrage_plus_rapide_et_moins'); }, modIds: ['modernfix'] },
+  { slug: 'dynamic-fps', title: 'Dynamic FPS', impact: 'eco', get what() { return t('performance.baisse_les_fps_quand_la'); }, modIds: ['dynamic_fps', 'dynamicfps'] },
+  { slug: 'c2me-fabric', get title() { return t('performance.c2me_avance'); }, impact: 'tick', get what() { return t('performance.genere_les_chunks_sur_plusieurs'); }, modIds: ['c2me'], optional: true },
 ];
 
 /** Mods de l'instance, identifiés par leur fichier (sans Internet). */
@@ -155,13 +156,13 @@ async function packStatus({ gameDir, instance }) {
     let note = null;
     if (present) {
       state = 'installed';
-      note = present.enabled ? 'Déjà installé' : 'Installé mais désactivé';
+      note = present.enabled ? t('performance.deja_installe') : t('performance.installe_mais_desactive');
     } else if (rival) {
       state = 'conflict';
-      note = `${rival.modId === 'optifine' || rival.file.includes('optifine') ? 'OptiFine' : rival.modId} fait déjà ce travail`;
+      note = t('performance.fait_deja_ce_travail', { value: rival.modId === 'optifine' || rival.file.includes('optifine') ? 'OptiFine' : rival.modId });
     } else if (!found[mod.slug]) {
       state = 'unavailable';
-      note = `Pas de version pour ${LOADER_LABELS[instance.loader]} ${instance.version}`;
+      note = t('performance.pas_de_version_pour', { LOADER_LABELS: LOADER_LABELS[instance.loader], version: instance.version });
     }
     rows.push({ slug: mod.slug, title: mod.title, what: mod.what, impact: mod.impact, state, note, checked: state === 'available' && !mod.optional, version: found[mod.slug]?.number ?? null });
   }

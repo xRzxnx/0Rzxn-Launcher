@@ -1,4 +1,5 @@
 // Recherche globale (Ctrl+K) : champ, groupes de résultats et pied avec les touches.
+import { t } from '../i18n.js';
 import { blockIcon, h, icon } from '../dom.js';
 import { closePalette, paletteGroups, paletteKey, setPaletteActive, setPaletteQuery } from '../palette-actions.js';
 
@@ -33,7 +34,7 @@ export function paletteDialog(modal) {
   const active = Math.min(modal.active, Math.max(0, total - 1));
   const activeId = total ? `palette-opt-${active}` : null;
 
-  const list = h('div', { class: 'palette__list', id: 'palette-list', role: 'listbox', 'aria-label': 'Résultats', 'data-scroll-key': 'palette' });
+  const list = h('div', { class: 'palette__list', id: 'palette-list', role: 'listbox', 'aria-label': t('palette.resultats'), 'data-scroll-key': 'palette' });
   for (const group of groups) {
     const titleId = `palette-group-${group.id}`;
     list.append(
@@ -55,7 +56,7 @@ export function paletteDialog(modal) {
     { class: 'overlay overlay--palette', onClick: (e) => e.target === e.currentTarget && closePalette() },
     h(
       'section',
-      { class: 'palette', 'aria-label': 'Recherche globale' },
+      { class: 'palette', 'aria-label': t('common.recherche_globale') },
       h(
         'div',
         { class: 'palette__field' },
@@ -65,28 +66,28 @@ export function paletteDialog(modal) {
           class: 'palette__input',
           type: 'text',
           role: 'combobox',
-          'aria-label': 'Rechercher une instance, un mod ou une action',
+          'aria-label': t('palette.rechercher_une_instance_un_mod'),
           'aria-expanded': 'true',
           'aria-controls': 'palette-list',
           'aria-autocomplete': 'list',
           'aria-activedescendant': activeId,
           autocomplete: 'off',
           spellcheck: 'false',
-          placeholder: 'Rechercher une instance, un mod, une action…',
+          placeholder: t('palette.rechercher_une_instance_un_mod_2'),
           value: modal.query,
           onInput: (e) => setPaletteQuery(e.target.value),
           onKeydown: paletteKey,
         }),
         kbd('Ctrl K'),
       ),
-      total > 0 ? list : h('p', { class: 'palette__empty', role: 'status' }, `Aucun résultat pour « ${modal.query.trim()} »`),
+      total > 0 ? list : h('p', { class: 'palette__empty', role: 'status' }, t('palette.aucun_resultat_pour', { query: modal.query.trim() })),
       h(
         'div',
         { class: 'palette__foot' },
         h('span', null, kbd('↑'), kbd('↓'), ' naviguer'),
-        h('span', null, kbd('Entrée'), ' ouvrir ou jouer'),
-        h('span', null, kbd('Maj'), kbd('Entrée'), ' sélectionner'),
-        h('span', null, kbd('Échap'), ' fermer'),
+        h('span', null, kbd(t('common.entree')), t('palette.ouvrir_ou_jouer')),
+        h('span', null, kbd(t('common.maj')), kbd(t('common.entree')), t('palette.selectionner')),
+        h('span', null, kbd(t('common.echap')), t('palette.close')),
       ),
     ),
   );

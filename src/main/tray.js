@@ -2,6 +2,7 @@
 
 // Icône dans la zone de notification : clic = afficher ou masquer le launcher,
 // clic droit = partie en cours, instances récentes et Quitter.
+const { t } = require('./i18n');
 const path = require('node:path');
 const { Menu, Tray, dialog, nativeImage } = require('electron');
 
@@ -78,30 +79,30 @@ class LauncherTray {
       this.playing = playing;
     }
     const name = now?.instance?.name ?? 'Minecraft';
-    this.tray.setToolTip(!now ? '0Rzxn_ Launcher' : playing ? `0Rzxn_ Launcher · ${name} en cours` : `0Rzxn_ Launcher · ${name} se prépare`);
+    this.tray.setToolTip(!now ? '0Rzxn_ Launcher' : t(playing ? 'tray.tooltip_playing' : 'tray.tooltip_preparing', { name }));
   }
 
   menu() {
     const now = this.current();
-    const items = [{ label: 'Ouvrir 0Rzxn_ Launcher', click: () => this.showWindow() }, { type: 'separator' }];
+    const items = [{ label: t('tray.ouvrir_0rzxn_launcher'), click: () => this.showWindow() }, { type: 'separator' }];
     if (now) {
       const { run, instance } = now;
       const what = instance ? `${instance.name} · ${instance.version}` : 'Minecraft';
       items.push(
-        { label: 'En cours', enabled: false },
-        { label: run.phase === 'running' ? `${what} · depuis ${minutesSince(run.startedAt)} min` : `${what} · préparation`, enabled: false },
-        { label: run.phase === 'running' ? 'Arrêter le jeu…' : 'Annuler le lancement', click: () => this.confirmStop(run.phase === 'running') },
+        { label: t('tray.en_cours'), enabled: false },
+        { label: run.phase === 'running' ? t('tray.depuis_min', { what, startedAt: minutesSince(run.startedAt) }) : t('tray.preparation', { what }), enabled: false },
+        { label: run.phase === 'running' ? t('tray.arreter_le_jeu') : t('tray.annuler_le_lancement'), click: () => this.confirmStop(run.phase === 'running') },
         { type: 'separator' },
       );
     }
     const recent = this.ctx.instances.list().slice(0, RECENT);
     const canPlay = !now && this.ctx.canPlay();
-    items.push({ label: now ? 'Jouer (une partie est en cours)' : 'Jouer', enabled: false });
-    if (recent.length === 0) items.push({ label: 'Aucune instance', enabled: false });
+    items.push({ label: now ? t('tray.jouer_une_partie_est_en') : t('tray.jouer'), enabled: false });
+    if (recent.length === 0) items.push({ label: t('tray.aucune_instance'), enabled: false });
     for (const instance of recent) {
       items.push({ label: `${instance.name} (${instance.version})`, enabled: canPlay, click: () => this.ctx.onLaunch(instance.id) });
     }
-    items.push({ type: 'separator' }, { label: 'Quitter', click: () => this.ctx.onQuit() });
+    items.push({ type: 'separator' }, { label: t('common.quitter'), click: () => this.ctx.onQuit() });
     return Menu.buildFromTemplate(items);
   }
 
@@ -113,10 +114,10 @@ class LauncherTray {
     const win = this.ctx.getWindow();
     const options = {
       type: 'warning',
-      title: 'Arrêter le jeu',
-      message: 'Arrêter Minecraft maintenant ?',
-      detail: "Le jeu est fermé sans sauvegarder la partie en cours. Préfère « Sauvegarder et quitter » dans le jeu quand c'est possible.",
-      buttons: ['Annuler', 'Arrêter le jeu'],
+      title: t('tray.arreter_le_jeu_2'),
+      message: t('tray.arreter_minecraft_maintenant'),
+      detail: t('tray.le_jeu_est_ferme_sans'),
+      buttons: [t('common.annuler'), t('tray.arreter_le_jeu_2')],
       defaultId: 0,
       cancelId: 0,
       noLink: true,

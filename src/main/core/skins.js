@@ -2,6 +2,7 @@
 
 // Skins et capes : profils publics de Mojang, textures en cache, « Mes skins » sur le disque
 // et envoi au compte Microsoft. Référence : https://minecraft.wiki/w/Mojang_API
+const { formatDate, t } = require('../i18n');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
@@ -38,11 +39,11 @@ function pngSize(buffer) {
 
 /** Vérifie qu'un fichier est un skin que le jeu accepte ; renvoie sa taille. */
 function checkSkin(buffer) {
-  if (buffer.length > MAX_PNG) throw new Error('Ce fichier est trop lourd pour un skin (2 Mo au maximum).');
+  if (buffer.length > MAX_PNG) throw new Error(t('common.ce_fichier_est_trop_lourd'));
   const size = pngSize(buffer);
-  if (!size) throw new Error("Ce fichier n'est pas une image PNG.");
+  if (!size) throw new Error(t('skins.ce_fichier_est_pas_une'));
   if (size.width !== 64 || (size.height !== 64 && size.height !== 32)) {
-    throw new Error(`Un skin fait 64×64 ou 64×32 pixels (celui-ci : ${size.width}×${size.height}).`);
+    throw new Error(t('skins.un_skin_fait_64_64', { width: size.width, height: size.height }));
   }
   return size;
 }
@@ -52,11 +53,11 @@ async function getPublic(url) {
   try {
     res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (error) {
-    throw new Error(`Mojang ne répond pas (${error.cause?.code ?? error.message}).`);
+    throw new Error(t('skins.mojang_ne_repond_pas', { code: error.cause?.code ?? error.message }));
   }
   if (res.status === 404 || res.status === 204) return null;
-  if (res.status === 429) throw new Error('Trop de requêtes vers Mojang : réessaie dans une minute.');
-  if (!res.ok) throw new Error(`Mojang a répondu ${res.status}.`);
+  if (res.status === 429) throw new Error(t('skins.trop_de_requetes_vers_mojang'));
+  if (!res.ok) throw new Error(t('skins.mojang_repondu', { status: res.status }));
   return res.json();
 }
 
@@ -105,7 +106,7 @@ class SkinStore {
   }
 
   skinFile(id) {
-    if (!this.has(id)) throw new Error('Ce skin n’est plus dans ta liste.');
+    if (!this.has(id)) throw new Error(t('skins.ce_skin_est_plus_dans'));
     return path.join(this.dir, `${id}.png`);
   }
 
@@ -125,7 +126,7 @@ class SkinStore {
 
   setVariant(id, variant) {
     const item = this.items.find((i) => i.id === id);
-    if (!item) throw new Error('Ce skin n’est plus dans ta liste.');
+    if (!item) throw new Error(t('skins.ce_skin_est_plus_dans'));
     item.variant = cleanVariant(variant);
     writeJson(this.file, this.items);
   }
@@ -140,7 +141,7 @@ class SkinStore {
   /** Chemin local d'une texture de Mojang, téléchargée à la première demande. */
   texture(rawHash) {
     const hash = String(rawHash ?? '').toLowerCase();
-    if (!HASH.test(hash)) return Promise.reject(new Error('Texture inconnue.'));
+    if (!HASH.test(hash)) return Promise.reject(new Error(t('skins.texture_inconnue')));
     const file = path.join(this.cacheDir, `${hash}.png`);
     if (exists(file)) return Promise.resolve(file);
     if (this.downloads.has(hash)) return this.downloads.get(hash);
@@ -154,11 +155,11 @@ class SkinStore {
     try {
       res = await fetch(`${TEXTURES}/${hash}`, { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(TIMEOUT_MS) });
     } catch (error) {
-      throw new Error(`Texture indisponible (${error.cause?.code ?? error.message}).`);
+      throw new Error(t('skins.texture_indisponible', { code: error.cause?.code ?? error.message }));
     }
-    if (!res.ok) throw new Error(`Texture indisponible (${res.status}).`);
+    if (!res.ok) throw new Error(t('skins.texture_indisponible_2', { status: res.status }));
     const png = Buffer.from(await res.arrayBuffer());
-    if (png.length > MAX_PNG || !pngSize(png)) throw new Error('Texture illisible.');
+    if (png.length > MAX_PNG || !pngSize(png)) throw new Error(t('skins.texture_illisible'));
     this.putTexture(hash, png);
     return file;
   }
@@ -226,7 +227,7 @@ class Wardrobe {
     const kept = libraryId ?? (previous?.hash === hash ? previous?.libraryId : null);
     if (skin && kept) skin.libraryId = kept;
     const capes = (profile.capes ?? [])
-      .map((c) => ({ id: c.id, alias: String(c.alias ?? 'Cape').slice(0, 30), hash: textureHash(c.url), active: c.state === 'ACTIVE' }))
+      .map((c) => ({ id: c.id, alias: String(c.alias ?? t('skins.cape')).slice(0, 30), hash: textureHash(c.url), active: c.state === 'ACTIVE' }))
       .filter((c) => c.id && c.hash);
     const cape = capes.find((c) => c.active);
     this.accounts.setLook(id, { skin, cape: cape ? { hash: cape.hash } : null, capes, checkedAt: Date.now() });
@@ -261,7 +262,7 @@ class Wardrobe {
   /** Appel à Mojang qui demande un jeton. Jamais de nouvel essai après un 429. */
   async guarded(id, action) {
     const until = this.cooldowns.get(id) ?? 0;
-    if (Date.now() < until) throw new microsoft.MicrosoftAuthError('Mojang limite les changements de skin : attends encore un peu.', 'RATE_LIMIT');
+    if (Date.now() < until) throw new microsoft.MicrosoftAuthError(t('skins.mojang_limite_les_changements_de'), 'RATE_LIMIT');
     try {
       return await this.accounts.withToken(id, action);
     } catch (error) {
@@ -276,21 +277,21 @@ class Wardrobe {
     if (!current || current.libraryId) return;
     try {
       const png = await fsp.readFile(await this.store.texture(current.hash));
-      const date = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
-      this.store.add(png, { name: `Ancien skin ${date}`, variant: current.variant });
+      const date = formatDate(new Date(), { day: '2-digit', month: '2-digit' });
+      this.store.add(png, { name: t('skins.ancien_skin', { date }), variant: current.variant });
     } catch {
       // sans la texture, le changement reste possible
     }
   }
 
   requireMicrosoft(id) {
-    if (this.accounts.get(id).type !== 'microsoft') throw new Error('Il faut un compte Microsoft pour changer de skin ou de cape.');
+    if (this.accounts.get(id).type !== 'microsoft') throw new Error(t('skins.il_faut_un_compte_microsoft'));
   }
 
   async sourcePng(source) {
     if (source?.library) return fsp.readFile(this.store.skinFile(String(source.library)));
     if (source?.texture) return fsp.readFile(await this.store.texture(source.texture));
-    throw new Error('Choisis un skin.');
+    throw new Error(t('skins.choisis_un_skin'));
   }
 
   /**
@@ -311,7 +312,7 @@ class Wardrobe {
     }
     if (cape !== undefined) {
       const known = this.accounts.get(id).look?.capes ?? [];
-      if (cape !== null && !known.some((c) => c.id === cape)) throw new Error('Cette cape n’appartient pas à ce compte.');
+      if (cape !== null && !known.some((c) => c.id === cape)) throw new Error(t('skins.cette_cape_appartient_pas_ce'));
       await this.saveProfile(id, await this.guarded(id, (token) => (cape === null ? this.api.hideCape(token) : this.api.showCape(token, cape))));
     }
     return this.snapshot(id);
@@ -328,11 +329,11 @@ class Wardrobe {
   /** Copie le skin public d'un joueur dans « Mes skins ». Rien n'est envoyé. */
   async copyPlayer(rawName) {
     const name = String(rawName ?? '').trim();
-    if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) throw new Error('Ce pseudo n’est pas valide.');
+    if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) throw new Error(t('skins.ce_pseudo_est_pas_valide'));
     const player = await lookupPlayer(name);
-    if (!player) throw new Error(`Aucun joueur ne s'appelle ${name}.`);
+    if (!player) throw new Error(t('skins.aucun_joueur_ne_appelle', { name }));
     const { skin } = await publicLook(player.uuid);
-    if (!skin) throw new Error(`${player.name} n'a pas de skin personnalisé.`);
+    if (!skin) throw new Error(t('skins.pas_de_skin_personnalise', { name: player.name }));
     const png = await fsp.readFile(await this.store.texture(skin.hash));
     return this.store.add(png, { name: player.name, variant: skin.variant });
   }

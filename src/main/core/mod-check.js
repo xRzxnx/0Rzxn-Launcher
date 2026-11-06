@@ -2,6 +2,7 @@
 
 // Diagnostic des mods avant le lancement : lit les métadonnées locales des jars (sans réseau)
 // et repère les dépendances absentes, les conflits déclarés et les doublons.
+const { currentLanguage, t } = require('../i18n');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
@@ -327,8 +328,8 @@ function analyse(mods, instance) {
           problems.push({
             id: `mc:${m.file}`,
             severity: 'blocking',
-            title: 'Version de Minecraft',
-            text: `${label(m)} n'est pas prévu pour Minecraft ${minecraft}.`,
+            title: t('mod_check.version_de_minecraft'),
+            text: t('mod_check.est_pas_prevu_pour_minecraft', { m: label(m), minecraft }),
             action: null,
           });
         }
@@ -340,21 +341,20 @@ function analyse(mods, instance) {
     }
   }
   for (const [id, { mods: needers, disabled }] of missing) {
-    const verb = needers.length > 1 ? 'demandent' : 'demande';
     if (disabled) {
       problems.push({
         id: `dep:${id}`,
         severity: 'blocking',
-        title: 'Dépendance désactivée',
-        text: `${listJoin(needers)} ${verb} ${label(disabled)}. Il est désactivé.`,
-        action: { type: 'enable', label: 'Activer', file: disabled.file },
+        title: t('mod_check.dependance_desactivee'),
+        text: t('mod_check.dep_disabled', { count: needers.length, mods: listJoin(needers), dep: label(disabled) }),
+        action: { type: 'enable', label: t('mod_check.activer'), file: disabled.file },
       });
     } else {
       problems.push({
         id: `dep:${id}`,
         severity: 'blocking',
-        title: 'Dépendance manquante',
-        text: `${listJoin(needers)} ${verb} « ${id} », qui n'est pas installé.`,
+        title: t('mod_check.dependance_manquante'),
+        text: t('mod_check.dep_missing', { count: needers.length, mods: listJoin(needers), id }),
         action: null,
       });
     }
@@ -384,9 +384,9 @@ function analyse(mods, instance) {
     problems.push({
       id: `dup:${id}`,
       severity: 'risk',
-      title: 'Mod en double',
-      text: `${listJoin(group.map((g) => g.file))} contiennent tous le mod « ${id} ». Le plus ancien (${drop.file}) peut être désactivé.`,
-      action: { type: 'disable', label: 'Désactiver', file: drop.file },
+      title: t('mod_check.mod_en_double'),
+      text: t('mod_check.contiennent_tous_le_mod_le', { group: listJoin(group.map((g) => g.file)), id, file: drop.file }),
+      action: { type: 'disable', label: t('mod_check.desactiver'), file: drop.file },
     });
   }
 
@@ -396,19 +396,19 @@ function analyse(mods, instance) {
     for (const b of m.info.breaks) {
       if (IGNORED.has(b.id)) continue;
       const targets = (present.get(b.id) ?? []).filter((t) => t !== m);
-      for (const t of targets) {
-        const version = t.info.mainIds.includes(b.id) ? t.info.version : null;
+      for (const other of targets) {
+        const version = other.info.mainIds.includes(b.id) ? other.info.version : null;
         const hit = b.range === '*' ? true : (b.maven ? matchMavenRange(b.range, version) : matchFabricRange(b.range, version));
         if (hit !== true) continue;
-        const key = [m.file, t.file].sort().join('|');
+        const key = [m.file, other.file].sort().join('|');
         if (seenPairs.has(key)) continue;
         seenPairs.add(key);
         problems.push({
           id: `breaks:${key}`,
           severity: 'risk',
-          title: 'Mods incompatibles',
-          text: `${label(m)} se déclare incompatible avec ${label(t)}.`,
-          action: { type: 'disable', label: 'Désactiver', file: t.file, target: label(t) },
+          title: t('common.mods_incompatibles'),
+          text: t('mod_check.se_declare_incompatible_avec', { m: label(m), value: label(other) }),
+          action: { type: 'disable', label: t('mod_check.desactiver'), file: other.file, target: label(other) },
         });
       }
     }
@@ -422,9 +422,9 @@ function analyse(mods, instance) {
       problems.push({
         id: `optifine:${id}`,
         severity: 'risk',
-        title: 'Mods en double',
-        text: `${name} et OptiFine font le même travail et ne vont pas ensemble.`,
-        action: { type: 'disable', label: 'Désactiver', file: optifine.file, target: 'OptiFine' },
+        title: t('mod_check.mods_en_double'),
+        text: t('mod_check.et_optifine_font_le_meme', { name }),
+        action: { type: 'disable', label: t('mod_check.desactiver'), file: optifine.file, target: 'OptiFine' },
       });
     }
   }
@@ -447,7 +447,7 @@ async function check({ gameDir, instance }) {
     return { count: 0, problems: [] };
   }
   const jars = names.filter((n) => n.replace(DISABLED, '').toLowerCase().endsWith('.jar')).sort();
-  const key = `${dirStat.mtimeMs}|${jars.length}|${loader}|${instance.version}|${jars.join('/')}`;
+  const key = `${currentLanguage()}|${dirStat.mtimeMs}|${jars.length}|${loader}|${instance.version}|${jars.join('/')}`;
   const hit = resultCache.get(dir);
   if (hit?.key === key) return hit.result;
 

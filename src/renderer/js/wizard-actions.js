@@ -1,4 +1,5 @@
 // Assistant de création d'instance : choix du profil, nom et version, récapitulatif, création puis installation des mods.
+import { t } from './i18n.js';
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { forgetPreviews } from './perf-actions.js';
@@ -7,12 +8,12 @@ import { state, toast, toastError, update } from './state.js';
 
 /** Cartes de l'étape 1. `online` : le profil télécharge des mods, il faut une connexion. */
 export const PROFILE_CARDS = [
-  { id: 'survival', title: 'Survie optimisée', text: 'Fabric et Pack Performances, sur la version la plus récente', online: true },
-  { id: 'pvp', title: 'PvP', text: 'Fabric, performances et confort : zoom, ping, infos de faim. Rien qui triche', online: true },
-  { id: 'shaders', title: 'Shaders', text: 'Fabric, Sodium et Iris : prêt à recevoir un shader', online: true },
-  { id: 'creative', title: 'Créatif', text: 'Vanilla, dernière version, rien à configurer', online: false },
-  { id: 'modpack', title: 'Modpack', text: 'Choisir un pack complet sur Modrinth', online: true },
-  { id: 'custom', title: 'Personnalisée', text: 'Le formulaire complet : version, loader, compte', online: false },
+  { id: 'survival', get title() { return t('wizard.survie_optimisee'); }, get text() { return t('wizard.fabric_et_pack_performances_sur'); }, online: true },
+  { id: 'pvp', title: 'PvP', get text() { return t('wizard.fabric_performances_et_confort_zoom'); }, online: true },
+  { id: 'shaders', title: 'Shaders', get text() { return t('wizard.fabric_sodium_et_iris_pret'); }, online: true },
+  { id: 'creative', get title() { return t('wizard.creatif'); }, get text() { return t('wizard.vanilla_derniere_version_rien_configurer'); }, online: false },
+  { id: 'modpack', title: 'Modpack', get text() { return t('wizard.choisir_un_pack_complet_sur'); }, online: true },
+  { id: 'custom', get title() { return t('common.personnalisee'); }, get text() { return t('wizard.le_formulaire_complet_version_loader'); }, online: false },
 ];
 
 export const offline = () => Boolean(state.versions.offline);
@@ -113,7 +114,7 @@ export function goToRecap() {
   const wiz = wizardOf();
   if (!wiz || wiz.plan?.loading || !wiz.plan?.data) return;
   if (!state.modal.draft.name.trim()) {
-    update(() => { wiz.error = 'Donne un nom à ton instance.'; });
+    update(() => { wiz.error = t('common.donne_un_nom_ton_instance'); });
     return;
   }
   update(() => { wiz.step = 3; wiz.error = null; });
@@ -126,7 +127,6 @@ export function backToDetails() {
   });
 }
 
-const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
 /** Crée l'instance, ferme l'assistant, puis installe les mods du profil avec une progression visible. */
 export async function createFromWizard() {
@@ -153,8 +153,8 @@ export async function createFromWizard() {
   if (!hasMods) {
     toast({
       kind: 'success',
-      title: `${instance.name} créée`,
-      text: wiz.plan.data.mods.length ? 'Aucun mod du profil n’existe pour cette version : l’instance est créée sans eux.' : 'Clique sur « Installer » pour la préparer, puis joue.',
+      title: t('common.creee', { name: instance.name }),
+      text: wiz.plan.data.mods.length ? t('wizard.aucun_mod_du_profil_existe') : t('wizard.clique_sur_installer_pour_la'),
     });
     return;
   }
@@ -165,19 +165,19 @@ export async function createFromWizard() {
     const deps = result.installed.length - mods;
     toast({
       kind: result.failed.length ? 'error' : 'success',
-      title: `${instance.name} créée : ${plural(mods, 'mod')} installé${mods > 1 ? 's' : ''}`,
+      title: t('wizard.created_mods', { name: instance.name, count: mods }),
       text:
         [
-          deps > 0 && `${plural(deps, 'dépendance')} ajoutée${deps > 1 ? 's' : ''}.`,
-          result.skipped.length > 0 && `Ignoré, indisponible en ${instance.version} : ${result.skipped.map((m) => m.title).join(', ')}.`,
-          result.failed.length > 0 && `Échec : ${result.failed.map((f) => f.title).join(', ')}.`,
+          deps > 0 && t('wizard.deps_added', { count: deps }),
+          result.skipped.length > 0 && t('wizard.ignore_indisponible_en_2', { version: instance.version, skipped: result.skipped.map((m) => m.title).join(', ') }),
+          result.failed.length > 0 && t('wizard.echec', { failed: result.failed.map((f) => f.title).join(', ') }),
         ]
           .filter(Boolean)
-          .join(' ') || 'Clique sur « Installer » pour préparer le jeu.',
+          .join(' ') || t('wizard.clique_sur_installer_pour_preparer'),
       timeout: 9000,
     });
     refreshInstalled(state.instances.find((i) => i.id === instance.id) ?? instance, 'mods');
   } catch (error) {
-    toastError(`${instance.name} créée, mais les mods n’ont pas été installés`, error);
+    toastError(t('wizard.creee_mais_les_mods_ont', { name: instance.name }), error);
   }
 }

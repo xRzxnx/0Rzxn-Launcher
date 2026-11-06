@@ -1,4 +1,5 @@
 // Rapports de crash : liste de toutes les instances, explication, corrections en un clic, partage sur mclo.gs.
+import { t } from './i18n.js';
 import { api } from './api.js';
 import { verifyInstance } from './actions.js';
 import { refreshInstalled } from './mods-actions.js';
@@ -21,7 +22,7 @@ export async function loadCrashes() {
       s.crashes.list = [];
       s.crashes.loading = false;
     });
-    toastError('Rapports de crash illisibles', error);
+    toastError(t('crash.rapports_de_crash_illisibles'), error);
   }
 }
 
@@ -75,9 +76,9 @@ export async function copyCrash(item) {
   if (!report?.text) return;
   try {
     await navigator.clipboard.writeText(report.text);
-    toast({ kind: 'success', title: 'Rapport copié', text: `${report.text.split('\n').length.toLocaleString('fr-FR')} lignes dans le presse-papiers.`, timeout: 3000 });
+    toast({ kind: 'success', title: t('crash.rapport_copie'), text: t('crash.lines_copied', { count: report.text.split('\n').length }), timeout: 3000 });
   } catch {
-    toast({ kind: 'error', title: 'Copie impossible', text: "Le presse-papiers n'est pas accessible." });
+    toast({ kind: 'error', title: t('common.copie_impossible'), text: t('common.le_presse_papiers_est_pas') });
   }
 }
 
@@ -102,11 +103,11 @@ export async function shareCrash(item) {
 }
 
 export function openCrashFile(item) {
-  api.openCrash(item.instanceId, item.source, item.file).catch((error) => toastError("Impossible d'ouvrir le rapport", error));
+  api.openCrash(item.instanceId, item.source, item.file).catch((error) => toastError(t('crash.impossible_ouvrir_le_rapport'), error));
 }
 
 export function openCrashesFolder(instanceId) {
-  api.openCrashesFolder(instanceId).catch((error) => toastError("Impossible d'ouvrir le dossier", error));
+  api.openCrashesFolder(instanceId).catch((error) => toastError(t('common.impossible_ouvrir_le_dossier'), error));
 }
 
 /** Corrections proposées par l'explication : installer, désactiver, réglages… */
@@ -131,17 +132,17 @@ export async function runFix(item, action) {
       const project = await api.modrinthProject(action.slug);
       const result = await api.installContent(instance.id, 'mods', project.id, null);
       const added = result.installed.map((d) => d.title).join(', ');
-      toast({ kind: 'success', title: added ? `${added} installé` : `${project.title} est déjà installé`, text: 'Relance le jeu pour vérifier.' });
+      toast({ kind: 'success', title: added ? t('crash.installe', { added }) : t('common.est_deja_installe', { title: project.title }), text: t('crash.relance_le_jeu_pour_verifier') });
     } else if (action.type === 'disable') {
       const { items } = await api.content(instance.id, 'mods');
       const mod = items.find((m) => m.enabled && (m.modId === action.modId || m.modId?.replace(/[-_]/g, '') === action.modId.replace(/[-_]/g, '')));
-      if (!mod) throw new Error(`Aucun mod actif ne correspond à « ${action.modId} » dans ${instance.name}.`);
+      if (!mod) throw new Error(t('crash.aucun_mod_actif_ne_correspond', { modId: action.modId, name: instance.name }));
       await api.toggleContent(instance.id, 'mods', mod.file);
-      toast({ kind: 'success', title: `${mod.name} désactivé`, text: 'Tu peux le réactiver dans l’onglet Mods.' });
+      toast({ kind: 'success', title: t('crash.desactive', { name: mod.name }), text: t('crash.tu_peux_le_reactiver_dans') });
     }
     if (state.selectedId === instance.id) refreshInstalled(instance, 'mods');
   } catch (error) {
-    toastError(action.type === 'install' ? 'Installation impossible' : 'Action impossible', error);
+    toastError(action.type === 'install' ? t('common.installation_impossible') : t('common.action_impossible'), error);
   } finally {
     update((s) => { delete s.crashes.shared[busy]; });
   }

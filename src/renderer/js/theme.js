@@ -1,14 +1,15 @@
+import { t } from './i18n.js';
 // Couleur d'accent : le violet d'origine, six autres thèmes ou une couleur perso.
 // Les teintes sont calculées en OKLCH à luminosité imposée, puis vérifiées : le texte blanc
 // sur l'accent et le texte d'accent sur les panneaux gardent un contraste d'au moins 4,5:1.
 export const ACCENTS = [
-  { id: 'violet', label: 'Violet' },
-  { id: 'bleu', label: 'Bleu', hue: 255, chroma: 0.17 },
-  { id: 'cyan', label: 'Cyan', hue: 215, chroma: 0.12 },
-  { id: 'vert', label: 'Vert', hue: 150, chroma: 0.15 },
-  { id: 'ambre', label: 'Ambre', hue: 60, chroma: 0.15 },
-  { id: 'rouge', label: 'Rouge', hue: 25, chroma: 0.19 },
-  { id: 'rose', label: 'Rose', hue: 350, chroma: 0.19 },
+  { id: 'violet', get label() { return t('theme.violet'); } },
+  { id: 'bleu', get label() { return t('theme.bleu'); }, hue: 255, chroma: 0.17 },
+  { id: 'cyan', get label() { return t('theme.cyan'); }, hue: 215, chroma: 0.12 },
+  { id: 'vert', get label() { return t('theme.vert'); }, hue: 150, chroma: 0.15 },
+  { id: 'ambre', get label() { return t('theme.ambre'); }, hue: 60, chroma: 0.15 },
+  { id: 'rouge', get label() { return t('theme.rouge'); }, hue: 25, chroma: 0.19 },
+  { id: 'rose', get label() { return t('theme.rose'); }, hue: 350, chroma: 0.19 },
 ];
 
 // Valeurs de base.css, gardées telles quelles pour le violet.

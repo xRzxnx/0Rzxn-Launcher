@@ -1,6 +1,7 @@
 'use strict';
 
 // Contenu d'une instance : mods, packs de ressources et shaders. Fichiers locaux + Modrinth.
+const { compareText, t } = require('../i18n');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
@@ -19,7 +20,7 @@ const MAX_ICON = 300 * 1024;
 
 function kindInfo(kind) {
   const info = KINDS[kind];
-  if (!info) throw new Error('Type de contenu inconnu.');
+  if (!info) throw new Error(t('content.type_de_contenu_inconnu'));
   return info;
 }
 
@@ -37,9 +38,9 @@ function contentDir(gameDir, kind) {
 
 /** Nom de fichier sûr, présent dans le dossier (pas de « ../ »). */
 function safePath(dir, name) {
-  if (typeof name !== 'string' || !name || path.basename(name) !== name) throw new Error('Nom de fichier invalide.');
+  if (typeof name !== 'string' || !name || path.basename(name) !== name) throw new Error(t('content.nom_de_fichier_invalide'));
   const file = path.join(dir, name);
-  if (!fs.existsSync(file)) throw new Error('Fichier introuvable.');
+  if (!fs.existsSync(file)) throw new Error(t('content.fichier_introuvable'));
   return file;
 }
 
@@ -181,7 +182,7 @@ async function listContent({ gameDir, kind, instance, online = true }) {
     }
   }
 
-  items.sort((a, b) => (a.title ?? a.name).localeCompare(b.title ?? b.name, 'fr', { sensitivity: 'base' }));
+  items.sort((a, b) => compareText(a.title ?? a.name, b.title ?? b.name, { sensitivity: 'base' }));
   return { kind, folder: dir, online: identified, items };
 }
 
@@ -200,7 +201,7 @@ async function install({ gameDir, kind, instance, projectId, versionId = null, t
   const info = kindInfo(kind);
   const dir = contentDir(gameDir, kind);
   const loaders = loadersFor(kind, instance);
-  if (kind === 'mods' && loaders.length === 0) throw new Error('Cette instance est vanilla : ajoute un loader (Modifier…) pour installer des mods.');
+  if (kind === 'mods' && loaders.length === 0) throw new Error(t('content.cette_instance_est_vanilla_ajoute'));
 
   const current = await listContent({ gameDir, kind, instance });
   const done = [];
@@ -221,18 +222,18 @@ async function install({ gameDir, kind, instance, projectId, versionId = null, t
         skipped.push(pid);
         return;
       }
-      throw new Error(`Aucune version compatible avec Minecraft ${instance.version}${loaders[0] && kind === 'mods' ? ` et ${instance.loader}` : ''}.`);
+      throw Object.assign(new Error(t(loaders[0] && kind === 'mods' ? 'content.no_version_loader' : 'content.no_version', { version: instance.version, loader: instance.loader })), { code: 'NO_VERSION' });
     }
     if (existing.some((i) => i.versionId === v.id)) return;
 
     const filename = path.basename(v.file.filename);
-    if (!filename.toLowerCase().endsWith(info.extension)) throw new Error(`Fichier inattendu : ${filename}`);
+    if (!filename.toLowerCase().endsWith(info.extension)) throw new Error(t('content.fichier_inattendu', { filename }));
     await downloadFile({ url: v.file.url, path: path.join(dir, filename), sha1: v.file.sha1, size: v.file.size });
     for (const old of existing) {
       if (old.file !== filename) await trash(path.join(dir, old.file));
     }
     done.push({ projectId: pid, version: v.number, file: filename, dependency });
-    log(`${filename} installé`);
+    log(t('content.installe', { filename }));
 
     if (kind === 'mods') {
       for (const dep of v.dependencies.filter((d) => d.dependency_type === 'required')) {
@@ -253,7 +254,7 @@ async function install({ gameDir, kind, instance, projectId, versionId = null, t
 /** Met à jour les fichiers indiqués (ou tous ceux qui ont une mise à jour). */
 async function update({ gameDir, kind, instance, files = null, trash }) {
   const current = await listContent({ gameDir, kind, instance });
-  if (!current.online) throw new Error('Modrinth est injoignable : mise à jour impossible pour le moment.');
+  if (!current.online) throw new Error(t('content.modrinth_est_injoignable_mise_jour'));
   const targets = current.items.filter((i) => i.update && (!files || files.includes(i.file)));
   const updated = [];
   for (const item of targets) {

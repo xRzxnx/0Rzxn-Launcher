@@ -2,6 +2,7 @@
 
 // Import depuis d'autres launchers : instances rangées dans un dossier avec instance.cfg et mmc-pack.json
 // (copie du dossier du jeu, loader, réglages, temps de jeu). La source est seulement lue, jamais modifiée.
+const { t } = require('../i18n');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
@@ -37,7 +38,7 @@ async function copyTree(src, dest, { skip, onProgress, signal } = {}) {
   let next = 0;
   const worker = async () => {
     while (next < files.length) {
-      if (signal?.aborted) throw new Error('Import annulé.');
+      if (signal?.aborted) throw new Error(t('importer.import_annule'));
       const rel = files[next++];
       const target = path.join(dest, rel);
       await fsp.mkdir(path.dirname(target), { recursive: true });
@@ -102,7 +103,7 @@ function iconOf(key = '') {
 
 /** Libellé de la source affiché dans la fenêtre « Importer » : on décrit le dossier sans nommer le launcher d'origine. */
 function launcherName() {
-  return 'Autre launcher';
+  return t('importer.autre_launcher');
 }
 
 /** Groupe de chaque instance (instgroups.json), par nom de dossier. */
@@ -126,13 +127,13 @@ function readInstance(dir, groups = {}) {
   const loader = loaders[0] ? LOADER_UIDS[loaders[0].uid] : 'vanilla';
   for (const c of components) {
     if (BUILT_IN_UIDS.has(c.uid) || LOADER_UIDS[c.uid]) continue;
-    warnings.push(`Composant non repris : ${c.cachedName || c.uid}`);
+    warnings.push(t('importer.composant_non_repris', { cachedName: c.cachedName || c.uid }));
   }
-  if (cfg.InstanceType && cfg.InstanceType !== 'OneSix') problem = "Ancien format d'instance (Legacy), non pris en charge.";
-  else if (!version) problem = 'Version de Minecraft introuvable dans mmc-pack.json.';
-  else if (loaders.length > 1) problem = 'Plusieurs loaders de mods dans la même instance.';
-  else if (loader !== 'vanilla' && !loaders[0].version) problem = 'Version du loader introuvable.';
-  if (fs.existsSync(path.join(dir, 'jarmods')) && fs.readdirSync(path.join(dir, 'jarmods')).length) warnings.push('Les « jar mods » ne sont pas repris.');
+  if (cfg.InstanceType && cfg.InstanceType !== 'OneSix') problem = t('importer.ancien_format_instance_legacy_non');
+  else if (!version) problem = t('importer.version_de_minecraft_introuvable_dans');
+  else if (loaders.length > 1) problem = t('importer.plusieurs_loaders_de_mods_dans');
+  else if (loader !== 'vanilla' && !loaders[0].version) problem = t('importer.version_du_loader_introuvable');
+  if (fs.existsSync(path.join(dir, 'jarmods')) && fs.readdirSync(path.join(dir, 'jarmods')).length) warnings.push(t('importer.les_jar_mods_ne_sont'));
 
   const gameDir = ['minecraft', '.minecraft'].map((name) => path.join(dir, name)).find((p) => fs.existsSync(p)) ?? null;
   const seconds = Number(cfg.totalTimePlayed);
@@ -224,7 +225,7 @@ function safeRead(dir, groups) {
 }
 
 /** Crée une nouvelle instance à partir d'une instance d'un autre launcher (copie complète de son dossier du jeu). */
-async function importInstance({ instances, dir, defaults, launcher = 'Autre launcher', signal, onProgress }) {
+async function importInstance({ instances, dir, defaults, launcher = t('importer.autre_launcher'), signal, onProgress }) {
   const source = readInstance(dir, readGroups(path.dirname(dir)));
   if (!source.supported) throw new Error(source.problem);
   const loaderVersion = source.loader === 'vanilla' ? null : await resolveLoaderVersion(source.loader, source.version, source.loaderVersion);

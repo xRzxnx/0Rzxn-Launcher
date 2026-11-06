@@ -2,6 +2,7 @@
 
 // Discord Rich Presence : le launcher parle à l'application Discord du PC par son canal local
 // (\\?\pipe\discord-ipc-N sous Windows), sans passer par Internet. Trames : opcode, longueur, JSON.
+const { t } = require('../i18n');
 const net = require('node:net');
 const os = require('node:os');
 const crypto = require('node:crypto');
@@ -81,14 +82,14 @@ class DiscordPresence {
           // canal suivant
         }
       }
-      if (!socket) throw new Error("Discord n'est pas ouvert.");
+      if (!socket) throw new Error(t('discord.discord_est_pas_ouvert'));
       this.socket = socket;
       this.buffer = Buffer.alloc(0);
       socket.on('data', (chunk) => this.receive(chunk));
-      socket.on('close', () => this.reset(new Error('Discord a fermé la connexion.')));
+      socket.on('close', () => this.reset(new Error(t('discord.discord_ferme_la_connexion'))));
       socket.on('error', () => {});
       await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Discord ne répond pas.')), TIMEOUT);
+        const timer = setTimeout(() => reject(new Error(t('discord.discord_ne_repond_pas'))), TIMEOUT);
         this.pending.set('READY', { resolve, reject, timer });
         socket.write(encode(OP.HANDSHAKE, { v: 1, client_id: this.clientId }));
       });
@@ -122,11 +123,11 @@ class DiscordPresence {
     if (!waiter) return;
     this.pending.delete(key);
     clearTimeout(waiter.timer);
-    if (message.evt === 'ERROR') waiter.reject(new Error(message.data?.message ?? 'Erreur de Discord.'));
+    if (message.evt === 'ERROR') waiter.reject(new Error(message.data?.message ?? t('discord.erreur_de_discord')));
     else waiter.resolve(message.data);
   }
 
-  reset(error = new Error('Connexion à Discord perdue.')) {
+  reset(error = new Error(t('discord.connexion_discord_perdue'))) {
     for (const waiter of this.pending.values()) {
       clearTimeout(waiter.timer);
       waiter.reject(error);
@@ -143,7 +144,7 @@ class DiscordPresence {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(nonce);
-        reject(new Error('Discord ne répond pas.'));
+        reject(new Error(t('discord.discord_ne_repond_pas')));
       }, TIMEOUT);
       this.pending.set(nonce, { resolve, reject, timer });
       this.socket.write(encode(OP.FRAME, { cmd, args, nonce }));
@@ -169,7 +170,7 @@ class DiscordPresence {
   /** Efface le statut puis ferme le canal. */
   async close() {
     if (this.socket) await this.setActivity(null).catch(() => {});
-    this.reset(new Error('Connexion fermée.'));
+    this.reset(new Error(t('discord.connexion_fermee')));
   }
 }
 

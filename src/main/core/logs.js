@@ -10,7 +10,7 @@ const EVENT_END = '</log4j:Event>';
 const PLAIN_LINE = /^\[(\d{2}:\d{2}:\d{2})\] \[([^\]]+)\](?: \[([^\]]+)\])?: ?(.*)$/;
 
 function clock(date = new Date()) {
-  return date.toLocaleTimeString('fr-FR', { hour12: false });
+  return date.toTimeString().slice(0, 8);
 }
 
 function attribute(xml, name) {

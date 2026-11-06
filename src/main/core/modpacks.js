@@ -2,6 +2,7 @@
 
 // Modpacks au format Modrinth (.mrpack) : installation, mise à jour et export.
 // Format : https://support.modrinth.com/en/articles/8802351-modrinth-modpack-format-mrpack
+const { t } = require('../i18n');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
@@ -24,7 +25,7 @@ function safeTarget(gameDir, rel) {
   const clean = String(rel ?? '').replace(/\\/g, '/');
   const root = path.resolve(gameDir);
   const target = path.resolve(root, clean);
-  if (!clean || path.isAbsolute(clean) || !target.startsWith(root + path.sep)) throw new Error(`Chemin refusé dans le modpack : ${rel}`);
+  if (!clean || path.isAbsolute(clean) || !target.startsWith(root + path.sep)) throw new Error(t('modpacks.chemin_refuse_dans_le_modpack', { rel }));
   return target;
 }
 
@@ -33,15 +34,15 @@ function readPack(buffer) {
   try {
     entries = zip.listEntries(buffer);
   } catch {
-    throw new Error("Ce fichier n'est pas une archive valide.");
+    throw new Error(t('modpacks.ce_fichier_est_pas_une'));
   }
   const raw = zip.readFile(buffer, 'modrinth.index.json', entries);
-  if (!raw) throw new Error("Ce fichier n'est pas un modpack Modrinth (.mrpack).");
+  if (!raw) throw new Error(t('modpacks.ce_fichier_est_pas_un'));
   const index = JSON.parse(raw.toString('utf8'));
-  if (index.game !== 'minecraft' || !index.dependencies?.minecraft) throw new Error('Modpack invalide : version de Minecraft absente.');
+  if (index.game !== 'minecraft' || !index.dependencies?.minecraft) throw new Error(t('modpacks.modpack_invalide_version_de_minecraft'));
   const keys = Object.keys(index.dependencies).filter((k) => k !== 'minecraft');
   const unknown = keys.filter((k) => !LOADER_KEYS[k]);
-  if (unknown.length) throw new Error(`Loader non pris en charge par le launcher : ${unknown.join(', ')}.`);
+  if (unknown.length) throw new Error(t('modpacks.loader_non_pris_en_charge', { unknown: unknown.join(', ') }));
   const loaderKey = keys[0];
   return {
     entries,
@@ -64,7 +65,7 @@ function fileTasks(gameDir, index) {
           return false;
         }
       });
-      if (!url) throw new Error(`Source de téléchargement non autorisée pour ${f.path}.`);
+      if (!url) throw new Error(t('modpacks.source_de_telechargement_non_autorisee', { path: f.path }));
       return { url, path: safeTarget(gameDir, f.path), sha1: f.hashes?.sha1, size: f.fileSize, rel: f.path.replace(/\\/g, '/') };
     });
 }
@@ -89,7 +90,7 @@ async function applyOverrides(buffer, entries, gameDir, { update = false } = {})
 async function downloadPack(dirs, versionId, signal) {
   const v = await modrinth.version(versionId);
   const file = v.files.find((f) => f.filename.endsWith('.mrpack')) ?? v.file;
-  if (!file?.filename.endsWith('.mrpack')) throw new Error("Cette version n'est pas un modpack Modrinth.");
+  if (!file?.filename.endsWith('.mrpack')) throw new Error(t('modpacks.cette_version_est_pas_un'));
   const target = path.join(dirs.cache, 'modpacks', path.basename(file.filename));
   await downloadFile({ url: file.url, path: target, sha1: file.sha1, size: file.size }, { signal });
   return { buffer: await fsp.readFile(target), version: v };
@@ -104,10 +105,10 @@ async function installPack({ instances, buffer, defaults, source = null, signal,
   let tasks;
   try {
     tasks = fileTasks(gameDir, pack.index);
-    log(`${pack.index.name} ${pack.index.versionId} : ${tasks.length} fichiers, Minecraft ${pack.mc}${loaderVersion ? `, ${pack.loader} ${loaderVersion}` : ''}`);
+    log(t('modpacks.summary', { name: pack.index.name, version: pack.index.versionId, files: tasks.length, mc: `${pack.mc}${loaderVersion ? `, ${pack.loader} ${loaderVersion}` : ''}` }));
     await downloadAll(tasks, { signal, onProgress });
     const overrides = await applyOverrides(buffer, pack.entries, gameDir);
-    log(`${overrides} fichiers de configuration copiés`);
+    log(t('modpacks.fichiers_de_configuration_copies', { overrides }));
   } catch (error) {
     // Instance incomplète : on la retire (elle vient d'être créée, rien d'autre dedans).
     await fsp.rm(instances.dir(instance.id), { recursive: true, force: true }).catch(() => {});

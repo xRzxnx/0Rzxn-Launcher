@@ -2,6 +2,7 @@
 
 // Profils prêts à jouer de l'assistant de création : une seule table (loader, mods Modrinth, mémoire).
 // Aucun mod qui donne un avantage interdit sur les serveurs : seulement du rendu, de l'affichage et du confort.
+const { t } = require('../i18n');
 const content = require('./content');
 const modrinth = require('./modrinth');
 const performance = require('./performance');
@@ -25,7 +26,7 @@ const TITLES = {
  * (on cherche alors une version plus ancienne). `shaders` : ajoute de la mémoire au conseil.
  */
 const PROFILES = {
-  survival: { id: 'survival', title: 'Survie optimisée', loader: 'fabric', mods: PERF_ALL, required: ['sodium'] },
+  survival: { id: 'survival', get title() { return t('profiles.survie_optimisee'); }, loader: 'fabric', mods: PERF_ALL, required: ['sodium'] },
   pvp: {
     id: 'pvp',
     title: 'PvP',
@@ -34,12 +35,12 @@ const PROFILES = {
     required: ['sodium'],
   },
   shaders: { id: 'shaders', title: 'Shaders', loader: 'fabric', mods: ['sodium', 'iris'], required: ['sodium', 'iris'], shaders: true },
-  creative: { id: 'creative', title: 'Créatif', loader: 'vanilla', mods: [], required: [] },
+  creative: { id: 'creative', get title() { return t('profiles.creatif'); }, loader: 'vanilla', mods: [], required: [] },
 };
 
 function profile(id) {
   const p = PROFILES[id];
-  if (!p) throw new Error('Profil inconnu.');
+  if (!p) throw new Error(t('profiles.profil_inconnu'));
   return p;
 }
 
@@ -99,7 +100,7 @@ async function installMods({ profileId, gameDir, instance, trash, onProgress = (
       const result = await content.install({ gameDir, kind: 'mods', instance, projectId: slug, trash });
       installed.push(...result.installed.map((m) => (m.dependency ? m : { ...m, title: titleOf(slug) })));
     } catch (error) {
-      if (/^Aucune version compatible/.test(error.message)) skipped.push({ slug, title: titleOf(slug) });
+      if (error.code === 'NO_VERSION') skipped.push({ slug, title: titleOf(slug) });
       else failed.push({ slug, title: titleOf(slug), message: error.message });
     }
   }

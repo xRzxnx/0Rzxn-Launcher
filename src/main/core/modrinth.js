@@ -1,5 +1,7 @@
 'use strict';
 
+const { t } = require('../i18n');
+
 // Client de l'API Modrinth v2 (sans clé) : https://docs.modrinth.com/api/
 const API = 'https://api.modrinth.com/v2';
 const USER_AGENT = '0Rzxn_Launcher/0.1 (launcher Minecraft personnel)';
@@ -15,11 +17,11 @@ async function call(path, { method = 'GET', body } = {}) {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (error) {
-    throw new Error(`Modrinth ne répond pas (${error.cause?.code ?? error.message}).`);
+    throw new Error(t('modrinth.modrinth_ne_repond_pas', { code: error.cause?.code ?? error.message }));
   }
   if (res.status === 404) return null;
-  if (res.status === 429) throw new Error('Trop de requêtes vers Modrinth : réessaie dans une minute.');
-  if (!res.ok) throw new Error(`Modrinth a répondu ${res.status}.`);
+  if (res.status === 429) throw new Error(t('modrinth.trop_de_requetes_vers_modrinth'));
+  if (!res.ok) throw new Error(t('modrinth.modrinth_repondu', { status: res.status }));
   return res.json();
 }
 
@@ -55,7 +57,7 @@ async function search({ query = '', projectType, gameVersion, loaders = [], sort
 
 async function project(id) {
   const p = await call(`/project/${encodeURIComponent(id)}`);
-  if (!p) throw new Error('Projet introuvable sur Modrinth.');
+  if (!p) throw new Error(t('modrinth.projet_introuvable_sur_modrinth'));
   return {
     id: p.id,
     slug: p.slug,
@@ -101,7 +103,7 @@ async function versions(projectId, { loaders, gameVersion }) {
 
 async function version(versionId) {
   const v = await call(`/version/${encodeURIComponent(versionId)}`);
-  if (!v) throw new Error('Version introuvable sur Modrinth.');
+  if (!v) throw new Error(t('modrinth.version_introuvable_sur_modrinth'));
   return simplifyVersion(v);
 }
 

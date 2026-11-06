@@ -1,6 +1,7 @@
 'use strict';
 
 // Java automatique : runtimes officiels de Mojang (les mêmes que le launcher officiel).
+const { t } = require('../i18n');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const fsp = fs.promises;
@@ -41,16 +42,16 @@ async function ensureRuntime(dirs, component, { signal, onProgress } = {}) {
     entry = (await fetchJson(RUNTIME_INDEX_URL, { signal }))[platformKey()]?.[component]?.[0];
   } catch (error) {
     if (installed) return exe;
-    throw new Error(`Java (${component}) n'est pas encore installé et le téléchargement a échoué (${error.message}).`);
+    throw new Error(t('java.java_est_pas_encore_installe', { component, message: error.message }));
   }
   if (!entry) {
     if (installed) return exe;
-    throw new Error(`Mojang ne fournit pas ${component} pour ce système : choisis un Java personnalisé dans les paramètres.`);
+    throw new Error(t('java.mojang_ne_fournit_pas_pour', { component }));
   }
   if (installed && fs.readFileSync(marker, 'utf8').trim() === entry.manifest.sha1) return exe;
 
   const raw = await fetchBuffer(entry.manifest.url, { signal });
-  if (sha1(raw) !== entry.manifest.sha1) throw new Error('Le manifeste de Java téléchargé est corrompu.');
+  if (sha1(raw) !== entry.manifest.sha1) throw new Error(t('java.le_manifeste_de_java_telecharge'));
   const { files } = JSON.parse(raw.toString('utf8'));
 
   const tasks = [];
@@ -91,12 +92,12 @@ function probeJava(exe) {
     child.stderr.on('data', (d) => { output += d; });
     child.on('error', (error) => {
       clearTimeout(timer);
-      reject(new Error(`Java ne démarre pas (${error.code ?? error.message}) : ${exe}`));
+      reject(new Error(t('java.java_ne_demarre_pas', { code: error.code ?? error.message, exe })));
     });
     child.on('close', () => {
       clearTimeout(timer);
       const match = output.match(/version "(\d+)(?:\.(\d+))?/);
-      if (!match) return reject(new Error(`Version de Java illisible : ${exe}`));
+      if (!match) return reject(new Error(t('java.version_de_java_illisible', { exe })));
       const first = Number(match[1]);
       resolve({ major: first === 1 ? Number(match[2]) : first, description: output.split(/\r?\n/)[0].trim() });
     });

@@ -10,9 +10,13 @@ const listen = (channel) => (callback) => {
   return () => ipcRenderer.removeListener(channel, handler);
 };
 
+const argument = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
+
 contextBridge.exposeInMainWorld('launcher', {
+  language: { lang: argument('ui-language') ?? 'fr', locale: argument('ui-locale') ?? 'fr-FR' },
   info: invoke('app:info'),
   memory: invoke('system:memory'),
+  setLanguage: invoke('launcher:setLanguage'),
   openLauncherFolder: invoke('launcher:openFolder'),
   pickJava: invoke('dialog:pickJava'),
   saveRecapImage: invoke('stats:saveRecapImage'),
