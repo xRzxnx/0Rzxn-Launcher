@@ -1,4 +1,4 @@
-# 0Rzxn_ Launcher 0.2.0
+# 0Rzxn_ Launcher 0.3.0
 
 ## English
 
