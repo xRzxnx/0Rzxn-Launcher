@@ -49,6 +49,7 @@
 **Comfort**
 - Available in **English**, **French** and **Spanish**: follows the Windows language, and changes instantly in Settings › Launcher.
 - Accent color themes, system tray menu, keyboard shortcuts (AZERTY-friendly).
+- Automatic updates: new versions download in the background, never during a game, and install on restart.
 - Java and disk storage management.
 - Skin preview in 3D, saved skins, capes.
 
@@ -86,6 +87,16 @@ npm run dist
 ```
 
 The installer is written to `dist/`. It installs for the current Windows user, without administrator rights. It is not code-signed yet, so Windows SmartScreen may ask for confirmation (**More info → Run anyway**).
+
+### Publish a version
+
+Change the version in `package.json`, commit, push `main`, then run:
+
+```bash
+npm run publier
+```
+
+The script builds the installer and creates the GitHub release that installed launchers read. It needs the GitHub CLI (`gh`) signed in.
 
 ## Where data is stored
 

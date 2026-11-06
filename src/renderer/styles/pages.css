@@ -1911,3 +1911,7 @@ button.spec-tile:hover { background: var(--panel-3); }
 .lang-picker__option:hover { background: var(--panel-2); }
 .lang-picker__option[aria-pressed='true'] { background: var(--accent); color: #fff; }
 .lang-picker--corner { position: absolute; top: 48px; right: 24px; z-index: 3; background: var(--glass-strong); }
+
+.update-progress { display: flex; flex-direction: column; gap: 8px; }
+.update-progress__bar { height: 6px; border-radius: 3px; background: var(--panel-2, rgba(255, 255, 255, 0.14)); overflow: hidden; }
+.update-progress__bar i { display: block; height: 100%; background: var(--accent-3); }

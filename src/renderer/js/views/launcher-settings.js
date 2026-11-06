@@ -7,6 +7,7 @@ import { formatSize, h, icon } from '../dom.js';
 import { cleanStorage, loadStorage, refreshDiscord, removeRuntime, selectedCleanup, setLauncherPref, toggleCleanup } from '../launcher-actions.js';
 import { SHORTCUTS } from '../shortcuts.js';
 import { ACCENTS, accentTokens, applyAccent } from '../theme.js';
+import { checkUpdate, installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
 import { selectedInstance, state, toastError, update } from '../state.js';
 import { close, dialog } from './modals.js';
 import { languageSection } from './language.js';
@@ -129,6 +130,74 @@ function traySection(prefs) {
   );
 }
 
+const RELEASES_URL = 'https://github.com/xRzxnx/0Rzxn-Launcher/releases';
+
+function checkedAgo(time) {
+  if (!time) return '';
+  const minutes = Math.floor((Date.now() - time) / 60000);
+  if (minutes < 1) return t('update.checked_now');
+  if (minutes < 60) return t('update.checked_minutes', { minutes });
+  return t('update.checked_hours', { hours: Math.floor(minutes / 60) });
+}
+
+/** Ce que la section dit de la mise à jour en cours. */
+function updateStatus(u) {
+  const version = t('chrome.version', { appVersion: state.appVersion ?? '' });
+  const line = (text, cls = 'hint') => h('p', { class: cls, role: 'status' }, text);
+  if (!u?.supported) return line(t('update.installed_only', { version }));
+  switch (u.status) {
+    case 'checking':
+      return line(t('update.searching'));
+    case 'current':
+      return line(t('update.up_to_date', { version, checked: checkedAgo(u.checkedAt) }));
+    case 'waiting':
+      return line(updateWaitText(u.version, updateBlocker()));
+    case 'downloading':
+      return h(
+        'div',
+        { class: 'update-progress', role: 'status' },
+        h('p', { class: 'hint' }, u.total ? t('update.downloading_size', { version: u.version, done: formatSize(u.transferred), total: formatSize(u.total) }) : t('update.downloading', { version: u.version })),
+        h('div', { class: 'update-progress__bar' }, h('i', { style: `width:${u.percent}%` })),
+      );
+    case 'ready': {
+      const waiting = updateBlocker();
+      return h(
+        'div',
+        { class: 'toggle-row' },
+        h('span', { role: 'status' }, waiting ? updateWaitText(u.version, waiting) : t('update.ready', { version: u.version })),
+        h('button', { class: 'btn btn--primary', disabled: Boolean(waiting), onClick: installUpdate }, t('update.restart')),
+      );
+    }
+    case 'error':
+      return line(u.error, 'hint hint--error');
+    default:
+      return line(version);
+  }
+}
+
+function updateSection(prefs) {
+  const u = state.launcherUpdate;
+  const busy = u?.status === 'checking' || u?.status === 'downloading';
+  return h(
+    'section',
+    { class: 'settings__section', 'aria-labelledby': 'update-title' },
+    h(
+      'div',
+      { class: 'settings__title-row' },
+      h('h2', { class: 'settings__title', id: 'update-title' }, t('update.title')),
+      h('button', { class: 'btn btn--ghost', disabled: !u?.supported || busy, onClick: checkUpdate }, icon('search'), t('update.check')),
+    ),
+    updateStatus(u),
+    toggleRow('update-label', t('update.auto'), prefs.autoUpdate, () => setLauncherPref({ autoUpdate: !prefs.autoUpdate })),
+    h(
+      'p',
+      { class: 'hint' },
+      t('update.hint'),
+      h('a', { href: RELEASES_URL, target: '_blank', rel: 'noreferrer' }, t('update.whats_new')),
+    ),
+  );
+}
+
 const keys = (list) => h('span', { class: 'keys' }, list.map((k) => h('kbd', { class: 'kbd' }, k)));
 
 function shortcutsSection() {
@@ -153,7 +222,7 @@ export function renderLauncherTab() {
     'div',
     null,
     h('p', { class: 'settings__scope-note' }, icon('settings', 20), t('launcher.reglages_du_launcher_lui_meme')),
-    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), discordSection(prefs), traySection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
+    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
   );
 }
 

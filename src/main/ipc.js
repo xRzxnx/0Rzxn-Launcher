@@ -26,6 +26,7 @@ const storage = require('./core/storage');
 const performance = require('./core/performance');
 const gpu = require('./core/gpu');
 const { readHardware } = require('./core/hardware');
+const { UpdateManager } = require('./core/updates');
 const { findSystemJavas } = require('./core/java');
 const { DiscordPresence, gameActivity } = require('./core/discord');
 const { LauncherTray } = require('./tray');
@@ -34,6 +35,19 @@ const { clientId: MICROSOFT_CLIENT_ID } = require('./microsoft-config');
 const { promptMicrosoftLogin } = require('./microsoft-login');
 
 const LOG_BUFFER = 5000;
+
+/** Journal des mises à jour : un fichier par session, pour comprendre un échec chez un utilisateur. */
+function updateLog(file) {
+  fs.rmSync(file, { force: true });
+  const write = (level) => (message) => {
+    try {
+      fs.appendFileSync(file, `${new Date().toISOString()} ${level} ${message}\n`);
+    } catch {
+      // le journal ne doit jamais gêner la mise à jour
+    }
+  };
+  return { info: write('info'), warn: write('warn'), error: write('error') };
+}
 
 /** Chiffre les jetons Microsoft avec la protection de Windows (DPAPI), liée à ta session Windows. */
 const vault = {
@@ -64,7 +78,7 @@ function createServices() {
 
 // Réglages du launcher lui-même (Paramètres › Launcher).
 // lightMode : le launcher se met en veille pendant une partie ; gpuHighPerformance : accord donné pour la carte dédiée.
-const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false };
+const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true };
 const ACCENTS = new Set(['violet', 'bleu', 'cyan', 'vert', 'ambre', 'rouge', 'rose']);
 const LOADER_NAMES = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
 
@@ -74,7 +88,7 @@ function sanitizeLauncher(input, base = LAUNCHER_DEFAULTS) {
   if (input.language === 'auto' || SUPPORTED.includes(input.language)) s.language = input.language;
   // Couleur d'accent : un thème prédéfini ou une couleur perso « #rrggbb ».
   if (ACCENTS.has(input.accent) || /^#[0-9a-f]{6}$/i.test(input.accent ?? '')) s.accent = input.accent.toLowerCase();
-  for (const key of ['discord', 'discordShowName', 'tray', 'closeToTray', 'lightMode', 'gpuHighPerformance']) if (typeof input[key] === 'boolean') s[key] = input[key];
+  for (const key of ['discord', 'discordShowName', 'tray', 'closeToTray', 'lightMode', 'gpuHighPerformance', 'autoUpdate']) if (typeof input[key] === 'boolean') s[key] = input[key];
   return s;
 }
 
@@ -784,8 +798,26 @@ function registerIpc(getWindow) {
   launches.onChange = () => {
     tray.refresh();
     queueDiscord();
+    updates.gameChanged();
   };
   tray.setEnabled(services.settings.launcher().tray);
+
+  // Mises à jour du launcher : seulement dans la version installée, et jamais pendant une partie.
+  const updates = new UpdateManager({
+    supported: app.isPackaged,
+    loadUpdater: () => require('electron-updater').autoUpdater,
+    isBusy: () => Boolean(launches.session || task),
+    isAutomatic: () => services.settings.launcher().autoUpdate,
+    onState: (status) => {
+      const win = getWindow();
+      if (win && !win.isDestroyed()) win.webContents.send('update:status', status);
+    },
+    log: app.isPackaged ? updateLog(path.join(app.getPath('userData'), 'mises-a-jour.log')) : null,
+  });
+  handle('update:state', () => ({ ...updates.state }));
+  handle('update:check', () => updates.check({ manual: true }));
+  handle('update:install', () => updates.install());
+  updates.start();
 
   handle('launcher:get', () => services.settings.launcher());
   // La langue change sans redémarrer : messages d'erreur, dialogues et zone de notification suivent aussitôt.
@@ -992,6 +1024,7 @@ function registerIpc(getWindow) {
       quitting = true;
       tray.setEnabled(false);
       presence.close();
+      updates.stop();
     },
   };
 }

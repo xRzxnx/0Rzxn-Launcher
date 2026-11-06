@@ -1,7 +1,7 @@
 // Point d'entrée de l'interface : redessine tout à chaque changement d'état,
 // en conservant le focus, la saisie en cours et la position de défilement.
 import { renderModal, renderToasts, renderWelcome } from './views/modals.js';
-import { renderSidebar, renderTabs, renderTopbarRight } from './views/chrome.js';
+import { renderSidebar, renderTabs, renderTitlebarUpdate, renderTopbarRight } from './views/chrome.js';
 import { renderConsole } from './views/console.js';
 import { renderHome } from './views/home.js';
 import { renderSettings } from './views/settings.js';
@@ -101,6 +101,7 @@ function render() {
   renderScene();
   $('tabs').setAttribute('aria-label', t('chrome.tabs_label'));
   $('sidebar').setAttribute('aria-label', t('common.instances'));
+  $('titlebar-update').replaceChildren(...renderTitlebarUpdate());
   $('tabs').replaceChildren(...renderTabs());
   $('topbar-right').replaceChildren(...renderTopbarRight());
   $('sidebar').replaceChildren(...renderSidebar().filter(Boolean));

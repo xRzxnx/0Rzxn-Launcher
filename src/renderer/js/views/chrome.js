@@ -7,6 +7,7 @@ import { pendingModUpdates } from '../mods-actions.js';
 import { LOADER_NAMES, LOADERS } from '../data.js';
 import { blockIcon, h, icon } from '../dom.js';
 import { openWizard } from '../wizard-actions.js';
+import { installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceStatus, state, update } from '../state.js';
 
@@ -33,6 +34,21 @@ export function renderTabs() {
       tab.label,
     ),
   );
+}
+
+/** Bouton de la barre de titre : visible seulement quand une mise à jour est prête. */
+export function renderTitlebarUpdate() {
+  const u = state.launcherUpdate;
+  if (u?.status !== 'ready') return [];
+  const waiting = updateBlocker();
+  return [
+    h(
+      'button',
+      { class: `update-pill${waiting ? ' update-pill--wait' : ''}`, disabled: Boolean(waiting), onClick: installUpdate },
+      icon(waiting ? 'clock' : 'refresh'),
+      waiting ? updateWaitText(u.version, waiting) : t('update.restart_install', { version: u.version }),
+    ),
+  ];
 }
 
 export function renderTopbarRight() {

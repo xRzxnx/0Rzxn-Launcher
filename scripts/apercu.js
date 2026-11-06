@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const pkg = require('../package.json');
-const root = path.join(__dirname, '..', '.apercu');
+const root = process.env.APERCU_DIR ?? path.join(__dirname, '..', '.apercu'); // APERCU_DIR : un second aperçu à part
 const configDir = path.join(root, 'config');
 const instancesDir = path.join(root, '.0rzxn', 'instances');
 const versionsDir = path.join(root, '.0rzxn', 'versions');
@@ -82,4 +82,18 @@ app.setName(pkg.productName);
 app.setVersion(pkg.version);
 app.setPath('appData', root);
 app.setPath('userData', configDir);
+
+// Démonstration des mises à jour, sans réseau : electron scripts/apercu.js --maj=ready
+// (états : current, waiting, downloading, ready, error).
+const demo = process.argv.find((arg) => arg.startsWith('--maj='))?.slice('--maj='.length);
+if (demo) {
+  const { UpdateManager } = require('../src/main/core/updates.js');
+  UpdateManager.prototype.start = function start() {
+    Object.assign(this.state, { supported: true, status: demo, version: '0.2.0', percent: 64, transferred: 78 * 1024 ** 2, total: 122 * 1024 ** 2, checkedAt: Date.now() - 12 * 60000, error: demo === 'error' ? 'GitHub ne répond pas. Vérifie ta connexion et réessaie.' : null });
+  };
+  UpdateManager.prototype.check = async function check() {
+    return { ...this.state };
+  };
+  UpdateManager.prototype.install = () => {};
+}
 require('../src/main/main.js');

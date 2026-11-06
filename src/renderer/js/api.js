@@ -86,6 +86,9 @@ export const api = {
   updateSettings: wrap((patch) => bridge.settings.update(patch)),
   launcherPrefs: wrap(() => bridge.launcher.get()),
   saveLauncherPrefs: wrap((patch) => bridge.launcher.set(patch)),
+  updateState: wrap(() => bridge.update.state()),
+  checkUpdate: wrap(() => bridge.update.check()),
+  installUpdate: wrap(() => bridge.update.install()),
   discordStatus: wrap(() => bridge.launcher.discordStatus()),
   runtimes: wrap(() => bridge.java.runtimes()),
   systemJavas: wrap((refresh) => bridge.java.system(refresh)),
@@ -109,6 +112,7 @@ export const api = {
   launchState: wrap(() => bridge.launch.state()),
   on: {
     status: (cb) => bridge?.launch.onStatus(cb),
+    updateStatus: (cb) => bridge?.update.onStatus(cb),
     progress: (cb) => bridge?.launch.onProgress(cb),
     logs: (cb) => bridge?.launch.onLogs(cb),
     reset: (cb) => bridge?.launch.onReset(cb),
