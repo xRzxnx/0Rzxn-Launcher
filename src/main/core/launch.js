@@ -14,6 +14,7 @@ const install = require('./install');
 const { ensureRuntime, probeJava } = require('./java');
 const { GameLogParser, censor, clock } = require('./logs');
 const { LOADER_NAMES, installLoader } = require('./loaders');
+const titleMenu = require('./title-menu');
 const { getVersionJson } = require('./versions');
 
 const STEPS = ['account', 'components', 'files', 'java', 'loader', 'javaCheck', 'memory', 'natives', 'launch'];
@@ -169,6 +170,10 @@ class LaunchSession extends EventEmitter {
     // 8. Natives et assets anciens
     this.progress(7);
     fs.mkdirSync(this.gameDir, { recursive: true });
+    if (instance.titleMenu) {
+      // Un écran titre raté ne doit jamais empêcher de jouer.
+      await titleMenu.refresh({ gameDir: this.gameDir, instance, player: account.name, keepEdits: true }).catch((error) => this.log(t('launch.menu_titre_erreur', { message: error.message }), 'LAUNCHER/WARN'));
+    }
     const gameAssets = await install.reconstructAssets(assets.index, version.assetIndex.id, dirs, this.gameDir);
     const vars = {
       auth_player_name: account.name,

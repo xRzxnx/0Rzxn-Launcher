@@ -8,6 +8,7 @@ const path = require('node:path');
 const { exists, readJson, writeJson } = require('./store');
 const { isInstalled } = require('./versions');
 const modSets = require('./mod-sets');
+const titleMenu = require('./title-menu');
 
 const DEFAULT_SETTINGS = {
   ram: 4,
@@ -212,6 +213,7 @@ class InstanceStore {
     if (patch.group !== undefined) next.group = cleanGroup(patch.group);
     if (patch.accountId !== undefined) next.accountId = cleanAccount(patch.accountId);
     if (patch.background !== undefined) next.background = this.cleanBackground(id, patch.background);
+    if (patch.titleMenu !== undefined) next.titleMenu = titleMenu.cleanOptions(patch.titleMenu);
     if (patch.settings) next.settings = sanitizeSettings(patch.settings, sanitizeSettings(current.settings));
     writeJson(this.file(id), next);
     if (patch.background !== undefined) this.cleanBackgroundFiles(id);

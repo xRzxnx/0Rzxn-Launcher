@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld('launcher', {
     openFolder: invoke('content:openFolder'),
     check: invoke('modcheck:run'),
   },
+  titleMenu: {
+    status: invoke('titlemenu:status'),
+    apply: invoke('titlemenu:apply'),
+    disable: invoke('titlemenu:disable'),
+  },
   modSets: {
     create: invoke('modsets:create'),
     rename: invoke('modsets:rename'),

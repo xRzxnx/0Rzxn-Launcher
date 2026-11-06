@@ -18,6 +18,7 @@ const content = require('./core/content');
 const modCheck = require('./core/mod-check');
 const modSets = require('./core/mod-sets');
 const modrinth = require('./core/modrinth');
+const titleMenu = require('./core/title-menu');
 const modpacks = require('./core/modpacks');
 const profiles = require('./core/profiles');
 const importer = require('./core/importer');
@@ -438,6 +439,31 @@ function registerIpc(getWindow) {
     const result = await content.install({ ...contentCtx(id, kind), projectId: text(projectId), versionId: text(versionId) || null, trash });
     if (text(kind) === 'mods') await syncSets(id);
     return result;
+  });
+  // ---------- Écran titre du jeu (menu Cristal) ----------
+  const titleStatus = (id) => {
+    const ctx = contentCtx(id, 'mods');
+    const versions = () => modrinth.versions(titleMenu.FANCYMENU, { loaders: content.loadersFor('mods', ctx.instance), gameVersion: ctx.instance.version });
+    return titleMenu.status({ gameDir: ctx.gameDir, instance: ctx.instance, versions });
+  };
+  handle('titlemenu:status', (id) => titleStatus(id));
+  handle('titlemenu:apply', async (id, options) => {
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
+    const ctx = contentCtx(id, 'mods');
+    const before = await titleStatus(id);
+    if (!before.installed) {
+      await content.install({ ...ctx, projectId: titleMenu.FANCYMENU, trash });
+      await syncSets(id);
+    }
+    const instance = instances.update(text(id), { titleMenu: options ?? {} });
+    await titleMenu.refresh({ gameDir: ctx.gameDir, instance });
+    return titleStatus(id);
+  });
+  handle('titlemenu:disable', async (id) => {
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
+    await titleMenu.removeMenu(contentCtx(id, 'mods').gameDir);
+    instances.update(text(id), { titleMenu: null });
+    return titleStatus(id);
   });
   handle('content:update', async (id, kind, files) => {
     notRunning(text(id), t('ipc.mettre_jour_son_contenu'));

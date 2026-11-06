@@ -10,6 +10,7 @@ import { go } from './chrome.js';
 import { renderLauncherTab, renderStorageTab } from './launcher-settings.js';
 import { loadSystemJavas } from '../launcher-actions.js';
 import { performanceSections } from './performance.js';
+import { titleMenuSection } from './title-menu.js';
 
 const AFTER_LAUNCH = [
   { id: 'keep', get label() { return t('settings.rester_ouvert'); } },
@@ -306,6 +307,7 @@ export function renderSettings() {
       memorySection(ctx, scope === 'instance' ? instance : null),
       javaSection(ctx, scope === 'instance' ? instance.version : null),
       ...Object.values(performanceSections(ctx, scope === 'instance' ? instance : null)).filter(Boolean),
+      scope === 'instance' && titleMenuSection(instance),
       windowSection(ctx),
       advancedSection(ctx),
       afterLaunchSection(ctx),
