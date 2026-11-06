@@ -8,6 +8,7 @@
 - **Change it anytime** in Settings › Launcher, or from the Welcome screen. Text changes right away, with no restart, and whatever is open stays open.
 - **Everything is translated:** screens, error messages (Microsoft sign-in included), crash explanations, the pre-launch check, Windows dialogs, the system tray menu and the monthly recap image.
 - **Dates, numbers and sizes** follow your language and region.
+- **A cleaner install.** The installer now also finds older copies of the launcher that Windows does not list, removes them and repairs their shortcuts. Your instances, worlds and settings stay untouched.
 
 Mod descriptions from Modrinth stay in the language of their authors, and the game's own logs and crash reports stay as written by the game. Minecraft's language is set in the game.
 
@@ -19,6 +20,7 @@ Mod descriptions from Modrinth stay in the language of their authors, and the ga
 - **Change de langue quand tu veux** dans Paramètres › Launcher, ou depuis l'écran Bienvenue. Les textes changent tout de suite, sans redémarrer, et ce qui est ouvert le reste.
 - **Tout est traduit :** les écrans, les messages d'erreur (connexion Microsoft comprise), les explications de crash, le diagnostic avant lancement, les dialogues Windows, le menu de la zone de notification et l'image du bilan du mois.
 - **Les dates, les nombres et les tailles** suivent ta langue et ta région.
+- **Une installation plus propre.** L'installateur retrouve aussi les anciennes copies du launcher que Windows ne connaît pas, les retire et répare leurs raccourcis. Tes instances, tes mondes et tes réglages ne sont pas touchés.
 
 Les descriptions de mods de Modrinth restent dans la langue de leurs auteurs, et les logs et rapports de crash du jeu restent tels que le jeu les écrit. La langue de Minecraft se règle dans le jeu.
 
@@ -30,5 +32,6 @@ Les descriptions de mods de Modrinth restent dans la langue de leurs auteurs, et
 - **Cambia de idioma cuando quieras** en Ajustes › Launcher o desde la pantalla de bienvenida. Los textos cambian al instante, sin reiniciar, y lo que tengas abierto sigue abierto.
 - **Todo está traducido:** las pantallas, los mensajes de error (incluido el inicio de sesión de Microsoft), las explicaciones de fallos, la comprobación antes de iniciar, los diálogos de Windows, el menú del área de notificación y la imagen del resumen del mes.
 - **Las fechas, los números y los tamaños** siguen tu idioma y tu región.
+- **Una instalación más limpia.** El instalador ahora también encuentra las copias antiguas del launcher que Windows no conoce, las elimina y repara sus accesos directos. Tus instancias, mundos y ajustes no se tocan.
 
 Las descripciones de mods de Modrinth se quedan en el idioma de sus autores, y los registros e informes de fallos del juego se quedan tal como los escribe el juego. El idioma de Minecraft se ajusta en el juego.
