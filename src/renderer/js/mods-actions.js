@@ -205,6 +205,7 @@ export async function importDropped(instance, files) {
 /** Un mod glissé arrive sans ses dépendances : on les ajoute tout de suite. */
 async function completeDropped(instance) {
   const { problems } = await api.checkMods(instance.id);
+  for (const problem of problems.filter((p) => p.foreign)) toast({ kind: 'error', title: problem.title, text: problem.text, timeout: 9000 });
   if (!problems.some((p) => p.dependency)) return;
   const { unresolved } = await installMissingDeps(instance.id);
   await refreshInstalled(instance, 'mods');

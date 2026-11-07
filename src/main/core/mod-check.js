@@ -11,6 +11,9 @@ const zip = require('./zip');
 const DISABLED = '.disabled';
 const IGNORED = new Set(['java', 'fabricloader', 'fabric-loader', 'quilt_loader', 'quilt-loader', 'forge', 'neoforge', 'minecraft']);
 const MAX_DEPTH = 2;
+const LOADER_NAMES = { fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
+// Formats de mods que chaque loader sait charger.
+const ACCEPTS = { fabric: ['fabric'], quilt: ['quilt', 'fabric'], forge: ['forge'], neoforge: ['neoforge', 'forge'] };
 
 // ---------- Versions et plages ----------
 
@@ -170,7 +173,7 @@ function fabricLikeDeps(source, list) {
 }
 
 function empty() {
-  return { mainIds: [], provided: [], depends: [], breaks: [], name: null, version: null, found: false };
+  return { mainIds: [], provided: [], depends: [], breaks: [], name: null, version: null, found: false, madeFor: null };
 }
 
 function parseFabric(buffer, entries, depth) {
@@ -178,6 +181,7 @@ function parseFabric(buffer, entries, depth) {
   if (!data || typeof data.id !== 'string') return null;
   const info = empty();
   info.found = true;
+  info.madeFor = 'fabric';
   info.mainIds = [data.id];
   info.name = data.name ?? data.id;
   info.version = data.version;
@@ -194,6 +198,7 @@ function parseQuilt(buffer, entries, depth) {
   if (!q || typeof q.id !== 'string') return null;
   const info = empty();
   info.found = true;
+  info.madeFor = 'quilt';
   info.mainIds = [q.id];
   info.name = q.metadata?.name ?? q.id;
   info.version = q.version;
@@ -209,9 +214,11 @@ function parseQuilt(buffer, entries, depth) {
 
 function parseToml(buffer, entries, depth, preferNeo) {
   const names = preferNeo ? ['META-INF/neoforge.mods.toml', 'META-INF/mods.toml'] : ['META-INF/mods.toml', 'META-INF/neoforge.mods.toml'];
-  const toml = names.map((n) => zip.readFile(buffer, n, entries)).find(Boolean)?.toString('utf8');
-  if (!toml) return null;
+  const tomlName = names.find((n) => zip.readFile(buffer, n, entries));
+  if (!tomlName) return null;
+  const toml = zip.readFile(buffer, tomlName, entries).toString('utf8');
   const info = empty();
+  info.madeFor = tomlName.includes('neoforge') ? 'neoforge' : 'forge';
   const sections = tomlSections(toml);
   for (const s of sections) {
     if (s.name === 'mods' && s.values.modId) {
@@ -299,12 +306,16 @@ function listJoin(names) {
 
 function analyse(mods, instance) {
   const problems = [];
-  const active = mods.filter((m) => m.enabled);
+  // Un jar pour un autre loader ne sera jamais chargé : il ne fournit rien et ne réclame rien.
+  const accepted = ACCEPTS[instance.loader];
+  const isForeign = (m) => Boolean(accepted && m.info.madeFor && !accepted.includes(m.info.madeFor));
+  const usable = mods.filter((m) => !isForeign(m));
+  const active = usable.filter((m) => m.enabled);
   const idsOf = (m) => [...m.info.mainIds, ...m.info.provided];
 
   const present = new Map(); // id → mods actifs
   const dormant = new Map(); // id → mods désactivés
-  for (const m of mods) {
+  for (const m of usable) {
     const target = m.enabled ? present : dormant;
     const ids = new Set(idsOf(m));
     if (m.info.optifine) ids.add('optifine');
@@ -314,6 +325,18 @@ function analyse(mods, instance) {
     }
   }
   const label = (m) => m.info.name || m.file.replace(DISABLED, '').replace(/\.jar$/i, '');
+
+  for (const m of mods) {
+    if (!m.enabled || !isForeign(m)) continue;
+    problems.push({
+      id: `loader:${m.file}`,
+      severity: 'blocking',
+      title: t('mod_check.autre_loader'),
+      text: t('mod_check.fait_pour_autre_loader', { m: label(m), madeFor: LOADER_NAMES[m.info.madeFor], loader: LOADER_NAMES[instance.loader] }),
+      action: { type: 'disable', label: t('mod_check.desactiver'), file: m.file },
+      foreign: true,
+    });
+  }
 
   // Dépendances obligatoires
   const missing = new Map(); // id → { mods, disabled }
