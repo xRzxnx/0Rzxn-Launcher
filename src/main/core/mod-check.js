@@ -317,6 +317,7 @@ function analyse(mods, instance) {
 
   // Dépendances obligatoires
   const missing = new Map(); // id → { mods, disabled }
+  const outdated = new Map(); // id → { mods, provider }
   const minecraft = instance.version;
   for (const m of active) {
     const own = new Set(idsOf(m));
@@ -335,7 +336,17 @@ function analyse(mods, instance) {
         }
         continue;
       }
-      if (IGNORED.has(dep.id) || present.has(dep.id)) continue;
+      if (IGNORED.has(dep.id)) continue;
+      if (present.has(dep.id)) {
+        // Seule la version du mod lui-même est connue, pas celle d'un jar imbriqué.
+        const provider = present.get(dep.id).find((p) => p.info.mainIds.includes(dep.id));
+        if (provider && dep.range !== '*' && dep.range != null) {
+          const ok = dep.maven ? matchMavenRange(dep.range, provider.info.version) : matchFabricRange(dep.range, provider.info.version);
+          if (ok === false && !outdated.has(dep.id)) outdated.set(dep.id, { mods: [label(m)], provider });
+          else if (ok === false && !outdated.get(dep.id).mods.includes(label(m))) outdated.get(dep.id).mods.push(label(m));
+        }
+        continue;
+      }
       if (!missing.has(dep.id)) missing.set(dep.id, { mods: [], disabled: dormant.get(dep.id)?.[0] ?? null });
       missing.get(dep.id).mods.push(label(m));
     }
@@ -356,8 +367,19 @@ function analyse(mods, instance) {
         title: t('mod_check.dependance_manquante'),
         text: t('mod_check.dep_missing', { count: needers.length, mods: listJoin(needers), id }),
         action: null,
+        dependency: { id },
       });
     }
+  }
+  for (const [id, { mods: needers, provider }] of outdated) {
+    problems.push({
+      id: `dep-old:${id}`,
+      severity: 'blocking',
+      title: t('mod_check.dependance_trop_ancienne'),
+      text: t('mod_check.dep_outdated', { count: needers.length, mods: listJoin(needers), dep: label(provider), version: provider.info.version }),
+      action: null,
+      dependency: { id, outdated: provider.file },
+    });
   }
 
   // Doublons : même identifiant principal dans plusieurs jars actifs
@@ -467,4 +489,10 @@ async function check({ gameDir, instance }) {
   return result;
 }
 
-module.exports = { check, matchFabricRange, matchMavenRange };
+/** Identifiants fournis par un jar, ceux de ses jars imbriqués compris. */
+function jarIds(buffer, loader) {
+  const info = parseJar(buffer, loader);
+  return { ids: [...new Set([...info.mainIds, ...info.provided])] };
+}
+
+module.exports = { check, jarIds, matchFabricRange, matchMavenRange };

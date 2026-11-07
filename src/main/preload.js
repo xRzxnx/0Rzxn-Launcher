@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('launcher', {
     import: invoke('content:import'),
     openFolder: invoke('content:openFolder'),
     check: invoke('modcheck:run'),
+    resolveDeps: invoke('modcheck:resolve'),
   },
   titleMenu: {
     status: invoke('titlemenu:status'),

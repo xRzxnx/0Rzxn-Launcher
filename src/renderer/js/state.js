@@ -143,6 +143,7 @@ export function toast({ kind = 'info', title, text, actions = [], timeout = 6000
     if (s.toasts.length > 4) s.toasts.shift();
   });
   if (timeout) setTimeout(() => dismissToast(id), timeout);
+  return id;
 }
 
 export function dismissToast(id) {

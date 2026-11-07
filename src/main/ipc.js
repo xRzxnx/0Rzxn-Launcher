@@ -16,6 +16,7 @@ const versions = require('./core/versions');
 const { availableLoaders } = require('./core/loaders');
 const content = require('./core/content');
 const modCheck = require('./core/mod-check');
+const modDeps = require('./core/mod-deps');
 const modSets = require('./core/mod-sets');
 const modrinth = require('./core/modrinth');
 const titleMenu = require('./core/title-menu');
@@ -428,6 +429,17 @@ function registerIpc(getWindow) {
     const ctx = contentCtx(id, 'mods');
     return modCheck.check({ gameDir: ctx.gameDir, instance: ctx.instance });
   });
+  // Installe ce que les mods de l'instance réclament, d'où qu'ils viennent.
+  const resolveDeps = async (id) => {
+    const ctx = contentCtx(id, 'mods');
+    const result = await modDeps.resolve({ gameDir: ctx.gameDir, instance: ctx.instance, trash });
+    if (result.installed.length) await syncSets(id);
+    return result;
+  };
+  handle('modcheck:resolve', (id) => {
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
+    return resolveDeps(id);
+  });
   handle('content:delete', async (id, kind, file) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
     const ctx = contentCtx(id, kind);
@@ -437,8 +449,14 @@ function registerIpc(getWindow) {
   handle('content:install', async (id, kind, projectId, versionId) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
     const result = await content.install({ ...contentCtx(id, kind), projectId: text(projectId), versionId: text(versionId) || null, trash });
-    if (text(kind) === 'mods') await syncSets(id);
-    return result;
+    if (text(kind) !== 'mods') return result;
+    await syncSets(id);
+    // Le jar peut réclamer plus que ce que sa page Modrinth annonce.
+    const extra = await resolveDeps(id).catch(() => null);
+    return {
+      installed: [...result.installed, ...(extra?.installed ?? [])],
+      missingDependencies: Math.max(result.missingDependencies, extra?.unresolved.length ?? 0),
+    };
   });
   // ---------- Écran titre du jeu (menu Cristal) ----------
   const titleStatus = (id) => {

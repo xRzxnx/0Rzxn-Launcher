@@ -1,6 +1,6 @@
 // Actions de l'onglet Mods : contenu installé, recherche Modrinth, installation, mises à jour.
 import { t } from './i18n.js';
-import { refreshInstances } from './actions.js';
+import { installMissingDeps, refreshInstances } from './actions.js';
 import { api } from './api.js';
 import { forgetRamGuide, selectedInstance, state, toast, toastError, update } from './state.js';
 
@@ -196,9 +196,19 @@ export async function importDropped(instance, files) {
     await refreshInstalled(instance, kind);
     if (copied.length) toast({ kind: 'success', title: t('mods.fichiers_ajoutes', { count: copied.length }), text: copied.join(', ') });
     else toast({ kind: 'error', title: t('mods.rien_ajouter'), text: t({ mods: 'mods.drop_add_mod', resourcepacks: 'mods.drop_add_pack', shaders: 'mods.drop_add_shader' }[kind]) });
+    if (kind === 'mods' && copied.length) await completeDropped(instance);
   } catch (error) {
     toastError(t('mods.ajout_impossible'), error);
   }
+}
+
+/** Un mod glissé arrive sans ses dépendances : on les ajoute tout de suite. */
+async function completeDropped(instance) {
+  const { problems } = await api.checkMods(instance.id);
+  if (!problems.some((p) => p.dependency)) return;
+  const { unresolved } = await installMissingDeps(instance.id);
+  await refreshInstalled(instance, 'mods');
+  if (unresolved.length) toast({ kind: 'error', title: t('mods.dependance_introuvable'), text: t('mods.deps_missing', { count: unresolved.length }) });
 }
 
 export function openContentFolder(instance) {

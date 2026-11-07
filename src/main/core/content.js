@@ -214,7 +214,10 @@ async function install({ gameDir, kind, instance, projectId, versionId = null, t
     visited.add(pid);
 
     const existing = current.items.filter((i) => i.projectId === pid);
-    if (dependency && existing.length) return; // dépendance déjà présente
+    if (dependency && existing.length) { // dépendance déjà présente, éventuellement à réactiver
+      if (!existing.some((i) => i.enabled)) await toggle({ gameDir, kind, file: existing[0].file });
+      return;
+    }
 
     const v = vid ? await modrinth.version(vid) : modrinth.pickVersion(await modrinth.versions(pid, { loaders, gameVersion: instance.version }));
     if (!v?.file) {
@@ -224,20 +227,21 @@ async function install({ gameDir, kind, instance, projectId, versionId = null, t
       }
       throw Object.assign(new Error(t(loaders[0] && kind === 'mods' ? 'content.no_version_loader' : 'content.no_version', { version: instance.version, loader: instance.loader })), { code: 'NO_VERSION' });
     }
-    if (existing.some((i) => i.versionId === v.id)) return;
-
-    const filename = path.basename(v.file.filename);
-    if (!filename.toLowerCase().endsWith(info.extension)) throw new Error(t('content.fichier_inattendu', { filename }));
-    await downloadFile({ url: v.file.url, path: path.join(dir, filename), sha1: v.file.sha1, size: v.file.size });
-    for (const old of existing) {
-      if (old.file !== filename) await trash(path.join(dir, old.file));
+    if (!existing.some((i) => i.versionId === v.id)) {
+      const filename = path.basename(v.file.filename);
+      if (!filename.toLowerCase().endsWith(info.extension)) throw new Error(t('content.fichier_inattendu', { filename }));
+      await downloadFile({ url: v.file.url, path: path.join(dir, filename), sha1: v.file.sha1, size: v.file.size });
+      for (const old of existing) {
+        if (old.file !== filename) await trash(path.join(dir, old.file));
+      }
+      done.push({ projectId: pid, version: v.number, file: filename, dependency });
+      log(t('content.installe', { filename }));
     }
-    done.push({ projectId: pid, version: v.number, file: filename, dependency });
-    log(t('content.installe', { filename }));
 
     if (kind === 'mods') {
       for (const dep of v.dependencies.filter((d) => d.dependency_type === 'required')) {
-        await installProject(dep.project_id, dep.version_id, true);
+        if (dep.project_id || dep.version_id) await installProject(dep.project_id, dep.version_id, true);
+        else skipped.push(dep.file_name ?? pid); // fichier hors de Modrinth
       }
     }
   }

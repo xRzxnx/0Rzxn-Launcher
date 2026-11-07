@@ -4,7 +4,7 @@ import { api } from './api.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
 import { loadUpdate } from './update-actions.js';
-import { activeAccount, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
+import { activeAccount, dismissToast, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
 
 export async function refreshInstances() {
   const instances = await api.instances();
@@ -278,12 +278,33 @@ export function setActiveAccount(id) {
 
 let checkingMods = false;
 
+/** Installe les dépendances réclamées par les mods de l'instance et renvoie le diagnostic à jour. */
+export async function installMissingDeps(instanceId) {
+  const progress = toast({ title: t('actions.installation_des_dependances'), timeout: 0 });
+  try {
+    const result = await api.resolveModDeps(instanceId);
+    if (result.installed.length) {
+      toast({ kind: 'success', title: t('actions.deps_added', { count: result.installed.length }), text: result.installed.map((d) => d.title).join(', ') });
+    }
+    return result;
+  } finally {
+    dismissToast(progress);
+  }
+}
+
 export async function requestLaunch(options = {}) {
   const instance = selectedInstance();
   if (!instance || !activeAccount() || state.run || checkingMods) return;
   checkingMods = true;
   try {
-    const { problems } = await api.checkMods(instance.id);
+    let { problems } = await api.checkMods(instance.id);
+    if (problems.some((p) => p.dependency)) {
+      try {
+        ({ problems } = await installMissingDeps(instance.id));
+      } catch (error) {
+        toastError(t('common.installation_impossible'), error);
+      }
+    }
     if (problems.length) {
       update((s) => { s.modal = { type: 'mod-check', instanceId: instance.id, options, problems }; });
       return;

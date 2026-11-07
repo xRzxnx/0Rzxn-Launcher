@@ -26,6 +26,8 @@ export default {
   'actions.le_lancement_echoue': "El lanzamiento falló",
   'actions.minecraft_est_deja_installe_tu': "Minecraft ya está instalado: puedes jugar ahora mismo.",
   'actions.minecraft_installe': "Minecraft {version} instalado.",
+  'actions.deps_added': {"one":"Dependencia añadida","other":"{count} dependencias añadidas"},
+  'actions.installation_des_dependances': "Instalando dependencias…",
   'actions.mods_corriges': "Mods corregidos",
   'actions.plus_aucun_probleme_detecte': "Ya no se detecta ningún problema.",
   'actions.raccourci_cree': "Acceso directo creado",

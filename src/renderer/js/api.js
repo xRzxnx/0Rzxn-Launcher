@@ -39,6 +39,7 @@ export const api = {
   filePath: (file) => bridge.filePath(file),
   content: wrap((id, kind) => bridge.content.list(id, kind)),
   checkMods: wrap((id) => bridge.content.check(id)),
+  resolveModDeps: wrap((id) => bridge.content.resolveDeps(id)),
   createModSet: wrap((id, name) => bridge.modSets.create(id, name)),
   renameModSet: wrap((id, setId, name) => bridge.modSets.rename(id, setId, name)),
   deleteModSet: wrap((id, setId) => bridge.modSets.remove(id, setId)),

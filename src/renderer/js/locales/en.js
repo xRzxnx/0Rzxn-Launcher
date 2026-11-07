@@ -26,6 +26,8 @@ export default {
   'actions.le_lancement_echoue': "The launch failed",
   'actions.minecraft_est_deja_installe_tu': "Minecraft is already installed: you can play right away.",
   'actions.minecraft_installe': "Minecraft {version} installed.",
+  'actions.deps_added': {"one":"Dependency added","other":"{count} dependencies added"},
+  'actions.installation_des_dependances': "Installing dependencies…",
   'actions.mods_corriges': "Mods fixed",
   'actions.plus_aucun_probleme_detecte': "No more problems detected.",
   'actions.raccourci_cree': "Shortcut created",
