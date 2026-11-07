@@ -74,6 +74,23 @@ function createWindow() {
 
 let ipc = null;
 
+const NETTOYAGE_DELAI = 5 * 1000;
+
+/** Après une installation manuelle : attend que la fenêtre soit ouverte pour ne pas ralentir le démarrage. */
+function planifierNettoyage() {
+  if (!app.isPackaged || process.platform !== 'win32') return;
+  setTimeout(() => {
+    require('./core/anciennes-versions').apresInstallation({
+      donnees: app.getPath('userData'),
+      executable: process.execPath,
+      produit: app.getName(),
+      version: app.getVersion(),
+      bureau: app.getPath('desktop'),
+      shell,
+    });
+  }, NETTOYAGE_DELAI);
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -90,6 +107,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     ipc = registerIpc(() => mainWindow);
     createWindow();
+    planifierNettoyage();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
