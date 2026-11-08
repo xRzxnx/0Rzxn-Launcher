@@ -1,7 +1,7 @@
 {
   "name": "0rzxn-launcher",
   "productName": "0Rzxn_ Launcher",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "A modern launcher for Minecraft: Java Edition (not an official Minecraft product)",
   "main": "src/main/main.js",
   "private": true,
