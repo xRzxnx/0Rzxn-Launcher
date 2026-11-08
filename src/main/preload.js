@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('launcher', {
     status: invoke('titlemenu:status'),
     apply: invoke('titlemenu:apply'),
     disable: invoke('titlemenu:disable'),
+    auto: invoke('titlemenu:auto'),
   },
   modSets: {
     create: invoke('modsets:create'),

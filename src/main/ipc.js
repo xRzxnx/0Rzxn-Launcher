@@ -465,17 +465,34 @@ function registerIpc(getWindow) {
     return titleMenu.status({ gameDir: ctx.gameDir, instance: ctx.instance, versions });
   };
   handle('titlemenu:status', (id) => titleStatus(id));
-  handle('titlemenu:apply', async (id, options) => {
-    notRunning(text(id), t('ipc.modifier_son_contenu'));
+  const applyTitleMenu = async (id, options, before) => {
     const ctx = contentCtx(id, 'mods');
-    const before = await titleStatus(id);
     if (!before.installed) {
       await content.install({ ...ctx, projectId: titleMenu.FANCYMENU, trash });
       await syncSets(id);
     }
     const instance = instances.update(text(id), { titleMenu: options ?? {} });
     await titleMenu.refresh({ gameDir: ctx.gameDir, instance });
+  };
+  handle('titlemenu:apply', async (id, options) => {
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
+    await applyTitleMenu(id, options, await titleStatus(id));
     return titleStatus(id);
+  });
+  // Avant chaque lancement : une instance moddée jamais réglée reçoit le menu Cristal.
+  // Version sans FancyMenu : retenue jusqu'à la fermeture du launcher, pour ne pas redemander à chaque partie.
+  const titleUnavailable = new Map();
+  handle('titlemenu:auto', async (id, options) => {
+    notRunning(text(id), t('ipc.modifier_son_contenu'));
+    const { instance } = contentCtx(id, 'mods');
+    const key = `${instance.version}/${instance.loader}`;
+    if (!titleMenu.wantsAuto(instance) || titleUnavailable.get(instance.id) === key) return { added: false };
+    const before = await titleStatus(id);
+    if (before.available === false) titleUnavailable.set(instance.id, key);
+    // Mod connu pour planter avec FancyMenu, ou Modrinth injoignable : on réessaiera au prochain lancement.
+    if (!before.available || before.conflicts.length) return { added: false };
+    await applyTitleMenu(id, options ?? {}, before);
+    return { added: true, installed: !before.installed };
   });
   handle('titlemenu:disable', async (id) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));

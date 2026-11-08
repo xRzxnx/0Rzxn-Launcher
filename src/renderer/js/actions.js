@@ -4,6 +4,7 @@ import { api } from './api.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
 import { loadUpdate } from './update-actions.js';
+import { autoTitleMenu } from './title-menu-actions.js';
 import { activeAccount, dismissToast, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
 
 export async function refreshInstances() {
@@ -297,6 +298,8 @@ export async function requestLaunch(options = {}) {
   if (!instance || !activeAccount() || state.run || checkingMods) return;
   checkingMods = true;
   try {
+    // Avant le diagnostic, qui voit ainsi FancyMenu et les mods qu'il demande.
+    if (await autoTitleMenu(instance)) await refreshInstances();
     let { problems } = await api.checkMods(instance.id);
     if (problems.some((p) => p.dependency)) {
       try {

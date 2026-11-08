@@ -1,7 +1,7 @@
 // Menu Cristal : état affiché dans les paramètres de l'instance et demandes au processus principal.
 import { t } from './i18n.js';
 import { api } from './api.js';
-import { state, toast, toastError, update } from './state.js';
+import { dismissToast, state, toast, toastError, update } from './state.js';
 
 const pending = new Set();
 
@@ -51,11 +51,36 @@ export async function enableTitleMenu(id) {
   }
 }
 
+/**
+ * Avant un lancement : une instance moddée jamais réglée reçoit le menu Cristal, avec le style
+ * choisi dans ses paramètres s'il y en a un. Ne doit jamais empêcher de jouer.
+ */
+export async function autoTitleMenu(instance) {
+  if (instance.titleMenu !== undefined || !instance.loader || instance.loader === 'vanilla') return false;
+  const menu = state.titleMenu?.[instance.id];
+  // Le message n'apparaît que si l'ajout dure (téléchargement depuis Modrinth).
+  let progress = null;
+  const timer = setTimeout(() => { progress = toast({ title: t('titlemenu.ajout'), timeout: 0 }); }, 600);
+  try {
+    const result = await api.titleMenuAuto(instance.id, menu ? { style: menu.style, card: menu.card } : {});
+    if (!result.added) return false;
+    store(instance.id, await api.titleMenuStatus(instance.id));
+    toast({ kind: 'success', title: t('titlemenu.ajoute'), text: t('titlemenu.ajoute_texte') });
+    return true;
+  } catch {
+    return false; // on réessaiera au prochain lancement
+  } finally {
+    clearTimeout(timer);
+    if (progress) dismissToast(progress);
+  }
+}
+
 export async function disableTitleMenu(id) {
+  const wasInstalled = state.titleMenu[id]?.installed;
   store(id, { busy: true });
   try {
     store(id, { ...(await api.titleMenuDisable(id)), busy: false });
-    toast({ kind: 'success', title: t('titlemenu.retire'), text: t('titlemenu.retire_texte') });
+    toast({ kind: 'success', title: t('titlemenu.retire'), text: t(wasInstalled ? 'titlemenu.retire_texte' : 'titlemenu.garde_texte') });
   } catch (error) {
     store(id, { busy: false });
     toastError(t('titlemenu.erreur'), error);

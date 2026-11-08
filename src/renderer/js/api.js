@@ -46,6 +46,7 @@ export const api = {
   titleMenuStatus: wrap((id) => bridge.titleMenu.status(id)),
   titleMenuApply: wrap((id, options) => bridge.titleMenu.apply(id, options)),
   titleMenuDisable: wrap((id) => bridge.titleMenu.disable(id)),
+  titleMenuAuto: wrap((id, options) => bridge.titleMenu.auto(id, options)),
   applyModSet: wrap((id, setId) => bridge.modSets.apply(id, setId)),
   toggleContent: wrap((id, kind, file) => bridge.content.toggle(id, kind, file)),
   deleteContent: wrap((id, kind, file) => bridge.content.remove(id, kind, file)),

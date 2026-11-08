@@ -50,11 +50,22 @@ function body(instance, menu) {
       }),
     ),
     instance.background?.kind === 'image' && h('p', { class: 'hint' }, t('titlemenu.image_perso')),
-    menu.conflicts.length > 0 && h('p', { class: 'hint hint--warn' }, t('titlemenu.conflits', { mods: menu.conflicts.join(', ') })),
+    menu.conflicts.length > 0 && h('p', { class: 'hint hint--warn' }, t('titlemenu.conflits', { mods: menu.conflicts.join(', ') }) + (menu.auto ? ` ${t('titlemenu.auto_conflits')}` : '')),
     menu.active
       ? [
           h('p', { class: 'hint' }, t('titlemenu.editeur')),
           h('div', null, h('button', { class: 'btn', disabled: menu.busy, onClick: () => disableTitleMenu(instance.id) }, t('titlemenu.retirer'))),
+        ]
+      : menu.auto && menu.conflicts.length === 0
+      ? [
+          // Menu par défaut : il s'ajoutera au prochain lancement, sauf si on garde le menu classique.
+          h('p', { class: 'hint' }, t('titlemenu.auto')),
+          h(
+            'div',
+            { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+            h('button', { class: 'btn btn--primary', disabled: menu.busy, onClick: () => enableTitleMenu(instance.id) }, t(menu.busy ? 'titlemenu.installation' : 'titlemenu.activer_maintenant')),
+            h('button', { class: 'btn', disabled: menu.busy, onClick: () => disableTitleMenu(instance.id) }, t('titlemenu.garder_classique')),
+          ),
         ]
       : [
           h('p', { class: 'hint' }, t(menu.installed ? 'titlemenu.mod_present' : 'titlemenu.mods_ajoutes')),

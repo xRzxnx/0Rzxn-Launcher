@@ -349,9 +349,17 @@ async function refresh({ gameDir, instance, player = null, keepEdits = false }) 
   await writeMenu({ gameDir, seed: instance.seed, theme: instance.background?.kind, style: instance.titleMenu?.style, card: instance.titleMenu?.card !== false, info });
 }
 
+const isModded = (instance) => Boolean(instance.loader) && instance.loader !== 'vanilla';
+
+/**
+ * Menu par défaut des instances moddées : il s'ajoute seul tant que personne n'a choisi pour l'instance.
+ * `titleMenu` absent = jamais réglé ; null = menu classique choisi (ou retiré) : on n'y touche plus.
+ */
+const wantsAuto = (instance) => instance.titleMenu === undefined && isModded(instance);
+
 /** Ce que l'interface doit savoir pour cette instance. `versions` interroge Modrinth. */
 async function status({ gameDir, instance, versions }) {
-  const modded = Boolean(instance.loader) && instance.loader !== 'vanilla';
+  const modded = isModded(instance);
   const names = await jarNames(gameDir);
   const installed = names.some((n) => /^fancymenu/i.test(n));
   let available = null; // inconnu si Modrinth ne répond pas
@@ -362,6 +370,7 @@ async function status({ gameDir, instance, versions }) {
     available: modded ? available : false,
     installed,
     active: Boolean(instance.titleMenu) && hasLayout(gameDir),
+    auto: wantsAuto(instance),
     style: STYLES.includes(instance.titleMenu?.style) ? instance.titleMenu.style : 'colonne',
     card: instance.titleMenu?.card !== false,
     conflicts: conflictsIn(names),
@@ -370,4 +379,4 @@ async function status({ gameDir, instance, versions }) {
 
 const cleanOptions = (value) => (value ? { style: STYLES.includes(value.style) ? value.style : 'colonne', card: value.card !== false } : null);
 
-module.exports = { FANCYMENU, STYLES, buildLayout, writeMenu, removeMenu, hasLayout, gatherInfo, refresh, status, cleanOptions };
+module.exports = { FANCYMENU, STYLES, buildLayout, writeMenu, removeMenu, hasLayout, gatherInfo, refresh, status, wantsAuto, cleanOptions };
