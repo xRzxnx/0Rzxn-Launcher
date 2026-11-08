@@ -236,9 +236,16 @@ function parseToml(buffer, entries, depth, preferNeo) {
     if (type === 'incompatible') info.breaks.push({ id: s.values.modId, range, maven: true });
     else if (s.values.mandatory === 'true' || type === 'required') info.depends.push({ id: s.values.modId, range, maven: true });
   }
-  const nested = entries.map((e) => e.name).filter((n) => /^META-INF\/jarjar\/.+\.jar$/i.test(n));
-  addNested(buffer, entries, nested, info, depth, preferNeo);
+  addNested(buffer, entries, jarJarFiles(buffer, entries), info, depth, preferNeo);
   return info;
+}
+
+/** Jars imbriqués Forge/NeoForge : ceux listés par META-INF/jarjar/metadata.json (rangés où le mod veut), plus ceux du dossier jarjar. */
+function jarJarFiles(buffer, entries) {
+  const listed = jsonEntry(buffer, entries, 'META-INF/jarjar/metadata.json')?.jars;
+  const fromList = (Array.isArray(listed) ? listed : []).map((j) => j?.path).filter((p) => typeof p === 'string');
+  const inFolder = entries.map((e) => e.name).filter((n) => /^META-INF\/jarjar\/.+\.jar$/i.test(n));
+  return [...new Set([...fromList, ...inFolder])];
 }
 
 /** Les mods fournis par un jar imbriqué comptent comme présents. */
