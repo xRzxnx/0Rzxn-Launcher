@@ -5,6 +5,7 @@ import { loadCrashes, openCrashes } from './crash-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
 import { loadUpdate } from './update-actions.js';
 import { autoTitleMenu } from './title-menu-actions.js';
+import { forgetWorlds } from './worlds-actions.js';
 import { activeAccount, dismissToast, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
 
 export async function refreshInstances() {
@@ -151,8 +152,13 @@ export async function createInstance(draft) {
 }
 
 /** Nom, icône ou version (fenêtre « Modifier l'instance »). */
-export async function editInstance(id, patch) {
-  await api.updateInstance(id, patch);
+export async function editInstance(id, patch, options = {}) {
+  const result = await api.updateInstance(id, patch, options);
+  if (result?.backupError) {
+    askBackupFailed(result.backupError, { retry: () => editInstance(id, patch), skip: () => editInstance(id, patch, { skipBackup: true }) });
+    return;
+  }
+  forgetWorlds(id);
   await refreshInstances();
   forgetRamGuide(id);
   update((s) => { s.modal = null; });
@@ -370,7 +376,19 @@ async function continueLaunch(instance, options) {
 
 export function startLaunch(instanceId, options = {}) {
   update((s) => { s.modal = null; });
-  api.startLaunch(instanceId, options).catch((error) => toastError(t('actions.lancement_impossible'), error));
+  api.startLaunch(instanceId, options).then(
+    (result) => {
+      if (result?.backupError) {
+        askBackupFailed(result.backupError, { retry: () => startLaunch(instanceId, options), skip: () => startLaunch(instanceId, { ...options, skipBackup: true }) });
+      } else if (!options.prepareOnly) forgetWorlds(instanceId);
+    },
+    (error) => toastError(t('actions.lancement_impossible'), error),
+  );
+}
+
+/** La sauvegarde automatique des mondes a échoué : l'opération attend un choix (réessayer ou continuer sans). */
+export function askBackupFailed(message, { retry, skip }) {
+  update((s) => { s.modal = { type: 'backup-failed', message, retry, skip }; });
 }
 
 export function verifyInstance(instanceId) {

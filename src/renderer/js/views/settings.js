@@ -261,6 +261,56 @@ function afterLaunchSection({ settings, save }) {
   );
 }
 
+const LAUNCH_BACKUP = [
+  { id: 'never', get label() { return t('settings.jamais'); } },
+  { id: 'hardcore', get label() { return t('settings.hardcore_seulement'); } },
+  { id: 'always', get label() { return t('settings.toujours'); } },
+];
+
+/** Sauvegardes automatiques des mondes : avant les changements risqués, à chaque lancement, et combien en garder. */
+function worldBackupSection({ settings, save }) {
+  const set = (key, value) => update(() => { settings[key] = value; save(); });
+  return h(
+    'section',
+    { class: 'settings__section settings__section--wide', 'aria-labelledby': 'backup-title', style: 'flex-direction:column;align-items:stretch;gap:12px' },
+    h('div', null, h('h2', { class: 'settings__title', id: 'backup-title' }, t('settings.sauvegardes_des_mondes')), h('p', { class: 'hint', style: 'font-size:13px;margin:4px 0 0' }, t('settings.sauvegardes_des_mondes_detail'))),
+    h(
+      'div',
+      { class: 'toggle-row' },
+      h('span', { id: 'backup-auto-label' }, t('settings.avant_les_changements_risques')),
+      h('button', { class: 'toggle', 'aria-labelledby': 'backup-auto-label', 'aria-pressed': settings.backupAuto ? 'true' : 'false', onClick: () => set('backupAuto', !settings.backupAuto) }),
+    ),
+    h(
+      'div',
+      { class: 'toggle-row' },
+      h('span', { id: 'backup-launch-label' }, t('settings.a_chaque_lancement')),
+      h(
+        'div',
+        { class: 'segmented', role: 'radiogroup', 'aria-labelledby': 'backup-launch-label' },
+        LAUNCH_BACKUP.map((o) => h('button', { role: 'radio', 'aria-checked': settings.backupLaunch === o.id ? 'true' : 'false', onClick: () => set('backupLaunch', o.id) }, o.label)),
+      ),
+    ),
+    h(
+      'div',
+      { class: 'toggle-row' },
+      h('label', { for: 'backup-keep' }, t('settings.sauvegardes_auto_gardees')),
+      h('input', {
+        id: 'backup-keep',
+        class: 'input',
+        type: 'number',
+        min: 1,
+        max: 20,
+        style: 'width:84px',
+        value: String(settings.backupKeep),
+        onChange: (e) => {
+          const n = Math.round(Number(e.target.value));
+          if (Number.isFinite(n)) set('backupKeep', Math.min(20, Math.max(1, n)));
+        },
+      }),
+    ),
+  );
+}
+
 export function renderSettings() {
   const instance = selectedInstance();
   const scope = instance || state.settingsScope !== 'instance' ? state.settingsScope : 'global';
@@ -311,6 +361,7 @@ export function renderSettings() {
       windowSection(ctx),
       advancedSection(ctx),
       afterLaunchSection(ctx),
+      worldBackupSection(ctx),
     ),
   );
 }

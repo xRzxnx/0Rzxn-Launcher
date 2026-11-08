@@ -16,6 +16,8 @@ const zip = require('./zip');
 const GAME_TYPES = ['survival', 'creative', 'adventure', 'spectator'];
 const REASONS = new Set(['manual', 'modpack', 'version', 'loader', 'launch']);
 const TEMP_PREFIX = '.restauration-';
+// Déjà compressés (régions, images, archives) : rangés tels quels, la sauvegarde va bien plus vite.
+const PRECOMPRESSED = /\.(mca|mcc|png|jpg|zip|jar|gz)$/i;
 const skipLock = (rel) => path.basename(rel) === 'session.lock';
 const savesOf = (gameDir) => path.join(gameDir, 'saves');
 const stripFormatting = (value) => String(value ?? '').replace(/§./g, '');
@@ -150,7 +152,7 @@ async function archive({ dir, folder, name, files, backupDir, kind, reason, sign
   for (let n = 2; exists(path.join(backupDir, file)); n++) file = `${base}-${n}.zip`;
   const result = await zip.writeZipFile(
     path.join(backupDir, file),
-    files.map((rel) => ({ name: `${folder}/${rel.split(path.sep).join('/')}`, path: path.join(dir, rel) })),
+    files.map((rel) => ({ name: `${folder}/${rel.split(path.sep).join('/')}`, path: path.join(dir, rel), store: PRECOMPRESSED.test(rel) })),
     { signal, onProgress: onFile },
   );
   const index = readJson(indexFile(backupDir), {});

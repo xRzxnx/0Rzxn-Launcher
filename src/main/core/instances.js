@@ -22,6 +22,9 @@ const DEFAULT_SETTINGS = {
   afterLaunch: 'minimize', // 'keep' | 'minimize' | 'hide'
   jvmPreset: 'auto', // 'auto' | 'g1' | 'zgc' | 'none' (voir performance.js)
   priority: 'normal', // 'normal' | 'above' : priorité du processus du jeu
+  backupAuto: true, // sauvegarde des mondes avant une mise à jour de modpack, de version ou de loader
+  backupLaunch: 'hardcore', // 'never' | 'hardcore' | 'always' : sauvegarde à chaque lancement
+  backupKeep: 5, // sauvegardes automatiques gardées par monde
 };
 const ICONS = new Set(['grass', 'diamond', 'stone', 'netherrack', 'sand', 'end']);
 const LOADERS = new Set(['vanilla', 'fabric', 'quilt', 'forge', 'neoforge']);
@@ -84,6 +87,9 @@ function sanitizeSettings(input, base = DEFAULT_SETTINGS) {
   if (['keep', 'minimize', 'hide'].includes(input.afterLaunch)) s.afterLaunch = input.afterLaunch;
   if (['auto', 'g1', 'zgc', 'none'].includes(input.jvmPreset)) s.jvmPreset = input.jvmPreset;
   if (['normal', 'above'].includes(input.priority)) s.priority = input.priority;
+  if (typeof input.backupAuto === 'boolean') s.backupAuto = input.backupAuto;
+  if (['never', 'hardcore', 'always'].includes(input.backupLaunch)) s.backupLaunch = input.backupLaunch;
+  if (Number.isInteger(input.backupKeep)) s.backupKeep = Math.min(20, Math.max(1, input.backupKeep));
   return s;
 }
 

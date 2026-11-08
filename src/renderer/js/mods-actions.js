@@ -1,6 +1,7 @@
 // Actions de l'onglet Mods : contenu installé, recherche Modrinth, installation, mises à jour.
 import { t } from './i18n.js';
-import { installMissingDeps, refreshInstances } from './actions.js';
+import { askBackupFailed, installMissingDeps, refreshInstances } from './actions.js';
+import { forgetWorlds } from './worlds-actions.js';
 import { api } from './api.js';
 import { forgetRamGuide, selectedInstance, state, toast, toastError, update } from './state.js';
 
@@ -264,9 +265,14 @@ export async function checkModpackUpdate(instance) {
   }
 }
 
-export async function updateModpack(instance, versionId) {
+export async function updateModpack(instance, versionId, options = {}) {
   try {
-    const result = await api.updateModpack(instance.id, versionId);
+    const result = await api.updateModpack(instance.id, versionId, options);
+    if (result?.backupError) {
+      askBackupFailed(result.backupError, { retry: () => updateModpack(instance, versionId), skip: () => updateModpack(instance, versionId, { skipBackup: true }) });
+      return;
+    }
+    forgetWorlds(instance.id);
     await refreshInstances();
     update((s) => {
       delete s.modpackUpdates[instance.id];

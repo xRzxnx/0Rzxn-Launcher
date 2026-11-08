@@ -256,9 +256,33 @@ function deleteWorldDialog(modal) {
   });
 }
 
+/** La sauvegarde automatique a échoué : rien n'a été modifié, l'opération attend un choix. */
+function backupFailedDialog(modal) {
+  const run = (fn) => () => {
+    close();
+    fn();
+  };
+  return dialog({
+    title: t('worlds.sauvegarde_auto_impossible'),
+    size: 'dialog--small',
+    labelId: 'backup-failed-title',
+    body: [
+      h('p', { class: 'notice notice--warn', role: 'alert' }, icon('alert'), modal.message),
+      h('p', { class: 'hint', style: 'margin:0' }, t('worlds.operation_arretee')),
+    ],
+    foot: [
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'btn btn--lg', onClick: close }, t('common.annuler')),
+      h('button', { class: 'btn btn--lg', onClick: run(modal.skip) }, t('worlds.continuer_sans_sauvegarde')),
+      h('button', { class: 'btn btn--lg btn--primary', onClick: run(modal.retry) }, icon('refresh'), t('worlds.reessayer')),
+    ],
+  });
+}
+
 /** Fenêtres de l'onglet Mondes (appelé par renderModal). */
 export function worldsDialog(modal) {
   if (modal.type === 'restore-world') return restoreDialog(modal);
   if (modal.type === 'delete-world') return deleteWorldDialog(modal);
+  if (modal.type === 'backup-failed') return backupFailedDialog(modal);
   return null;
 }

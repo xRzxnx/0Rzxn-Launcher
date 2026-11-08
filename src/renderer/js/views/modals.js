@@ -488,7 +488,7 @@ export function renderModal() {
   if (modal.type === 'clean-storage') return cleanDialog(modal);
   if (modal.type === 'perf-pack') return packDialog(modal);
   if (modal.type === 'gpu-confirm') return gpuConfirmDialog(modal);
-  if (modal.type === 'restore-world' || modal.type === 'delete-world') return worldsDialog(modal);
+  if (['restore-world', 'delete-world', 'backup-failed'].includes(modal.type)) return worldsDialog(modal);
   return null;
 }
 

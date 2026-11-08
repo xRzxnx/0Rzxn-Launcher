@@ -342,8 +342,16 @@ function registerIpc(getWindow) {
 
   handle('instances:list', () => instances.list());
   handle('instances:create', (data) => instances.create(data ?? {}, services.settings.defaults()));
-  handle('instances:update', (id, patch) => {
+  // Changer de version ou de loader convertit les mondes sans retour possible : ils sont sauvegardés avant.
+  handle('instances:update', async (id, patch, options) => {
     if (launches.run?.instanceId === id && patch?.version) throw new Error(t('ipc.impossible_de_changer_de_version'));
+    const current = instances.get(text(id));
+    const loaderChanged = patch?.loader !== undefined && (patch.loader !== current.loader || (patch.loaderVersion ?? null) !== (current.loaderVersion ?? null));
+    const reason = typeof patch?.version === 'string' && patch.version !== current.version ? 'version' : loaderChanged ? 'loader' : null;
+    if (reason && options?.skipBackup !== true) {
+      const failed = await backupBefore(current, reason);
+      if (failed) return failed;
+    }
     return instances.update(text(id), patch ?? {});
   });
   const notRunning = (id, action) => {
@@ -556,7 +564,7 @@ function registerIpc(getWindow) {
     };
     send({ label, done: 0, total: 0, cancellable });
     try {
-      return await work((p) => send({ label, done: p.done, total: p.total, cancellable }), taskAbort?.signal);
+      return await work((p) => send({ label: p.label ?? label, done: p.done, total: p.total, cancellable }), taskAbort?.signal);
     } finally {
       task = null;
       taskAbort = null;
@@ -564,6 +572,37 @@ function registerIpc(getWindow) {
     }
   };
   handle('task:cancel', () => taskAbort?.abort());
+
+  // Sauvegarde automatique des mondes avant une opération risquée (reason : modpack, version, loader, launch).
+  // Renvoie null si rien n'était à faire ; lève une erreur si la copie échoue (l'opération est alors arrêtée).
+  const worldsToBackUp = (instance, reason) => {
+    const s = instance.settings;
+    if (reason === 'launch') {
+      if (s.backupLaunch === 'never') return null;
+      return s.backupLaunch === 'hardcore' ? (w) => w.hardcore : () => true;
+    }
+    return s.backupAuto ? () => true : null;
+  };
+  const autoBackup = (instance, reason, onProgress, signal) => {
+    const filter = worldsToBackUp(instance, reason);
+    const gameDir = instances.gameDir(instance.id);
+    if (!filter || !worlds.scanWorlds(gameDir).some(filter)) return null;
+    const label = t('ipc.sauvegarde_des_mondes');
+    return worlds.backupAll({
+      gameDir, backupDir: path.join(dirs.backups, instance.id), reason, keep: instance.settings.backupKeep, trash, filter, signal,
+      onProgress: (p) => onProgress({ ...p, label: p.world ? t('ipc.sauvegarde_de', { name: p.world }) : label }),
+    });
+  };
+  /** Sauvegarde automatique seule, comme tâche : { backupError } si elle échoue, null sinon. */
+  const backupBefore = async (instance, reason) => {
+    if (!worldsToBackUp(instance, reason) || !worlds.scanWorlds(instances.gameDir(instance.id)).some(worldsToBackUp(instance, reason))) return null;
+    try {
+      await runTask(t('ipc.sauvegarde_des_mondes'), (onProgress, signal) => autoBackup(instance, reason, onProgress, signal), { cancellable: true });
+      return null;
+    } catch (error) {
+      return { backupError: error.message };
+    }
+  };
   const installFromBuffer = (label, buffer, source) =>
     runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }));
 
@@ -590,9 +629,13 @@ function registerIpc(getWindow) {
     return installFromBuffer(t('ipc.import_de', { filePaths: path.basename(result.filePaths[0]) }), buffer, null);
   });
   handle('modpacks:checkUpdate', (id) => modpacks.checkUpdate(instances.get(text(id))));
-  handle('modpacks:update', async (id, versionId) => {
+  handle('modpacks:update', async (id, versionId, options) => {
     notRunning(text(id), t('ipc.mettre_jour_le_modpack'));
     const instance = instances.get(text(id));
+    if (options?.skipBackup !== true) {
+      const failed = await backupBefore(instance, 'modpack');
+      if (failed) return failed;
+    }
     const { buffer } = await modpacks.downloadPack(dirs, text(versionId));
     return runTask(t('ipc.mise_jour_de', { name: instance.name }), (onProgress) =>
       modpacks.updatePack({ instances, instanceId: instance.id, buffer, source: { versionId: text(versionId) }, trash, onProgress }),
@@ -843,12 +886,15 @@ function registerIpc(getWindow) {
     return result.canceled ? null : result.filePaths[0];
   });
 
-  handle('launch:start', (id, options) =>
-    launches.start(text(id), {
-      verify: options?.verify === true,
-      prepareOnly: options?.prepareOnly === true,
-    }),
-  );
+  handle('launch:start', async (id, options) => {
+    const prepareOnly = options?.prepareOnly === true;
+    if (!prepareOnly && options?.skipBackup !== true) {
+      if (launches.session) throw new Error(t('ipc.une_partie_ou_une_installation'));
+      const failed = await backupBefore(instances.get(text(id)), 'launch');
+      if (failed) return failed;
+    }
+    return launches.start(text(id), { verify: options?.verify === true, prepareOnly });
+  });
   handle('launch:stop', () => launches.stop());
   handle('launch:state', () => launches.state());
 

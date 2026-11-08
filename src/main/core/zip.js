@@ -119,7 +119,8 @@ function dosTime(date) {
 
 /**
  * Écrit une archive ZIP fichier par fichier, sans tout charger en mémoire.
- * entries : [{ name, path }] ; onProgress({ done, total }). Écrit d'abord un « .part », renommé à la fin.
+ * entries : [{ name, path, store }] (store : rangé sans compression, pour les fichiers déjà compressés) ;
+ * onProgress({ done, total }). Écrit d'abord un « .part », renommé à la fin.
  */
 async function writeZipFile(target, entries, { onProgress, signal } = {}) {
   const part = `${target}.part`;
@@ -135,11 +136,11 @@ async function writeZipFile(target, entries, { onProgress, signal } = {}) {
     onProgress?.({ done: 0, total: entries.length });
     for (let i = 0; i < entries.length; i++) {
       if (signal?.aborted) throw new Error(t('zip.sauvegarde_annulee'));
-      const { name, path: file } = entries[i];
+      const { name, path: file, store = false } = entries[i];
       const [data, stat] = await Promise.all([fs.promises.readFile(file), fs.promises.stat(file)]);
       if (data.length >= MAX32) throw new Error(t('zip.fichier_trop_gros', { name }));
-      const compressed = await deflateRaw(data);
-      const stored = compressed.length >= data.length;
+      const compressed = store ? null : await deflateRaw(data);
+      const stored = !compressed || compressed.length >= data.length;
       const body = stored ? data : compressed;
       const crc = zlib.crc32(data) >>> 0;
       const when = dosTime(stat.mtime);

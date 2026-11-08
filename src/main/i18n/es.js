@@ -205,6 +205,7 @@ module.exports = {
   'ipc.restaurer_un_monde': "restaurar un mundo",
   'ipc.restauration_de': "Restaurando {name}",
   'ipc.supprimer_un_monde': "eliminar un mundo",
+  'ipc.sauvegarde_des_mondes': "Copia de los mundos",
   'java.java_est_pas_encore_installe': "Java ({component}) aún no está instalado y la descarga falló ({message}).",
   'java.java_ne_demarre_pas': "Java no se inicia ({code}): {exe}",
   'java.le_manifeste_de_java_telecharge': "El manifiesto de Java descargado está dañado.",
