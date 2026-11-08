@@ -8,7 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { AccountStore } = require('./core/accounts');
 const { InstanceStore, DEFAULT_SETTINGS, sanitizeSettings } = require('./core/instances');
-const { LaunchSession } = require('./core/launch');
+const { LaunchSession, quickPlayFile } = require('./core/launch');
 const microsoft = require('./core/microsoft');
 const { SkinStore, Wardrobe } = require('./core/skins');
 const { gameDirs, readJson, writeJson } = require('./core/store');
@@ -191,7 +191,7 @@ class LaunchManager {
     this.onChange?.();
   }
 
-  start(instanceId, { verify = false, prepareOnly = false } = {}) {
+  start(instanceId, { verify = false, prepareOnly = false, quickPlay = null } = {}) {
     if (this.session) throw new Error(t('ipc.une_partie_ou_une_installation'));
     const { dirs, instances, accounts } = this.services;
     const instance = instances.get(instanceId);
@@ -210,6 +210,7 @@ class LaunchManager {
       verify,
       prepareOnly,
       prepareJava: (exe, log) => this.prepareJava(exe, log),
+      quickPlay,
     });
     this.session = session;
     this.logs = [];
@@ -240,6 +241,7 @@ class LaunchManager {
     });
     session.on('exit', async ({ code, crashed, minutes }) => {
       instances.recordPlay(instanceId, minutes);
+      this.keepQuickPlay(instanceId);
       const win = this.getWindow();
       if (win && !win.isDestroyed() && (!win.isVisible() || win.isMinimized())) {
         win.show();
@@ -262,6 +264,19 @@ class LaunchManager {
     const report = (await crashes.listCrashes(dirs)).find((c) => c.source !== 'log' && c.at >= since - 5000);
     if (report) return { source: report.source, file: report.file };
     return { source: 'log', file: await crashes.saveCrashLog(dirs.instanceDir, this.logs, { code }) };
+  }
+
+  /** Monde ou serveur rejoint pendant la partie, noté par le jeu (1.20 et plus) : il rejoint la liste « Reprendre ». */
+  keepQuickPlay(instanceId) {
+    const { instances } = this.services;
+    const file = quickPlayFile(instances.dir(instanceId));
+    try {
+      const [entry] = [].concat(JSON.parse(fs.readFileSync(file, 'utf8')));
+      if (entry?.type && entry.id) instances.recordQuickPlay(instanceId, { type: entry.type, id: String(entry.id), name: String(entry.name ?? entry.id) });
+    } catch {
+      // pas de fichier : aucune partie rejointe, ou version d'avant 1.20
+    }
+    fs.rmSync(file, { force: true });
   }
 
   /** Accord donné pour la carte dédiée : chaque nouveau java.exe la reçoit aussi. */
@@ -893,8 +908,20 @@ function registerIpc(getWindow) {
       const failed = await backupBefore(instances.get(text(id)), 'launch');
       if (failed) return failed;
     }
-    return launches.start(text(id), { verify: options?.verify === true, prepareOnly });
+    return launches.start(text(id), { verify: options?.verify === true, prepareOnly, quickPlay: prepareOnly ? null : quickPlayTarget(text(id), options?.quickPlay) });
   });
+  /** Monde ou serveur demandé par l'interface : un monde doit exister dans l'instance, une adresse rester une adresse. */
+  const quickPlayTarget = (id, target) => {
+    if (!target || (target.type !== 'singleplayer' && target.type !== 'multiplayer')) return null;
+    const name = text(target.name).slice(0, 100);
+    if (target.type === 'singleplayer') {
+      worlds.worldDir(instances.gameDir(id), text(target.id)); // lève une erreur si le monde n'existe plus
+      return { type: 'singleplayer', id: text(target.id), name };
+    }
+    const address = text(target.id).trim();
+    if (!/^[\w.\-:[\]]{1,255}$/.test(address)) throw new Error(t('ipc.adresse_de_serveur_invalide'));
+    return { type: 'multiplayer', id: address, name };
+  };
   handle('launch:stop', () => launches.stop());
   handle('launch:state', () => launches.state());
 

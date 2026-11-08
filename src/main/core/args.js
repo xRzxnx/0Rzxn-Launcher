@@ -22,19 +22,44 @@ function splitUserArgs(text) {
   return (text ?? '').match(/"[^"]*"|\S+/g)?.map((a) => a.replace(/^"|"$/g, '')) ?? [];
 }
 
+/** La version gère-t-elle Quick Play (1.20 et plus) ? Lu dans les arguments du fichier de version. */
+function supportsQuickPlay(version) {
+  return (version.arguments?.game ?? []).some((item) => item?.rules?.some((rule) => rule.features?.is_quick_play_singleplayer));
+}
+
+/** Hôte et port d'une adresse de serveur (« play.exemple.fr », « 1.2.3.4:25570 », « [::1]:25565 »). */
+function serverTarget(address) {
+  const text = String(address).trim();
+  const m = /^\[([^\]]+)\](?::(\d+))?$/.exec(text) ?? /^([^:]+)(?::(\d+))?$/.exec(text);
+  return m ? { host: m[1], port: Number(m[2] ?? 25565) } : { host: text, port: 25565 };
+}
+
 /**
  * `javaMajor` : version de Java qui lance le jeu (choix du ramasse-miettes, voir performance.js).
- * @returns {{ jvm: string[], game: string[], librarySearchPath: string, gc: string }}
+ * `quickPlay` : { type: 'singleplayer' | 'multiplayer', id } pour entrer directement dans un monde ou sur un serveur ;
+ * `quickPlayPath` : fichier où le jeu note le monde ou le serveur rejoint (1.20 et plus).
+ * Avant 1.20, seul un serveur peut être rejoint au démarrage (--server / --port).
+ * @returns {{ jvm: string[], game: string[], librarySearchPath: string, gc: string, quickPlay: string | null }}
  */
-function buildArguments({ version, vars, settings, loggingConfig, javaMajor = version.javaVersion?.majorVersion ?? 8 }) {
+function buildArguments({ version, vars, settings, loggingConfig, quickPlay = null, quickPlayPath = null, javaMajor = version.javaVersion?.majorVersion ?? 8 }) {
+  const modern = supportsQuickPlay(version);
+  const target = quickPlay?.type === 'singleplayer' || quickPlay?.type === 'multiplayer' ? quickPlay : null;
   const features = {
     is_demo_user: false,
     has_custom_resolution: !settings.fullscreen,
-    has_quick_plays_support: false,
-    is_quick_play_singleplayer: false,
-    is_quick_play_multiplayer: false,
+    has_quick_plays_support: modern && Boolean(quickPlayPath),
+    is_quick_play_singleplayer: modern && target?.type === 'singleplayer',
+    is_quick_play_multiplayer: modern && target?.type === 'multiplayer',
     is_quick_play_realms: false,
   };
+  if (modern) {
+    vars = {
+      ...vars,
+      quickPlayPath: quickPlayPath ?? '',
+      quickPlaySingleplayer: target?.type === 'singleplayer' ? target.id : '',
+      quickPlayMultiplayer: target?.type === 'multiplayer' ? target.id : '',
+    };
+  }
   const tuned = jvmArguments({ preset: settings.jvmPreset, javaMajor, ramGb: settings.ram, jvmArgs: settings.jvmArgs });
   const jvm = [...tuned.args, ...splitUserArgs(settings.jvmArgs)];
 
@@ -68,11 +93,17 @@ function buildArguments({ version, vars, settings, loggingConfig, javaMajor = ve
     if (!settings.fullscreen) game.push('--width', String(vars.resolution_width), '--height', String(vars.resolution_height));
   }
   if (settings.fullscreen) game.push('--fullscreen');
+  let joined = modern && target ? target.type : null;
+  if (!modern && target?.type === 'multiplayer') {
+    const { host, port } = serverTarget(target.id);
+    game.push('--server', host, '--port', String(port));
+    joined = 'multiplayer';
+  }
 
   const libraryArg = jvm.find((arg) => arg.startsWith('-Djava.library.path='));
   const librarySearchPath = libraryArg ? path.normalize(libraryArg.slice('-Djava.library.path='.length)) : vars.natives_directory;
 
-  return { jvm, game, librarySearchPath, gc: tuned.gc };
+  return { jvm, game, librarySearchPath, gc: tuned.gc, quickPlay: joined };
 }
 
-module.exports = { buildArguments, splitUserArgs };
+module.exports = { buildArguments, splitUserArgs, supportsQuickPlay, serverTarget };

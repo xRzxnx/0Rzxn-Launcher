@@ -8,6 +8,7 @@ import { renderSettings } from './views/settings.js';
 import { renderMods } from './views/mods.js';
 import { renderVersions } from './views/versions.js';
 import { renderWorlds } from './views/worlds.js';
+import { renderSidebarMenu } from './views/resume.js';
 import { handleShortcut } from './shortcuts.js';
 import { init } from './actions.js';
 import { checkOtherInstances } from './mods-actions.js';
@@ -113,7 +114,7 @@ function render() {
   if (state.ready) main.replaceChildren(VIEWS[state.view]());
   else main.replaceChildren(loadingView());
 
-  const overlays = [renderWelcome(), renderModal()].filter(Boolean);
+  const overlays = [renderWelcome(), renderModal() ?? renderSidebarMenu()].filter(Boolean);
   $('modal-root').replaceChildren(...overlays);
   $('toasts').replaceChildren(...renderToasts());
 

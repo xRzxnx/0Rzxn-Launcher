@@ -970,4 +970,12 @@ export default {
   'worlds.operation_arretee': "La operación se ha detenido y no se ha cambiado nada. Vuelve a intentarlo o continúa sin copia bajo tu responsabilidad.",
   'worlds.continuer_sans_sauvegarde': "Continuar sin copia",
   'worlds.reessayer': "Reintentar",
+  'resume.reprendre': "Continuar",
+  'resume.entrer_directement': "Iniciar y entrar directamente en {name}",
+  'resume.derniers_mondes_et_serveurs': "Mundos y servidores recientes",
+  'resume.entrer_dans': "Entrar directamente en…",
+  'resume.monde': "Mundo",
+  'resume.serveur': "Servidor",
+  'resume.serveurs_seulement': "Antes de la 1.20, Minecraft solo puede abrir directamente un servidor.",
+  'resume.ouvrir_le_dossier': "Abrir carpeta",
 };

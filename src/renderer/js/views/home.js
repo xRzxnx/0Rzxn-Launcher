@@ -9,6 +9,7 @@ import { formatGo, formatPlaytime, formatShortTime, h, icon } from '../dom.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceAccount, instanceStatus, runPercent, selectedInstance, state, update } from '../state.js';
 import { go, openNewInstance } from './chrome.js';
+import { resumeControl } from './resume.js';
 
 const javaLabel = (details) => (details ? `Java ${details.java}` : 'Java');
 
@@ -87,6 +88,7 @@ function hero(instance, status, details, card) {
       'div',
       { class: 'hero__bar' },
       playButton(instance, status),
+      resumeControl(instance),
       h(
         'div',
         { class: 'version-box' },

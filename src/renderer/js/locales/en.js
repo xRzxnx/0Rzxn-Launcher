@@ -970,4 +970,12 @@ export default {
   'worlds.operation_arretee': "The operation stopped and nothing was changed. Try again, or continue without a backup at your own risk.",
   'worlds.continuer_sans_sauvegarde': "Continue without backup",
   'worlds.reessayer': "Try again",
+  'resume.reprendre': "Resume",
+  'resume.entrer_directement': "Launch and go straight into {name}",
+  'resume.derniers_mondes_et_serveurs': "Recent worlds and servers",
+  'resume.entrer_dans': "Go straight into…",
+  'resume.monde': "World",
+  'resume.serveur': "Server",
+  'resume.serveurs_seulement': "Before 1.20, Minecraft can only open a server directly.",
+  'resume.ouvrir_le_dossier': "Open folder",
 };

@@ -36,8 +36,9 @@ class LaunchSession extends EventEmitter {
    * `account` : compte prêt à l'emploi, ou `getAccount(log)` : fonction asynchrone appelée à l'étape
    * « Compte » (renouvellement de la session Microsoft).
    */
-  constructor({ dirs, instance, instanceDir, account, getAccount, launcherVersion = '0.1.0', verify = false, prepareOnly = false, prepareJava = null }) {
+  constructor({ dirs, instance, instanceDir, account, getAccount, launcherVersion = '0.1.0', verify = false, prepareOnly = false, prepareJava = null, quickPlay = null }) {
     super();
+    this.quickPlay = quickPlay; // { type: 'singleplayer' | 'multiplayer', id, name } : entrer directement dans un monde ou sur un serveur
     this.prepareJava = prepareJava; // ex. préférence de carte graphique pour ce java.exe
     this.prepareOnly = prepareOnly;
     this.getAccount = getAccount ?? (async () => account);
@@ -200,7 +201,19 @@ class LaunchSession extends EventEmitter {
       resolution_height: settings.height,
     };
     const loggingConfig = install.loggingTask(game, dirs)?.path;
-    const { jvm, game: gameArgs, librarySearchPath, gc } = buildArguments({ version: game, vars, settings, loggingConfig, javaMajor: this.javaMajor });
+    // Le jeu note dans ce fichier le monde ou le serveur rejoint (1.20 et plus) : c'est la liste « Reprendre ».
+    const quickPlayPath = quickPlayFile(this.instanceDir);
+    fs.rmSync(quickPlayPath, { force: true });
+    const { jvm, game: gameArgs, librarySearchPath, gc, quickPlay: joined } = buildArguments({ version: game, vars, settings, loggingConfig, quickPlay: this.quickPlay, quickPlayPath, javaMajor: this.javaMajor });
+    if (this.quickPlay) {
+      const name = this.quickPlay.name || this.quickPlay.id;
+      if (!joined) this.log(t('launch.quick_play_impossible', { name }));
+      else {
+        this.log(t(joined === 'singleplayer' ? 'launch.quick_play_monde' : 'launch.quick_play_serveur', { name }));
+        // Premier lancement : l'écran d'accessibilité du jeu bloquerait l'entrée directe.
+        if (skipOnboarding(this.gameDir)) this.log(t('launch.ecran_accessibilite_passe'));
+      }
+    }
     this.log(t(settings.jvmPreset === 'auto' ? 'launch.gc_auto' : 'launch.gc', { gc: GC_NAMES[gc] }));
     const extracted = await install.extractNatives(gameLibraries.natives, librarySearchPath);
     this.log(t('launch.natives_extraites', { extracted }));
@@ -261,4 +274,22 @@ class LaunchSession extends EventEmitter {
   }
 }
 
-module.exports = { LaunchSession, STEPS };
+/** Fichier où le jeu note le dernier monde ou serveur rejoint (dans le dossier de l'instance, pas celui du jeu). */
+function quickPlayFile(instanceDir) {
+  return path.join(instanceDir, 'quickplay.json');
+}
+
+/** Met « onboardAccessibility » à false dans options.txt de l'instance (créé si besoin). Renvoie true si quelque chose a changé. */
+function skipOnboarding(gameDir) {
+  const file = path.join(gameDir, 'options.txt');
+  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  if (/^onboardAccessibility:false\s*$/m.test(text)) return false;
+  const next = /^onboardAccessibility:/m.test(text)
+    ? text.replace(/^onboardAccessibility:.*$/m, 'onboardAccessibility:false')
+    : `${text}${text && !text.endsWith('\n') ? '\n' : ''}onboardAccessibility:false\n`;
+  fs.mkdirSync(gameDir, { recursive: true });
+  fs.writeFileSync(file, next);
+  return true;
+}
+
+module.exports = { LaunchSession, STEPS, quickPlayFile };

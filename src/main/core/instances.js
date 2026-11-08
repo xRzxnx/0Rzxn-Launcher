@@ -93,6 +93,28 @@ function sanitizeSettings(input, base = DEFAULT_SETTINGS) {
   return s;
 }
 
+/** Liste « Reprendre » : [{ type: 'singleplayer' | 'multiplayer', id, name, at }], la plus récente d'abord. */
+function cleanRecent(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((r) => (r?.type === 'singleplayer' || r?.type === 'multiplayer') && typeof r.id === 'string' && r.id && r.id.length <= 260)
+    .map((r) => ({ type: r.type, id: r.id, name: typeof r.name === 'string' && r.name ? r.name.slice(0, 100) : r.id, at: Number.isFinite(r.at) ? r.at : 0 }))
+    .slice(0, 5);
+}
+
+/**
+ * Quick Play (entrer directement dans un monde) existe depuis 1.20 (snapshot 23w14a). Estimation d'après le nom de la
+ * version, pour l'interface ; le lancement, lui, vérifie le fichier de version.
+ */
+function quickPlayVersion(id) {
+  const text = String(id ?? '');
+  let m = /^1\.(\d+)/.exec(text);
+  if (m) return Number(m[1]) >= 20;
+  m = /^(\d\d)w(\d\d)/.exec(text);
+  if (m) return Number(m[1]) > 23 || (Number(m[1]) === 23 && Number(m[2]) >= 14);
+  return /^\d{2}\.\d/.test(text); // 26.1 et plus : numérotation par année
+}
+
 class InstanceStore {
   constructor(dirs) {
     this.dirs = dirs;
@@ -125,8 +147,19 @@ class InstanceStore {
       loaderVersion: loader === 'vanilla' ? null : data.loaderVersion,
       settings: sanitizeSettings(data.settings),
       ...modSets.sanitize(data.modSets, data.activeModSet),
+      recent: cleanRecent(data.recent),
+      quickPlay: quickPlayVersion(data.version),
       installed: isInstalled(this.dirs, data.version) && loaderReady,
     };
+  }
+
+  /** Monde ou serveur rejoint (noté par le jeu) : en tête de la liste « Reprendre », 5 au plus, sans doublon. */
+  recordQuickPlay(id, entry) {
+    const current = readJson(this.file(id), null);
+    const [clean] = cleanRecent([{ ...entry, at: Date.now() }]);
+    if (!current || !clean) return;
+    current.recent = cleanRecent([clean, ...(current.recent ?? []).filter((r) => r.type !== clean.type || r.id !== clean.id)]);
+    writeJson(this.file(id), current);
   }
 
   /** Ensembles de mods (validés) et ensemble actif. */

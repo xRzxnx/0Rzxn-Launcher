@@ -62,6 +62,8 @@ export const state = {
     versions: {}, // « projet:instance:type » → liste | { loading } | { error }
     busy: {}, // projet ou fichier en cours de traitement → true
   },
+  resumeMenu: null, // instance dont le menu « Reprendre » est ouvert
+  sidebarMenu: null, // menu du clic droit dans la barre latérale : { id, x, y }
   worlds: {
     lists: {}, // instance → { loading, worlds, backups, error }
     selected: {}, // instance → dossier du monde affiché à droite

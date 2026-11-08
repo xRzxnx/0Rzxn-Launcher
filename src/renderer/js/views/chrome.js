@@ -10,6 +10,7 @@ import { openWizard } from '../wizard-actions.js';
 import { installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceStatus, state, update } from '../state.js';
+import { openSidebarMenu } from './resume.js';
 
 export const TABS = [
   { id: 'home', get label() { return t('chrome.accueil'); }, icon: 'home' },
@@ -103,6 +104,7 @@ function instanceItem(instance) {
         class: 'instance-item',
         'aria-current': current ? 'true' : null,
         onClick: () => update(select),
+        onContextmenu: (e) => openSidebarMenu(e, instance),
       },
       blockIcon(instance.icon, '', status.kind === 'idle' ? null : status.kind),
       h(
