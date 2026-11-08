@@ -21,6 +21,7 @@ import { paletteDialog } from './palette.js';
 import { wizardDialog } from './wizard.js';
 import { modSetDeleteDialog, modSetDialog } from './mod-sets.js';
 import { worldsDialog } from './worlds.js';
+import { versionChangeDialog } from './version-change.js';
 
 export const BLOCKS = () => [
   ['grass', t('modals.herbe')], ['diamond', t('modals.diamant')], ['stone', t('modals.pierre')],
@@ -489,6 +490,7 @@ export function renderModal() {
   if (modal.type === 'perf-pack') return packDialog(modal);
   if (modal.type === 'gpu-confirm') return gpuConfirmDialog(modal);
   if (['restore-world', 'delete-world', 'backup-failed'].includes(modal.type)) return worldsDialog(modal);
+  if (modal.type === 'version-change') return versionChangeDialog(modal);
   return null;
 }
 

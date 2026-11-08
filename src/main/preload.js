@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('launcher', {
     install: invoke('content:install'),
     update: invoke('content:update'),
     import: invoke('content:import'),
+    versionPlan: invoke('content:versionPlan'),
     openFolder: invoke('content:openFolder'),
     check: invoke('modcheck:run'),
     resolveDeps: invoke('modcheck:resolve'),

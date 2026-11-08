@@ -430,7 +430,33 @@ function registerIpc(getWindow) {
     return { instance, gameDir: instances.gameDir(instance.id), kind: text(kind) };
   };
   const trash = (file) => shell.trashItem(file);
-  handle('content:list', (id, kind) => content.listContent(contentCtx(id, kind)));
+  // Mods dont le jar annonce une autre version de Minecraft (d'après le diagnostic).
+  const mismatchedJars = async (gameDir, instance) => {
+    try {
+      const { problems } = await modCheck.check({ gameDir, instance });
+      return new Set(problems.filter((p) => p.id.startsWith('mc:')).map((p) => p.id.slice(3)));
+    } catch {
+      return new Set();
+    }
+  };
+  // Chaque fichier dit s'il est prévu pour la version de l'instance : versions listées sur Modrinth, ou plage du jar.
+  handle('content:list', async (id, kind) => {
+    const ctx = contentCtx(id, kind);
+    const data = await content.listContent(ctx);
+    const flagged = ctx.kind === 'mods' ? await mismatchedJars(ctx.gameDir, ctx.instance) : new Set();
+    for (const item of data.items) {
+      const unlisted = Array.isArray(item.gameVersions) && item.gameVersions.length > 0 && !item.gameVersions.includes(ctx.instance.version);
+      item.incompatible = flagged.has(item.file) || unlisted;
+    }
+    return data;
+  });
+  handle('content:versionPlan', async (id, target) => {
+    const instance = instances.get(text(id));
+    const gameDir = instances.gameDir(instance.id);
+    const version = text(target);
+    const localMismatch = await mismatchedJars(gameDir, { ...instance, version });
+    return content.versionPlan({ gameDir, instance, target: version, localMismatch });
+  });
   // Après un changement du dossier des mods, l'ensemble actif suit (nouveau mod, interrupteur, suppression).
   const setsCtx = (id) => {
     const instance = instances.get(text(id));

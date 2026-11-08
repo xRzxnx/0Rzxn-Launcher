@@ -170,7 +170,7 @@ async function listContent({ gameDir, kind, instance, online = true }) {
         const v = item.sha1 && known[item.sha1];
         if (!v) continue;
         const p = projectById[v.projectId];
-        Object.assign(item, { projectId: v.projectId, versionId: v.id, version: v.number, slug: p?.slug, title: p?.title ?? item.name, icon: p?.icon ?? item.icon });
+        Object.assign(item, { projectId: v.projectId, versionId: v.id, version: v.number, slug: p?.slug, title: p?.title ?? item.name, icon: p?.icon ?? item.icon, gameVersions: v.gameVersions ?? [] });
         const next = latest[item.sha1];
         // Une bêta n'est proposée qu'à qui utilise déjà une bêta.
         const sameChannel = next && (v.type !== 'release' || next.type === 'release');
@@ -184,6 +184,34 @@ async function listContent({ gameDir, kind, instance, online = true }) {
 
   items.sort((a, b) => compareText(a.title ?? a.name, b.title ?? b.name, { sensitivity: 'base' }));
   return { kind, folder: dir, online: identified, items };
+}
+
+/**
+ * Avant de passer l'instance en `target` : pour chaque fichier actif, ce qui arrivera.
+ * same : déjà prévu pour cette version ; update : une version compatible existe sur Modrinth ;
+ * missing : rien pour cette version ; unknown : fichier inconnu de Modrinth (gardé tel quel).
+ * `localMismatch` : fichiers (mods) dont le jar annonce une autre version de Minecraft.
+ */
+async function versionPlan({ gameDir, instance, target, localMismatch = new Set() }) {
+  const plan = [];
+  for (const kind of Object.keys(KINDS)) {
+    const loaders = loadersFor(kind, instance);
+    if (kind === 'mods' && loaders.length === 0) continue;
+    const { items } = await listContent({ gameDir, kind, instance, online: false });
+    const active = items.filter((i) => i.enabled && i.sha1);
+    if (!active.length) continue;
+    const known = await modrinth.versionsByHash(active.map((i) => i.sha1));
+    const latest = await modrinth.latestByHash(Object.keys(known), { loaders, gameVersion: target });
+    for (const item of active) {
+      const v = known[item.sha1];
+      let fate;
+      if (!v) fate = kind === 'mods' && localMismatch.has(item.file) ? 'missing' : 'unknown';
+      else if ((v.gameVersions ?? []).includes(target)) fate = 'same';
+      else fate = latest[item.sha1]?.file ? 'update' : 'missing';
+      plan.push({ kind, file: item.file, name: item.name, fate, number: fate === 'update' ? latest[item.sha1].number : null, known: Boolean(v) });
+    }
+  }
+  return plan;
 }
 
 async function toggle({ gameDir, kind, file }) {
@@ -284,4 +312,4 @@ async function importFiles({ gameDir, kind, paths }) {
   return copied;
 }
 
-module.exports = { KINDS, loadersFor, contentDir, safePath, listContent, toggle, install, update, importFiles };
+module.exports = { KINDS, loadersFor, contentDir, safePath, listContent, versionPlan, toggle, install, update, importFiles };

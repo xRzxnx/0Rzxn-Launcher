@@ -6,6 +6,7 @@ import { loadLauncherPrefs } from './launcher-actions.js';
 import { loadUpdate } from './update-actions.js';
 import { autoTitleMenu } from './title-menu-actions.js';
 import { forgetWorlds } from './worlds-actions.js';
+import { askVersionChange } from './version-actions.js';
 import { activeAccount, dismissToast, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
 
 export async function refreshInstances() {
@@ -152,10 +153,20 @@ export async function createInstance(draft) {
 }
 
 /** Nom, icône ou version (fenêtre « Modifier l'instance »). */
+/**
+ * options : planned (l'aperçu du changement de version a déjà été vu), skipBackup (continuer sans sauvegarde
+ * des mondes), after (suite à exécuter une fois la modification faite : mises à jour de mods, par exemple).
+ */
 export async function editInstance(id, patch, options = {}) {
-  const result = await api.updateInstance(id, patch, options);
+  const { planned = false, skipBackup = false, after = null } = options;
+  const current = state.instances.find((i) => i.id === id);
+  if (!planned && current && typeof patch.version === 'string' && patch.version !== current.version) {
+    await askVersionChange(current, patch);
+    return;
+  }
+  const result = await api.updateInstance(id, patch, { skipBackup });
   if (result?.backupError) {
-    askBackupFailed(result.backupError, { retry: () => editInstance(id, patch), skip: () => editInstance(id, patch, { skipBackup: true }) });
+    askBackupFailed(result.backupError, { retry: () => editInstance(id, patch, { planned, after }), skip: () => editInstance(id, patch, { planned, after, skipBackup: true }) });
     return;
   }
   forgetWorlds(id);
@@ -163,6 +174,7 @@ export async function editInstance(id, patch, options = {}) {
   forgetRamGuide(id);
   update((s) => { s.modal = null; });
   toast({ kind: 'success', title: t('actions.instance_modifiee'), text: patch.name });
+  await after?.();
 }
 
 export async function duplicateInstance(id) {

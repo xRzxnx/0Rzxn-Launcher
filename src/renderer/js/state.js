@@ -61,6 +61,7 @@ export const state = {
     projects: {}, // id → fiche Modrinth | { loading } | { error }
     versions: {}, // « projet:instance:type » → liste | { loading } | { error }
     busy: {}, // projet ou fichier en cours de traitement → true
+    onlyIncompatible: false, // filtre : seulement les fichiers prévus pour une autre version
   },
   resumeMenu: null, // instance dont le menu « Reprendre » est ouvert
   sidebarMenu: null, // menu du clic droit dans la barre latérale : { id, x, y }

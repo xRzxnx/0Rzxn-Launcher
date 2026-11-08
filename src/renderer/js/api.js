@@ -59,6 +59,7 @@ export const api = {
   installContent: wrap((id, kind, projectId, versionId) => bridge.content.install(id, kind, projectId, versionId)),
   updateContent: wrap((id, kind, files) => bridge.content.update(id, kind, files)),
   importContent: wrap((id, kind, paths) => bridge.content.import(id, kind, paths)),
+  versionPlan: wrap((id, target) => bridge.content.versionPlan(id, target)),
   openContentFolder: wrap((id, kind) => bridge.content.openFolder(id, kind)),
   searchModrinth: wrap((params) => bridge.modrinth.search(params)),
   modrinthProject: wrap((id) => bridge.modrinth.project(id)),

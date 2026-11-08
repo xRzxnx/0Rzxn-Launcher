@@ -32,6 +32,13 @@ const SORTS = () => [
   ['newest', t('mods.nouveautes')],
 ];
 
+/** « 1.21.1 à 1.21.5 » ou « 1.20.1, 1.21.1 » : versions de jeu listées sur Modrinth, sans les snapshots. */
+function versionList(list) {
+  const releases = list.filter((v) => /^\d+\.\d+(\.\d+)?$/.test(v));
+  const shown = releases.length ? releases : list;
+  return shown.length > 3 ? t('mods.de_a', { first: shown[0], last: shown[shown.length - 1] }) : shown.join(', ');
+}
+
 function contentIcon(src, size = 44) {
   if (src) return h('img', { class: 'content-icon', src, alt: '', style: `width:${size}px;height:${size}px`, loading: 'lazy' });
   return h('span', { class: 'content-icon content-icon--empty', style: `width:${size}px;height:${size}px`, 'aria-hidden': 'true' }, icon('mods', size / 2));
@@ -72,8 +79,11 @@ function installedView(instance, running) {
   const kind = state.mods.kind;
   const data = installedContent(instance, kind);
   const filter = state.mods.filter.trim().toLowerCase();
-  const items = (data?.items ?? []).filter((i) => !filter || `${i.title ?? ''} ${i.name} ${i.file}`.toLowerCase().includes(filter));
+  const incompatible = (data?.items ?? []).filter((i) => i.incompatible && i.enabled);
+  const onlyBad = state.mods.onlyIncompatible && incompatible.length > 0;
+  const items = (data?.items ?? []).filter((i) => (!filter || `${i.title ?? ''} ${i.name} ${i.file}`.toLowerCase().includes(filter)) && (!onlyBad || (i.incompatible && i.enabled)));
   const updates = (data?.items ?? []).filter((i) => i.update);
+  const fixable = incompatible.filter((i) => i.update);
 
   const rows = items.map((item) =>
     h(
@@ -83,7 +93,18 @@ function installedView(instance, running) {
       h(
         'div',
         { class: 'content-row__body' },
-        h('div', { class: 'content-row__title' }, h('span', null, item.title ?? item.name), item.version && h('span', { class: 'content-row__version' }, item.version)),
+        h(
+          'div',
+          { class: 'content-row__title' },
+          h('span', null, item.title ?? item.name),
+          item.version && h('span', { class: 'content-row__version' }, item.version),
+          item.incompatible &&
+            h(
+              'span',
+              { class: 'tag tag--bad', title: item.gameVersions?.length ? t('mods.prevu_pour', { versions: versionList(item.gameVersions) }) : t('mods.jar_autre_version') },
+              t('mods.pas_pour', { version: instance.version }),
+            ),
+        ),
         h('div', { class: 'content-row__meta' }, h('span', { class: 'mono' }, item.file), item.description && h('span', { class: 'content-row__desc' }, item.description)),
       ),
       h('span', { class: `tag ${item.projectId ? 'tag--release' : 'tag--beta'}` }, item.projectId ? 'Modrinth' : item.isFolder ? t('common.dossier') : 'Local'),
@@ -133,6 +154,20 @@ function installedView(instance, running) {
       h('button', { class: 'btn btn--lg', onClick: () => openContentFolder(instance) }, icon('folder'), t('common.dossier')),
     ),
     kind === 'mods' && instance.loader !== 'vanilla' && data?.items && modSetsBar(instance, data.items, running),
+    incompatible.length > 0 &&
+      h(
+        'div',
+        { class: 'notice notice--bad', style: 'margin:12px 0 0;align-items:center' },
+        icon('alert'),
+        h('span', { style: 'flex:1' }, h('b', null, t('mods.n_pas_prevus', { count: incompatible.length, version: instance.version })), ' ', fixable.length ? t('mods.n_ont_une_version', { count: fixable.length }) : t('mods.aucune_version_compatible')),
+        h(
+          'button',
+          { class: 'chip', 'aria-pressed': onlyBad ? 'true' : 'false', onClick: () => update((s) => { s.mods.onlyIncompatible = !onlyBad; }) },
+          t('mods.voir_seulement_ceux_la'),
+        ),
+        fixable.length > 0 &&
+          h('button', { class: 'btn btn--primary btn--sm', disabled: running || state.mods.busy['*update-all*'], onClick: () => updateItems(instance, fixable.map((i) => i.file)) }, icon('download'), t('mods.mettre_a_jour_n', { count: fixable.length })),
+      ),
     data && !data.online && data.items?.length > 0 && h('p', { class: 'hint', style: 'margin:10px 0 0' }, t('mods.modrinth_injoignable_mises_jour_indisponibles')),
     h(
       'div',
