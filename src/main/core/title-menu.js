@@ -111,9 +111,11 @@ const W = {
 };
 
 // Ces petites icônes n'ont pas de nom dans FancyMenu : il les repère par leur position, calculée sur
-// un écran de 1000 × 1000. Elles changent de place selon la version, et une rangée de plus (Mod Menu)
-// les décale de 24. Toutes les positions connues sont écrites : un numéro absent est simplement ignoré.
-const icon = (spots, position) => spots.flatMap(([x, y]) => [y, y + 24].map((row) => widget(`${x}${row}`, position)));
+// un écran de 1000 × 1000. Elles changent de place selon la version ; une rangée de plus (Mod Menu)
+// les décale de 24, et NeoForge de 8 (boutons remontés de 16, puis sa rangée Mods de 24).
+// Toutes les positions connues sont écrites : un numéro absent est simplement ignoré.
+const ROW_SHIFTS = [0, 8, 24];
+const icon = (spots, position) => spots.flatMap(([x, y]) => ROW_SHIFTS.map((shift) => widget(`${x}${y + shift}`, position)));
 const language = (position) => icon([[376, 382], [490, 370]], position);
 const accessibility = (position) => icon([[604, 382], [514, 370]], position);
 const friends = (position) => icon([[466, 370]], position); // apparue avec 26.3

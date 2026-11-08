@@ -1,9 +1,13 @@
 // Menu Cristal : état affiché dans les paramètres de l'instance et demandes au processus principal.
 import { t } from './i18n.js';
 import { api } from './api.js';
+import { refreshInstalled } from './mods-actions.js';
 import { dismissToast, state, toast, toastError, update } from './state.js';
 
 const pending = new Set();
+
+// FancyMenu et ses dépendances viennent d'arriver : l'accueil et l'onglet Mods doivent les voir.
+const refreshMods = (id) => refreshInstalled({ id }, 'mods');
 
 function store(id, patch) {
   update((s) => {
@@ -44,6 +48,7 @@ export async function enableTitleMenu(id) {
   store(id, { busy: true });
   try {
     store(id, { ...(await api.titleMenuApply(id, { style, card })), busy: false });
+    refreshMods(id);
     toast({ kind: 'success', title: t('titlemenu.active'), text: t('titlemenu.active_texte') });
   } catch (error) {
     store(id, { busy: false });
@@ -65,6 +70,7 @@ export async function autoTitleMenu(instance) {
     const result = await api.titleMenuAuto(instance.id, menu ? { style: menu.style, card: menu.card } : {});
     if (!result.added) return false;
     store(instance.id, await api.titleMenuStatus(instance.id));
+    if (result.installed) refreshMods(instance.id);
     toast({ kind: 'success', title: t('titlemenu.ajoute'), text: t('titlemenu.ajoute_texte') });
     return true;
   } catch {
