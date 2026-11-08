@@ -6,7 +6,7 @@ export const state = {
   appVersion: null,
   microsoftReady: false, // client ID Azure configuré (src/main/microsoft-config.js)
   signingIn: false, // fenêtre de connexion Microsoft ouverte
-  view: 'home', // home | mods | versions | console | settings
+  view: 'home', // home | mods | worlds | versions | console | settings
   instances: [],
   selectedId: null,
   accounts: [],
@@ -61,6 +61,13 @@ export const state = {
     projects: {}, // id → fiche Modrinth | { loading } | { error }
     versions: {}, // « projet:instance:type » → liste | { loading } | { error }
     busy: {}, // projet ou fichier en cours de traitement → true
+  },
+  worlds: {
+    lists: {}, // instance → { loading, worlds, backups, error }
+    selected: {}, // instance → dossier du monde affiché à droite
+    sort: 'last', // last | name | size
+    filter: '',
+    busy: {}, // « instance:dossier » → 'backup' | 'restore'
   },
   perf: {
     guides: {}, // « instance|préréglage » → conseil de mémoire | { loading } | { error }

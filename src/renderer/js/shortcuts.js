@@ -25,7 +25,7 @@ export const SHORTCUTS = () => [
   {
     title: t('shortcuts.navigation'),
     rows: [
-      { label: t('shortcuts.onglets_accueil_versions'), keys: ['Ctrl', '1…3'] },
+      { label: t('shortcuts.onglets_accueil_versions'), keys: ['Ctrl', '1…4'] },
       { label: t('common.console'), keys: ['Ctrl', 'L'] },
       { label: t('common.parametres'), keys: ['Ctrl', ','] },
     ],
@@ -105,7 +105,7 @@ export function handleShortcut(e) {
   } else if (ctrl && !e.shiftKey && key === 'n') {
     e.preventDefault();
     openNewInstance();
-  } else if (ctrl && !e.shiftKey && /^Digit[1-3]$/.test(e.code)) {
+  } else if (ctrl && !e.shiftKey && /^Digit[1-4]$/.test(e.code)) {
     e.preventDefault();
     go(TABS[Number(e.code.slice(5)) - 1].id);
   } else if (ctrl && !e.shiftKey && key === 'l') {

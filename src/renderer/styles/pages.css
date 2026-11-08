@@ -578,6 +578,84 @@
 }
 
 .notice .icon { width: 16px; height: 16px; margin-top: 1px; }
+.notice--warn { color: #fff3c4; background: rgba(252, 211, 77, 0.12); border-color: rgba(252, 211, 77, 0.35); }
+.notice--warn .icon { color: var(--warn-text); }
+
+/* ---------- Mondes ---------- */
+.world-total { font-size: 13.5px; color: var(--muted); }
+
+.worlds-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.worlds-layout .content-list { margin-top: 0; }
+
+.world-row {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.world-icon {
+  flex: none;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  image-rendering: pixelated;
+  box-shadow: inset 0 0 0 1px var(--line-3);
+}
+
+.world-icon--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: var(--panel-2);
+}
+
+.world-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.world-row__title { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 600; flex-wrap: wrap; }
+.world-row__meta { font-size: 13px; color: var(--muted); }
+.world-row__side { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 13.5px; white-space: nowrap; }
+
+.world-detail {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+}
+
+.world-detail__head { display: flex; align-items: center; gap: 14px; }
+.world-detail__head h2 { margin: 0 0 4px; font-size: 21px; line-height: 1.25; overflow-wrap: anywhere; }
+
+.world-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.world-fact { padding: 8px 11px; border-radius: var(--r-sm); background: var(--bg-deep); min-width: 0; }
+.world-fact span { display: block; font-size: 12px; color: var(--muted); }
+.world-fact b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.world-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.world-actions .btn { justify-content: center; }
+
+.world-progress { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+.world-progress .progress { flex: 1; }
+
+.world-detail__label { display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; }
+.world-detail__label span:last-child { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+
+.backup-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.backup-row { display: flex; align-items: center; gap: 8px; padding: 7px 6px 7px 11px; border-radius: var(--r-sm); background: var(--bg-deep); }
+.backup-row__body { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13.5px; }
+.backup-row__body span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- Console ---------- */
 .console__filters {

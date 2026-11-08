@@ -14,10 +14,11 @@ import { activeAccount, instanceStatus, state, update } from '../state.js';
 export const TABS = [
   { id: 'home', get label() { return t('chrome.accueil'); }, icon: 'home' },
   { id: 'mods', label: 'Mods', icon: 'mods' },
+  { id: 'worlds', get label() { return t('chrome.mondes'); }, icon: 'worlds' },
   { id: 'versions', get label() { return t('common.versions'); }, icon: 'versions' },
 ];
 // Onglets propres à une instance : on y reste quand on change d'instance dans la barre latérale.
-const INSTANCE_VIEWS = new Set(['mods']);
+const INSTANCE_VIEWS = new Set(['mods', 'worlds']);
 
 export function go(view) {
   update((s) => {

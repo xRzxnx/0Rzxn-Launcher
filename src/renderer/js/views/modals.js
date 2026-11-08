@@ -20,6 +20,7 @@ import { recapDialog } from './recap.js';
 import { paletteDialog } from './palette.js';
 import { wizardDialog } from './wizard.js';
 import { modSetDeleteDialog, modSetDialog } from './mod-sets.js';
+import { worldsDialog } from './worlds.js';
 
 export const BLOCKS = () => [
   ['grass', t('modals.herbe')], ['diamond', t('modals.diamant')], ['stone', t('modals.pierre')],
@@ -487,6 +488,7 @@ export function renderModal() {
   if (modal.type === 'clean-storage') return cleanDialog(modal);
   if (modal.type === 'perf-pack') return packDialog(modal);
   if (modal.type === 'gpu-confirm') return gpuConfirmDialog(modal);
+  if (modal.type === 'restore-world' || modal.type === 'delete-world') return worldsDialog(modal);
   return null;
 }
 

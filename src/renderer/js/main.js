@@ -7,6 +7,7 @@ import { renderHome } from './views/home.js';
 import { renderSettings } from './views/settings.js';
 import { renderMods } from './views/mods.js';
 import { renderVersions } from './views/versions.js';
+import { renderWorlds } from './views/worlds.js';
 import { handleShortcut } from './shortcuts.js';
 import { init } from './actions.js';
 import { checkOtherInstances } from './mods-actions.js';
@@ -20,11 +21,12 @@ const $ = (id) => document.getElementById(id);
 const VIEWS = {
   home: renderHome,
   mods: renderMods,
+  worlds: renderWorlds,
   versions: renderVersions,
   console: renderConsole,
   settings: renderSettings,
 };
-const FLUSH_VIEWS = new Set(['versions', 'console', 'mods']);
+const FLUSH_VIEWS = new Set(['versions', 'console', 'mods', 'worlds']);
 
 let lastView = null;
 

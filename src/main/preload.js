@@ -33,6 +33,14 @@ contextBridge.exposeInMainWorld('launcher', {
     check: invoke('modcheck:run'),
     resolveDeps: invoke('modcheck:resolve'),
   },
+  worlds: {
+    list: invoke('worlds:list'),
+    backup: invoke('worlds:backup'),
+    restore: invoke('worlds:restore'),
+    remove: invoke('worlds:delete'),
+    removeBackup: invoke('worlds:deleteBackup'),
+    openFolder: invoke('worlds:openFolder'),
+  },
   titleMenu: {
     status: invoke('titlemenu:status'),
     apply: invoke('titlemenu:apply'),
