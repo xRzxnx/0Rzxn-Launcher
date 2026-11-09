@@ -44,6 +44,15 @@ test('contrat : les événements envoyés sont ceux écoutés par preload.js', (
   assert.deepEqual(listened, ['app:launchRequest', 'launch:logs', 'launch:progress', 'launch:reset', 'launch:status', 'task:progress', 'update:status']);
 });
 
+test('contrat : le fichier de types suit preload.js (canaux et événements)', () => {
+  const file = path.join(MAIN, 'ipc', 'types.d.ts');
+  const types = fs.readFileSync(file, 'utf8');
+  const union = types.slice(types.indexOf('export type InvokeChannel'), types.indexOf(';', types.indexOf('export type InvokeChannel')));
+  assert.deepEqual(names(union, /'([\w:]+)'/g).sort(), names(preload, /invoke\('([\w:]+)'\)/g).sort());
+  const events = types.slice(types.indexOf('export interface Events'));
+  assert.deepEqual(names(events, /'([\w:]+)':/g).sort(), names(preload, /listen\('([\w:]+)'\)/g).sort());
+});
+
 test('origine : un message venu d’une autre page est refusé', async (t) => {
   const ipc = startIpc(t);
   await assert.rejects(ipc.invokeAs({}, 'app:info'), { message: tr('ipc.origine_refusee') });

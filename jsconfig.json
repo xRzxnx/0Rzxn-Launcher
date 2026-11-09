@@ -13,5 +13,5 @@
     "useUnknownInCatchVariables": false,
     "skipLibCheck": true
   },
-  "include": ["src/main/**/*.js"]
+  "include": ["src/main/**/*.js", "src/main/**/*.d.ts"]
 }
