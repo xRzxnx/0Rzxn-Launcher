@@ -82,9 +82,9 @@ const NETTOYAGE_DELAI = 5 * 1000;
 
 /** Après une installation manuelle : attend que la fenêtre soit ouverte pour ne pas ralentir le démarrage. */
 function planifierNettoyage() {
-  if (!app.isPackaged || process.platform !== 'win32') return;
+  if (!app.isPackaged) return;
   setTimeout(() => {
-    require('./core/anciennes-versions').apresInstallation({
+    require('./platform').apresInstallation({
       donnees: app.getPath('userData'),
       executable: process.execPath,
       produit: app.getName(),
