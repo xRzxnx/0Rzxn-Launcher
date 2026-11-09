@@ -248,6 +248,7 @@ async function deleteWorld({ gameDir, folder, trash }) {
 
 /** Nom de dossier valide sous Windows. */
 function safeFolderName(name) {
+  // eslint-disable-next-line no-control-regex
   const clean = String(name).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, '').trim();
   return clean && !clean.startsWith(TEMP_PREFIX) && !/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(clean) ? clean.slice(0, 80) : 'World';
 }

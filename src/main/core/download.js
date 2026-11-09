@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 // Téléchargements vérifiés : SHA-1, taille, 3 essais, plusieurs fichiers en parallèle.
@@ -10,6 +11,10 @@ const path = require('node:path');
 const USER_AGENT = '0Rzxn_Launcher/0.1';
 const TIMEOUT_MS = 30_000;
 
+/** @typedef {{ url: string, path: string, sha1?: string | null, size?: number | null }} DownloadTask */
+/** @typedef {{ done: number, total: number, doneBytes: number, totalBytes: number }} DownloadProgress */
+
+/** @param {string} url @param {{ signal?: AbortSignal }} [options] */
 async function request(url, { signal } = {}) {
   const timeout = AbortSignal.timeout(TIMEOUT_MS);
   const res = await fetch(url, {
@@ -58,7 +63,12 @@ async function isValid(task, verify) {
   return stat.size > 0;
 }
 
-/** Télécharge `task` ({ url, path, sha1?, size? }) si besoin. Renvoie true si un téléchargement a eu lieu. */
+/**
+ * Télécharge `task` ({ url, path, sha1?, size? }) si besoin. Renvoie true si un téléchargement a eu lieu.
+ * @param {DownloadTask} task
+ * @param {{ signal?: AbortSignal, verify?: boolean, retries?: number }} [options]
+ * @returns {Promise<boolean>}
+ */
 async function downloadFile(task, { signal, verify = false, retries = 3 } = {}) {
   if (await isValid(task, verify)) return false;
   let lastError;
@@ -84,6 +94,8 @@ async function downloadFile(task, { signal, verify = false, retries = 3 } = {}) 
 /**
  * Télécharge une liste de fichiers (16 à la fois par défaut).
  * onProgress reçoit { done, total, doneBytes, totalBytes }, au plus toutes les 100 ms.
+ * @param {DownloadTask[]} tasks
+ * @param {{ concurrency?: number, signal?: AbortSignal, verify?: boolean, onProgress?: (progress: DownloadProgress) => void }} [options]
  */
 async function downloadAll(tasks, { concurrency = 16, signal, verify = false, onProgress } = {}) {
   const unique = [...new Map(tasks.map((t) => [path.resolve(t.path).toLowerCase(), t])).values()];
@@ -123,9 +135,9 @@ async function downloadAll(tasks, { concurrency = 16, signal, verify = false, on
 
   if (errors.length) {
     const first = errors[0];
-    const error = new Error(
+    const error = /** @type {Error & { code?: string }} */ (new Error(
       t('download.failed', { count: errors.length, file: path.basename(first.task.path), error: first.error.message }),
-    );
+    ));
     error.code = 'DOWNLOAD_FAILED';
     throw error;
   }

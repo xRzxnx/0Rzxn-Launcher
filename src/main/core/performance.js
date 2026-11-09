@@ -40,7 +40,10 @@ function userChoosesGc(jvmArgs) {
   return /-XX:\+Use\w*GC\b/.test(jvmArgs ?? '');
 }
 
-/** Ramasse-miettes réellement utilisé : 'g1', 'zgc' ou 'none' (celui de Java par défaut). */
+/**
+ * Ramasse-miettes réellement utilisé : 'g1', 'zgc' ou 'none' (celui de Java par défaut).
+ * @param {{ preset?: string, javaMajor: number, ramGb?: number, cpus?: number, jvmArgs?: string }} options
+ */
 function resolveGc({ preset = 'auto', javaMajor, ramGb = 0, cpus = os.cpus().length, jvmArgs = '' }) {
   if (preset === 'none' || userChoosesGc(jvmArgs)) return 'none';
   // ZGC travaille en parallèle du jeu : il lui faut Java 21 (générationnel), assez de cœurs et un tas assez grand.
@@ -50,7 +53,10 @@ function resolveGc({ preset = 'auto', javaMajor, ramGb = 0, cpus = os.cpus().len
   return zgcOk && cpus >= ZGC_MIN_CPUS && ramGb >= ZGC_MIN_RAM ? 'zgc' : 'g1';
 }
 
-/** Arguments de mémoire et de ramasse-miettes, placés avant ceux de l'utilisateur (qui gardent le dernier mot). */
+/**
+ * Arguments de mémoire et de ramasse-miettes, placés avant ceux de l'utilisateur (qui gardent le dernier mot).
+ * @param {{ preset?: string, javaMajor: number, ramGb: number, jvmArgs?: string, cpus?: number }} options
+ */
 function jvmArguments({ preset = 'auto', javaMajor, ramGb, jvmArgs = '', cpus }) {
   const memory = Math.round(ramGb * 1024);
   const gc = resolveGc({ preset, javaMajor, ramGb, cpus, jvmArgs });

@@ -277,7 +277,7 @@ async function apresInstallation({ donnees, executable, bureau, ...options }) {
   const marque = path.join(donnees, MARQUE);
   let prevu;
   try {
-    prevu = (await fsp.readFile(marque, 'utf16le')).replace(/^﻿/, '').trim();
+    prevu = (await fsp.readFile(marque, 'utf16le')).replace(/^\uFEFF/, '').trim();
   } catch {
     return;
   }

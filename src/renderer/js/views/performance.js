@@ -6,8 +6,6 @@ import { setLauncherPref } from '../launcher-actions.js';
 import { state, update } from '../state.js';
 import { close, dialog } from './modals.js';
 
-const GC_LABELS = { get zgc() { return t('performance.zgc_generationnel'); }, get g1() { return t('performance.g1_regle_pour_le_jeu'); }, get none() { return t('performance.celui_de_java_par_defaut'); } };
-
 function presetDetail(id, preview, settings) {
   const java = preview?.javaMajor;
   if (id === 'auto') {

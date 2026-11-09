@@ -2,7 +2,7 @@
 import { api } from './api.js';
 import { editInstance } from './actions.js';
 import { t } from './i18n.js';
-import { state, toast, toastError, update } from './state.js';
+import { toast, toastError, update } from './state.js';
 
 /**
  * Appelé quand la fenêtre de modification change la version : calcule le plan et l'affiche.

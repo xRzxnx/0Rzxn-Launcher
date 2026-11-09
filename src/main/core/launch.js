@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 // Pipeline de lancement : chaque étape est annoncée pour la barre de progression.
@@ -247,7 +248,7 @@ class LaunchSession extends EventEmitter {
       this.log(t('launch.minecraft_demarre_processus', { pid: child.pid }));
       if (priority === 'above') {
         try {
-          os.setPriority(child.pid, os.constants.priority.PRIORITY_ABOVE_NORMAL);
+          os.setPriority(/** @type {number} */ (child.pid), os.constants.priority.PRIORITY_ABOVE_NORMAL);
           this.log(t('launch.priorite_du_jeu_au_dessus'));
         } catch (error) {
           this.log(t('launch.priorite_du_jeu_inchangee', { code: error.code ?? error.message }), 'LAUNCHER/WARN');
@@ -255,7 +256,7 @@ class LaunchSession extends EventEmitter {
       }
       this.emit('running', { pid: child.pid });
     });
-    child.once('error', (error) => {
+    child.once('error', (/** @type {NodeJS.ErrnoException} */ error) => {
       if (reported) return;
       reported = true;
       this.log(t('launch.impossible_de_demarrer_java', { message: error.message }), 'LAUNCHER/ERROR');

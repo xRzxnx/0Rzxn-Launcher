@@ -120,5 +120,6 @@ module.exports = {
   getVersionJson,
   versionDetails,
   versionFiles,
+  mergeVersions,
   isInstalled,
 };

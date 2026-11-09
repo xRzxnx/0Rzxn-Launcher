@@ -234,4 +234,4 @@ async function exportPack({ instance, gameDir, name, version, summary }) {
   return { buffer, referenced: files.length, embedded: archive.length };
 }
 
-module.exports = { readPack, downloadPack, installPack, updatePack, checkUpdate, exportPack };
+module.exports = { readPack, safeTarget, fileTasks, downloadPack, installPack, updatePack, checkUpdate, exportPack };
