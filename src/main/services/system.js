@@ -13,7 +13,7 @@ const versions = require('../core/versions');
 const storage = require('../core/storage');
 const performance = require('../core/performance');
 const profiles = require('../core/profiles');
-const gpu = require('../core/gpu');
+const { gpu } = require('../platform');
 const { readHardware } = require('../core/hardware');
 const { findSystemJavas } = require('../core/java');
 
