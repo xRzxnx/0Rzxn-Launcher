@@ -1,18 +1,16 @@
 'use strict';
 
 // Pont entre l'interface et le cœur : chaque canal valide ses entrées avant d'agir.
-const { SUPPORTED, currentLanguage, resolveLanguage, setLanguage, t } = require('./i18n');
-const { app, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
+const { currentLanguage, resolveLanguage, setLanguage, t } = require('./i18n');
+const { app, dialog, ipcMain, protocol, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { AccountStore } = require('./core/accounts');
 const { journal } = require('./core/journal');
-const { InstanceStore, DEFAULT_SETTINGS, sanitizeSettings } = require('./core/instances');
+const { sanitizeSettings } = require('./core/instances');
 const { LaunchSession, quickPlayFile } = require('./core/launch');
 const microsoft = require('./core/microsoft');
 const { SkinStore, Wardrobe } = require('./core/skins');
-const { gameDirs, readJson, writeJson } = require('./core/store');
 const versions = require('./core/versions');
 const { availableLoaders } = require('./core/loaders');
 const content = require('./core/content');
@@ -37,6 +35,7 @@ const { LauncherTray } = require('./tray');
 const discordConfig = require('./discord-config');
 const { clientId: MICROSOFT_CLIENT_ID } = require('./microsoft-config');
 const { promptMicrosoftLogin } = require('./microsoft-login');
+const { createServices } = require('./services/container');
 
 const LOG_BUFFER = 5000;
 
@@ -53,81 +52,7 @@ function updateLog(file) {
   return { info: write('info'), warn: write('warn'), error: write('error') };
 }
 
-/** Chiffre les jetons Microsoft avec la protection de Windows (DPAPI), liée à ta session Windows. */
-const vault = {
-  encrypt(text) {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error(t('ipc.le_chiffrement_de_windows_est'));
-    return `enc:${safeStorage.encryptString(text).toString('base64')}`;
-  },
-  decrypt(data) {
-    if (!data?.startsWith('enc:')) throw new Error(t('ipc.session_illisible'));
-    return safeStorage.decryptString(Buffer.from(data.slice(4), 'base64'));
-  },
-};
-
-function createServices() {
-  const configDir = app.getPath('userData');
-  const dirs = gameDirs(path.join(app.getPath('appData'), '.0rzxn'));
-  for (const dir of [dirs.instances, dirs.cache]) fs.mkdirSync(dir, { recursive: true });
-  return {
-    dirs,
-    accounts: new AccountStore(configDir, {
-      vault,
-      renew: MICROSOFT_CLIENT_ID ? (refreshToken) => microsoft.renew(MICROSOFT_CLIENT_ID, refreshToken) : null,
-    }),
-    instances: new InstanceStore(dirs),
-    settings: createSettingsStore(path.join(configDir, 'settings.json')),
-  };
-}
-
-// Réglages du launcher lui-même (Paramètres › Launcher).
-// lightMode : le launcher se met en veille pendant une partie ; gpuHighPerformance : accord donné pour la carte dédiée.
-const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true };
-const ACCENTS = new Set(['violet', 'bleu', 'cyan', 'vert', 'ambre', 'rouge', 'rose']);
 const LOADER_NAMES = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
-
-function sanitizeLauncher(input, base = LAUNCHER_DEFAULTS) {
-  const s = { ...base };
-  if (input == null) return s;
-  if (input.language === 'auto' || SUPPORTED.includes(input.language)) s.language = input.language;
-  // Couleur d'accent : un thème prédéfini ou une couleur perso « #rrggbb ».
-  if (ACCENTS.has(input.accent) || /^#[0-9a-f]{6}$/i.test(input.accent ?? '')) s.accent = input.accent.toLowerCase();
-  for (const key of ['discord', 'discordShowName', 'tray', 'closeToTray', 'lightMode', 'gpuHighPerformance', 'autoUpdate']) if (typeof input[key] === 'boolean') s[key] = input[key];
-  return s;
-}
-
-/** settings.json : réglages par défaut des instances, réglages du launcher et petites préférences d'interface. */
-function createSettingsStore(file) {
-  const read = () => readJson(file, {});
-  return {
-    defaults: () => sanitizeSettings(read().defaults ?? DEFAULT_SETTINGS),
-    setDefaults(patch) {
-      const data = read();
-      data.defaults = sanitizeSettings(patch, sanitizeSettings(data.defaults ?? DEFAULT_SETTINGS));
-      writeJson(file, data);
-      return data.defaults;
-    },
-    launcher: () => sanitizeLauncher(read().launcher),
-    setLauncher(patch) {
-      const data = read();
-      data.launcher = sanitizeLauncher(patch, sanitizeLauncher(data.launcher));
-      writeJson(file, data);
-      return data.launcher;
-    },
-    ui: () => ({ selectedId: null, ...read().ui }),
-    setUi(patch) {
-      const data = read();
-      const ui = { ...data.ui };
-      if (typeof patch.selectedId === 'string' || patch.selectedId === null) ui.selectedId = patch.selectedId;
-      // Groupes repliés dans la barre latérale, et date des derniers rapports de crash vus.
-      if (Array.isArray(patch.collapsedGroups)) ui.collapsedGroups = patch.collapsedGroups.filter((g) => typeof g === 'string').slice(0, 100);
-      if (Number.isFinite(patch.crashesSeenAt)) ui.crashesSeenAt = patch.crashesSeenAt;
-      data.ui = ui;
-      writeJson(file, data);
-      return data.ui;
-    },
-  };
-}
 
 /** Une seule partie (ou préparation) à la fois, comme dans l'interface. */
 class LaunchManager {
