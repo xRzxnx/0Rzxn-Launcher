@@ -10,17 +10,25 @@
   "scripts": {
     "start": "electron .",
     "apercu": "electron scripts/apercu.js",
+    "test": "node --test test/*.test.js",
+    "check:types": "tsc --noEmit -p jsconfig.json",
+    "lint": "eslint .",
+    "check:i18n": "node scripts/check-i18n.js",
     "dist": "electron-builder --win --publish never",
     "icon": "electron scripts/make-icon.js",
-    "publier": "node scripts/publier.js",
-    "check:i18n": "node scripts/check-i18n.js"
+    "publier": "node scripts/publier.js"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@fontsource/geist-mono": "5.3.0",
     "@fontsource/geist-sans": "5.3.0",
     "@fontsource/pixelify-sans": "5.3.0",
+    "@types/node": "24.19.2",
     "electron": "45.2.1",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "typescript": "7.0.2"
   },
   "build": {
     "appId": "com.0rzxn.launcher",

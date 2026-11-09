@@ -67,6 +67,7 @@ class GameLogParser {
 
   plain(text) {
     // Forge colore sa sortie (codes ANSI) et Java peut écrire « \r\r\n » sous Windows : on nettoie.
+    // eslint-disable-next-line no-control-regex
     for (const line of text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r/g, '').split('\n')) {
       if (!line.trim()) continue;
       const match = line.match(PLAIN_LINE);

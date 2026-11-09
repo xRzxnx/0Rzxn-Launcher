@@ -6,7 +6,6 @@ import { api } from './api.js';
 import { forgetRamGuide, selectedInstance, state, toast, toastError, update } from './state.js';
 
 export const KIND_LABELS = { mods: 'Mods', get resourcepacks() { return t('mods.packs_de_ressources'); }, shaders: 'Shaders', modpacks: 'Modpacks' };
-const SINGULAR = { mods: 'mod', get resourcepacks() { return t('mods.pack_de_ressources'); }, shaders: 'shader' };
 
 const keyOf = (instance, kind) => `${instance.id}:${kind}`;
 

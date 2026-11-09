@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 // Comptes hors-ligne et Microsoft. Les jetons Microsoft sont chiffrés par un « coffre » fourni
@@ -27,7 +28,7 @@ const PLAIN_VAULT = {
 class AccountStore {
   /**
    * @param {string} configDir
-   * @param {{ vault?: { encrypt(text): string, decrypt(data): string }, renew?: (refreshToken) => Promise<object> }} options
+   * @param {{ vault?: { encrypt(text: string): string, decrypt(data: string): string }, renew?: ((refreshToken: string) => Promise<any>) | null }} [options]
    *   renew : renouvelle une session Microsoft (core/microsoft.js renew, avec le client ID).
    */
   constructor(configDir, { vault = PLAIN_VAULT, renew = null } = {}) {
@@ -139,6 +140,9 @@ class AccountStore {
   /**
    * Jetons d'un compte Microsoft, renouvelés s'ils expirent dans moins de 10 minutes
    * (ou tout de suite avec `force`). `log` reçoit les messages à afficher dans la console.
+   * @param {any} account
+   * @param {(message: string) => void} [log]
+   * @param {{ force?: boolean }} [options]
    */
   async freshSecrets(account, log = () => {}, { force = false } = {}) {
     let secrets;

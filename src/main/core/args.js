@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 // Construction de la ligne de commande Java : formats moderne (arguments) et ancien (minecraftArguments).
@@ -39,6 +40,7 @@ function serverTarget(address) {
  * `quickPlay` : { type: 'singleplayer' | 'multiplayer', id } pour entrer directement dans un monde ou sur un serveur ;
  * `quickPlayPath` : fichier où le jeu note le monde ou le serveur rejoint (1.20 et plus).
  * Avant 1.20, seul un serveur peut être rejoint au démarrage (--server / --port).
+ * @param {{ version: any, vars: Record<string, any>, settings: any, loggingConfig?: string | null, quickPlay?: { type: string, id: string, name?: string } | null, quickPlayPath?: string | null, javaMajor?: number }} options
  * @returns {{ jvm: string[], game: string[], librarySearchPath: string, gc: string, quickPlay: string | null }}
  */
 function buildArguments({ version, vars, settings, loggingConfig, quickPlay = null, quickPlayPath = null, javaMajor = version.javaVersion?.majorVersion ?? 8 }) {

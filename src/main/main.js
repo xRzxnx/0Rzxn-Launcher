@@ -1,7 +1,9 @@
 'use strict';
 
 const { app, BrowserWindow, Menu, protocol, shell } = require('electron');
+const os = require('node:os');
 const path = require('node:path');
+const { journal, openJournal } = require('./core/journal');
 const { registerIpc } = require('./ipc');
 
 protocol.registerSchemesAsPrivileged([
@@ -50,13 +52,15 @@ function createWindow() {
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+  mainWindow.webContents.on('render-process-gone', (_event, details) => journal.error('Renderer process gone:', details));
+  mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => journal.error(`Preload failed (${preloadPath}):`, error));
 
-  // En développement, les erreurs de l'interface s'affichent aussi dans le terminal.
-  if (!app.isPackaged) {
-    mainWindow.webContents.on('console-message', ({ level, message, sourceId, lineNumber }) => {
-      if (level === 'warning' || level === 'error') console.log(`[interface:${level}] ${message} (${sourceId}:${lineNumber})`);
-    });
-  }
+  // Les erreurs de l'interface vont dans le journal, et aussi dans le terminal en développement.
+  mainWindow.webContents.on('console-message', ({ level, message, sourceId, lineNumber }) => {
+    if (level !== 'warning' && level !== 'error') return;
+    journal[level === 'error' ? 'error' : 'warn'](`[renderer] ${message} (${sourceId}:${lineNumber})`);
+    if (!app.isPackaged) console.log(`[interface:${level}] ${message} (${sourceId}:${lineNumber})`);
+  });
 
   // Option « Fermer la fenêtre garde le launcher ouvert » : la fenêtre se cache dans la zone de notification.
   mainWindow.on('close', (event) => {
@@ -94,6 +98,19 @@ function planifierNettoyage() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  openJournal({ dir: path.join(app.getPath('userData'), 'logs'), level: app.isPackaged ? 'info' : 'debug' });
+  journal.info(`0Rzxn_ Launcher ${app.getVersion()}${app.isPackaged ? '' : ' (sources)'}, Electron ${process.versions.electron}, ${process.platform} ${os.release()} ${process.arch}`);
+  // Erreurs non gérées : notées sans changer le comportement d'Electron (boîte d'erreur pour une exception,
+  // simple avertissement dans la console pour une promesse rejetée, que l'on réécrit puisque l'écouteur le retire).
+  process.on('uncaughtExceptionMonitor', (error, origin) => journal.error(`Uncaught exception (${origin}):`, error));
+  process.on('unhandledRejection', (reason) => {
+    journal.error('Unhandled promise rejection:', reason);
+    console.warn('Unhandled promise rejection:', reason);
+  });
+  app.on('child-process-gone', (_event, details) => {
+    if (details.reason !== 'clean-exit') journal.warn('Child process gone:', details);
+  });
+  app.on('before-quit', () => journal.info('Quitting'));
   app.on('before-quit', () => ipc?.beforeQuit());
   app.on('second-instance', (_event, argv) => {
     if (!mainWindow) return;

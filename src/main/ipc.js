@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { AccountStore } = require('./core/accounts');
+const { journal } = require('./core/journal');
 const { InstanceStore, DEFAULT_SETTINGS, sanitizeSettings } = require('./core/instances');
 const { LaunchSession, quickPlayFile } = require('./core/launch');
 const microsoft = require('./core/microsoft');
@@ -326,10 +327,21 @@ function registerIpc(getWindow) {
   const wardrobe = new Wardrobe({ accounts, store: skins });
   const launches = new LaunchManager(services, getWindow);
 
+  // Les erreurs renvoyées à l'interface sont aussi notées dans le journal.
+  const failed = (channel, error) => {
+    journal.warn(`IPC ${channel} failed:`, error);
+    throw error;
+  };
   const handle = (channel, fn) =>
     ipcMain.handle(channel, (event, ...args) => {
       if (event.sender !== getWindow()?.webContents) throw new Error(t('ipc.origine_refusee'));
-      return fn(...args);
+      let result;
+      try {
+        result = fn(...args);
+      } catch (error) {
+        failed(channel, error);
+      }
+      return result instanceof Promise ? result.catch((error) => failed(channel, error)) : result;
     });
   const text = (value) => (typeof value === 'string' ? value : '');
 
