@@ -30,7 +30,6 @@ function isIntegrated({ name, pnp }) {
 
 /** Cartes graphiques physiques (les écrans virtuels et le bureau à distance sont ignorés). */
 async function listGpus() {
-  if (process.platform !== 'win32') return [];
   if (cache) return cache;
   const script = 'Get-CimInstance Win32_VideoController | Select-Object Name,PNPDeviceID | ConvertTo-Json -Compress';
   const out = await runner('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
@@ -65,4 +64,4 @@ async function clearPreference(exes) {
   }
 }
 
-module.exports = { KEY, HIGH, setRunner, isIntegrated, listGpus, preference, setHighPerformance, clearPreference };
+module.exports = { supported: true, KEY, HIGH, setRunner, isIntegrated, listGpus, preference, setHighPerformance, clearPreference };

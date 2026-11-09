@@ -6,7 +6,7 @@ const { app } = require('electron');
 const fs = require('node:fs');
 const { LaunchSession, quickPlayFile } = require('../core/launch');
 const crashes = require('../core/crashes');
-const gpu = require('../core/gpu');
+const { gpu } = require('../platform');
 const worlds = require('../core/worlds');
 
 const LOG_BUFFER = 5000;
@@ -165,7 +165,7 @@ class LaunchManager {
 
   /** Accord donné pour la carte dédiée : chaque nouveau java.exe la reçoit aussi. */
   async prepareJava(exe, log) {
-    if (process.platform !== 'win32' || !this.services.settings.launcher().gpuHighPerformance) return;
+    if (!gpu.supported || !this.services.settings.launcher().gpuHighPerformance) return;
     if ((await gpu.preference(exe)) === 'high') return;
     await gpu.setHighPerformance([exe]);
     log(t('ipc.carte_graphique_dediee_choisie_pour'));

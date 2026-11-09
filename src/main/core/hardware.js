@@ -2,23 +2,10 @@
 
 // Composants du PC : mémoire, processeur et carte graphique, lus une fois puis gardés en mémoire.
 const { gb, t } = require('../i18n');
-const { execFile } = require('node:child_process');
 const os = require('node:os');
-const gpu = require('./gpu');
+const platform = require('../platform');
 
 let cache = null;
-
-/** Cœurs physiques ; `os.cpus()` compte les cœurs logiques. Null si Windows ne répond pas. */
-function physicalCores() {
-  if (process.platform !== 'win32') return Promise.resolve(null);
-  const script = '(Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum';
-  return new Promise((resolve) => {
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 15_000 }, (error, stdout) => {
-      const cores = Number.parseInt(stdout, 10);
-      resolve(!error && cores > 0 ? cores : null);
-    });
-  });
-}
 
 /** « NVIDIA GeForce RTX 3060 » → « RTX 3060 ». */
 function shortGpuName(name) {
@@ -44,7 +31,7 @@ function describe({ totalGb, cpu, cores, threads, card }) {
 }
 
 async function loadHardware() {
-  const [cores, gpus] = await Promise.all([physicalCores(), gpu.listGpus().catch(() => [])]);
+  const [cores, gpus] = await Promise.all([platform.physicalCores(), platform.gpu.listGpus().catch(() => [])]);
   const list = os.cpus();
   const card = mainGpu(gpus);
   const totalGb = Math.round(os.totalmem() / 1024 ** 3);
