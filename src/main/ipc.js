@@ -1,7 +1,7 @@
 'use strict';
 
 // Pont entre l'interface et le cœur : chaque canal valide ses entrées avant d'agir.
-const { currentLanguage, resolveLanguage, setLanguage, t } = require('./i18n');
+const { resolveLanguage, setLanguage, t } = require('./i18n');
 const { app, dialog, ipcMain, protocol, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -12,45 +12,26 @@ const microsoft = require('./core/microsoft');
 const { SkinStore, Wardrobe } = require('./core/skins');
 const versions = require('./core/versions');
 const { availableLoaders } = require('./core/loaders');
-const content = require('./core/content');
-const modCheck = require('./core/mod-check');
-const modDeps = require('./core/mod-deps');
-const modSets = require('./core/mod-sets');
 const modrinth = require('./core/modrinth');
-const titleMenu = require('./core/title-menu');
 const modpacks = require('./core/modpacks');
 const profiles = require('./core/profiles');
 const importer = require('./core/importer');
-const crashes = require('./core/crashes');
 const worlds = require('./core/worlds');
 const storage = require('./core/storage');
 const performance = require('./core/performance');
 const gpu = require('./core/gpu');
 const { readHardware } = require('./core/hardware');
-const { UpdateManager } = require('./core/updates');
 const { findSystemJavas } = require('./core/java');
-const { DiscordPresence, gameActivity } = require('./core/discord');
-const { LauncherTray } = require('./tray');
 const discordConfig = require('./discord-config');
 const { clientId: MICROSOFT_CLIENT_ID } = require('./microsoft-config');
 const { promptMicrosoftLogin } = require('./microsoft-login');
 const { createServices } = require('./services/container');
 const { LaunchManager, quickPlayTarget } = require('./services/launches');
-
-/** Journal des mises à jour : un fichier par session, pour comprendre un échec chez un utilisateur. */
-function updateLog(file) {
-  fs.rmSync(file, { force: true });
-  const write = (level) => (message) => {
-    try {
-      fs.appendFileSync(file, `${new Date().toISOString()} ${level} ${message}\n`);
-    } catch {
-      // le journal ne doit jamais gêner la mise à jour
-    }
-  };
-  return { info: write('info'), warn: write('warn'), error: write('error') };
-}
-
-const LOADER_NAMES = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
+const { createTaskRunner } = require('./services/tasks');
+const { createBackups } = require('./services/backups');
+const { createContentService } = require('./services/content');
+const { createCrashService } = require('./services/crashes');
+const { createShell } = require('./services/shell');
 
 function registerIpc(getWindow) {
   const services = createServices();
@@ -86,6 +67,11 @@ function registerIpc(getWindow) {
       return result instanceof Promise ? result.catch((error) => failed(channel, error)) : result;
     });
   const text = (value) => (typeof value === 'string' ? value : '');
+  const openDir = async (dir) => {
+    fs.mkdirSync(dir, { recursive: true });
+    const error = await shell.openPath(dir);
+    if (error) throw new Error(error);
+  };
 
   handle('app:info', () => ({
     version: app.getVersion(),
@@ -178,226 +164,66 @@ function registerIpc(getWindow) {
     return path.basename(file);
   });
   // ---------- Contenu des instances (mods, packs, shaders) et Modrinth ----------
-  const contentCtx = (id, kind) => {
-    const instance = instances.get(text(id));
-    content.contentDir(instances.gameDir(instance.id), text(kind)); // valide le type
-    return { instance, gameDir: instances.gameDir(instance.id), kind: text(kind) };
-  };
   const trash = (file) => shell.trashItem(file);
-  // Mods dont le jar annonce une autre version de Minecraft (d'après le diagnostic).
-  const mismatchedJars = async (gameDir, instance) => {
-    try {
-      const { problems } = await modCheck.check({ gameDir, instance });
-      return new Set(problems.filter((p) => p.id.startsWith('mc:')).map((p) => p.id.slice(3)));
-    } catch {
-      return new Set();
-    }
-  };
-  // Chaque fichier dit s'il est prévu pour la version de l'instance : versions listées sur Modrinth, ou plage du jar.
-  handle('content:list', async (id, kind) => {
-    const ctx = contentCtx(id, kind);
-    const data = await content.listContent(ctx);
-    const flagged = ctx.kind === 'mods' ? await mismatchedJars(ctx.gameDir, ctx.instance) : new Set();
-    for (const item of data.items) {
-      const unlisted = Array.isArray(item.gameVersions) && item.gameVersions.length > 0 && !item.gameVersions.includes(ctx.instance.version);
-      item.incompatible = flagged.has(item.file) || unlisted;
-    }
-    return data;
-  });
-  handle('content:versionPlan', async (id, target) => {
-    const instance = instances.get(text(id));
-    const gameDir = instances.gameDir(instance.id);
-    const version = text(target);
-    const localMismatch = await mismatchedJars(gameDir, { ...instance, version });
-    return content.versionPlan({ gameDir, instance, target: version, localMismatch });
-  });
-  // Après un changement du dossier des mods, l'ensemble actif suit (nouveau mod, interrupteur, suppression).
-  const setsCtx = (id) => {
-    const instance = instances.get(text(id));
-    return { store: instances, instance, gameDir: instances.gameDir(instance.id) };
-  };
-  const syncSets = (id) => modSets.sync(setsCtx(id)).catch(() => {});
-  handle('content:toggle', async (id, kind, file) => {
+  const contents = createContentService({ instances, trash });
+  handle('content:list', (id, kind) => contents.list(id, kind));
+  handle('content:versionPlan', (id, target) => contents.versionPlan(id, target));
+  handle('content:toggle', (id, kind, file) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    await content.toggle({ ...contentCtx(id, kind), file: text(file) });
-    if (text(kind) === 'mods') await syncSets(id);
+    return contents.toggle(id, kind, file);
   });
-  handle('modsets:create', (id, name) => modSets.create({ ...setsCtx(id), name: text(name) }));
-  handle('modsets:rename', (id, setId, name) => modSets.rename({ ...setsCtx(id), setId: text(setId), name: text(name) }));
-  handle('modsets:delete', (id, setId) => modSets.remove({ ...setsCtx(id), setId: text(setId) }));
+  handle('modsets:create', (id, name) => contents.createSet(id, name));
+  handle('modsets:rename', (id, setId, name) => contents.renameSet(id, setId, name));
+  handle('modsets:delete', (id, setId) => contents.removeSet(id, setId));
   handle('modsets:apply', (id, setId) => {
     notRunning(text(id), t('ipc.changer_ensemble_de_mods'));
-    return modSets.apply({ ...setsCtx(id), setId: setId == null ? null : text(setId) });
+    return contents.applySet(id, setId);
   });
-  handle('modcheck:run', (id) => {
-    const ctx = contentCtx(id, 'mods');
-    return modCheck.check({ gameDir: ctx.gameDir, instance: ctx.instance });
-  });
-  // Installe ce que les mods de l'instance réclament, d'où qu'ils viennent.
-  const resolveDeps = async (id) => {
-    const ctx = contentCtx(id, 'mods');
-    const result = await modDeps.resolve({ gameDir: ctx.gameDir, instance: ctx.instance, trash });
-    if (result.installed.length) await syncSets(id);
-    return result;
-  };
+  handle('modcheck:run', (id) => contents.check(id));
   handle('modcheck:resolve', (id) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    return resolveDeps(id);
+    return contents.resolveDeps(id);
   });
-  handle('content:delete', async (id, kind, file) => {
+  handle('content:delete', (id, kind, file) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    const ctx = contentCtx(id, kind);
-    await trash(content.safePath(content.contentDir(ctx.gameDir, ctx.kind), text(file)));
-    if (ctx.kind === 'mods') await syncSets(id);
+    return contents.remove(id, kind, file);
   });
-  handle('content:install', async (id, kind, projectId, versionId) => {
+  handle('content:install', (id, kind, projectId, versionId) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    const result = await content.install({ ...contentCtx(id, kind), projectId: text(projectId), versionId: text(versionId) || null, trash });
-    if (text(kind) !== 'mods') return result;
-    await syncSets(id);
-    // Le jar peut réclamer plus que ce que sa page Modrinth annonce.
-    const extra = await resolveDeps(id).catch(() => null);
-    return {
-      installed: [...result.installed, ...(extra?.installed ?? [])],
-      missingDependencies: Math.max(result.missingDependencies, extra?.unresolved.length ?? 0),
-    };
+    return contents.install(id, kind, projectId, versionId);
   });
   // ---------- Écran titre du jeu (menu Cristal) ----------
-  const titleStatus = (id) => {
-    const ctx = contentCtx(id, 'mods');
-    const versions = () => modrinth.versions(titleMenu.FANCYMENU, { loaders: content.loadersFor('mods', ctx.instance), gameVersion: ctx.instance.version });
-    return titleMenu.status({ gameDir: ctx.gameDir, instance: ctx.instance, versions });
-  };
-  handle('titlemenu:status', (id) => titleStatus(id));
-  const applyTitleMenu = async (id, options, before) => {
-    const ctx = contentCtx(id, 'mods');
-    if (!before.installed) {
-      await content.install({ ...ctx, projectId: titleMenu.FANCYMENU, trash });
-      await syncSets(id);
-    }
-    const instance = instances.update(text(id), { titleMenu: options ?? {} });
-    await titleMenu.refresh({ gameDir: ctx.gameDir, instance });
-  };
-  handle('titlemenu:apply', async (id, options) => {
+  handle('titlemenu:status', (id) => contents.titleStatus(id));
+  handle('titlemenu:apply', (id, options) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    await applyTitleMenu(id, options, await titleStatus(id));
-    return titleStatus(id);
+    return contents.titleApply(id, options);
   });
-  // Avant chaque lancement : une instance moddée jamais réglée reçoit le menu Cristal.
-  // Version sans FancyMenu : retenue jusqu'à la fermeture du launcher, pour ne pas redemander à chaque partie.
-  const titleUnavailable = new Map();
-  handle('titlemenu:auto', async (id, options) => {
+  handle('titlemenu:auto', (id, options) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    const { instance } = contentCtx(id, 'mods');
-    const key = `${instance.version}/${instance.loader}`;
-    if (!titleMenu.wantsAuto(instance) || titleUnavailable.get(instance.id) === key) return { added: false };
-    const before = await titleStatus(id);
-    if (before.available === false) titleUnavailable.set(instance.id, key);
-    // Mod connu pour planter avec FancyMenu, ou Modrinth injoignable : on réessaiera au prochain lancement.
-    if (!before.available || before.conflicts.length) return { added: false };
-    await applyTitleMenu(id, options ?? {}, before);
-    return { added: true, installed: !before.installed };
+    return contents.titleAuto(id, options);
   });
-  handle('titlemenu:disable', async (id) => {
+  handle('titlemenu:disable', (id) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    await titleMenu.removeMenu(contentCtx(id, 'mods').gameDir);
-    instances.update(text(id), { titleMenu: null });
-    return titleStatus(id);
+    return contents.titleDisable(id);
   });
-  handle('content:update', async (id, kind, files) => {
+  handle('content:update', (id, kind, files) => {
     notRunning(text(id), t('ipc.mettre_jour_son_contenu'));
-    const result = await content.update({ ...contentCtx(id, kind), files: Array.isArray(files) ? files.map(text) : null, trash });
-    if (text(kind) === 'mods') await syncSets(id);
-    return result;
+    return contents.update(id, kind, files);
   });
-  handle('content:import', async (id, kind, paths) => {
+  handle('content:import', (id, kind, paths) => {
     notRunning(text(id), t('ipc.modifier_son_contenu'));
-    const result = await content.importFiles({ ...contentCtx(id, kind), paths: Array.isArray(paths) ? paths.map(text) : [] });
-    if (text(kind) === 'mods') await syncSets(id);
-    return result;
+    return contents.importFiles(id, kind, paths);
   });
-  handle('content:openFolder', async (id, kind) => {
-    const ctx = contentCtx(id, kind);
-    const dir = content.contentDir(ctx.gameDir, ctx.kind);
-    fs.mkdirSync(dir, { recursive: true });
-    const error = await shell.openPath(dir);
-    if (error) throw new Error(error);
-  });
-  handle('modrinth:search', ({ instanceId, kind, query, sort, offset } = {}) => {
-    // Les modpacks créent une nouvelle instance : pas de filtre sur l'instance sélectionnée.
-    if (kind === 'modpacks') {
-      return modrinth.search({ query: text(query), projectType: 'modpack', sort: text(sort), offset: Number(offset) || 0 });
-    }
-    const { instance } = contentCtx(instanceId, kind);
-    return modrinth.search({
-      query: text(query),
-      projectType: content.KINDS[kind].projectType,
-      gameVersion: instance.version,
-      loaders: content.loadersFor(kind, instance),
-      sort: text(sort),
-      offset: Number(offset) || 0,
-    });
-  });
-  handle('modrinth:project', (projectId) => modrinth.project(text(projectId)));
-  handle('modrinth:versions', (projectId, instanceId, kind) => {
-    if (kind === 'modpacks') return modrinth.versions(text(projectId), {});
-    const { instance } = contentCtx(instanceId, kind);
-    return modrinth.versions(text(projectId), { loaders: content.loadersFor(kind, instance), gameVersion: instance.version });
-  });
+  handle('content:openFolder', (id, kind) => openDir(contents.folder(id, kind)));
+  handle('modrinth:search', (params) => contents.search(params));
+  handle('modrinth:project', (projectId) => contents.project(projectId));
+  handle('modrinth:versions', (projectId, instanceId, kind) => contents.versions(projectId, instanceId, kind));
 
   // ---------- Modpacks ----------
-  // Une seule tâche longue à la fois (installation ou mise à jour d'un modpack), avec sa progression.
-  let task = null;
-  let taskAbort = null; // les tâches qui acceptent un signal (sauvegarde, restauration) peuvent être annulées
-  const runTask = async (label, work, { cancellable = false } = {}) => {
-    if (task) throw new Error(t('ipc.patiente_est_en_cours', { task }));
-    task = label;
-    taskAbort = cancellable ? new AbortController() : null;
-    const send = (payload) => {
-      const win = getWindow();
-      if (win && !win.isDestroyed()) win.webContents.send('task:progress', payload);
-    };
-    send({ label, done: 0, total: 0, cancellable });
-    try {
-      return await work((p) => send({ label: p.label ?? label, done: p.done, total: p.total, cancellable }), taskAbort?.signal);
-    } finally {
-      task = null;
-      taskAbort = null;
-      send(null);
-    }
-  };
-  handle('task:cancel', () => taskAbort?.abort());
-
-  // Sauvegarde automatique des mondes avant une opération risquée (reason : modpack, version, loader, launch).
-  // Renvoie null si rien n'était à faire ; lève une erreur si la copie échoue (l'opération est alors arrêtée).
-  const worldsToBackUp = (instance, reason) => {
-    const s = instance.settings;
-    if (reason === 'launch') {
-      if (s.backupLaunch === 'never') return null;
-      return s.backupLaunch === 'hardcore' ? (w) => w.hardcore : () => true;
-    }
-    return s.backupAuto ? () => true : null;
-  };
-  const autoBackup = (instance, reason, onProgress, signal) => {
-    const filter = worldsToBackUp(instance, reason);
-    const gameDir = instances.gameDir(instance.id);
-    if (!filter || !worlds.scanWorlds(gameDir).some(filter)) return null;
-    const label = t('ipc.sauvegarde_des_mondes');
-    return worlds.backupAll({
-      gameDir, backupDir: path.join(dirs.backups, instance.id), reason, keep: instance.settings.backupKeep, trash, filter, signal,
-      onProgress: (p) => onProgress({ ...p, label: p.world ? t('ipc.sauvegarde_de', { name: p.world }) : label }),
-    });
-  };
-  /** Sauvegarde automatique seule, comme tâche : { backupError } si elle échoue, null sinon. */
-  const backupBefore = async (instance, reason) => {
-    if (!worldsToBackUp(instance, reason) || !worlds.scanWorlds(instances.gameDir(instance.id)).some(worldsToBackUp(instance, reason))) return null;
-    try {
-      await runTask(t('ipc.sauvegarde_des_mondes'), (onProgress, signal) => autoBackup(instance, reason, onProgress, signal), { cancellable: true });
-      return null;
-    } catch (error) {
-      return { backupError: error.message };
-    }
-  };
+  const tasks = createTaskRunner(getWindow);
+  const runTask = tasks.run;
+  handle('task:cancel', () => tasks.cancel());
+  const { backupBefore, backupDirOf } = createBackups({ dirs, instances, runTask, trash });
   const installFromBuffer = (label, buffer, source) =>
     runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }));
 
@@ -465,46 +291,12 @@ function registerIpc(getWindow) {
       importer.importInstance({ instances, dir: source, defaults: services.settings.defaults(), launcher, onProgress }),
     );
   });
-  const openDir = async (dir) => {
-    fs.mkdirSync(dir, { recursive: true });
-    const error = await shell.openPath(dir);
-    if (error) throw new Error(error);
-  };
-
   // ---------- Rapports de crash ----------
-  const crashDirs = (id) => {
-    const instance = instances.get(text(id));
-    return { instance, gameDir: instances.gameDir(instance.id), instanceDir: instances.dir(instance.id) };
-  };
-  const summaries = new Map(); // « chemin:date » → type d'erreur reconnu, pour la liste
-  handle('crashes:list', async () => {
-    const all = [];
-    for (const instance of instances.list()) {
-      const found = await crashes.listCrashes(crashDirs(instance.id)).catch(() => []);
-      for (const item of found) all.push({ ...item, instanceId: instance.id, instanceName: instance.name });
-    }
-    const recent = all.sort((a, b) => b.at - a.at).slice(0, 40);
-    await Promise.all(
-      recent.map(async (item) => {
-        const file = crashes.crashFile(crashDirs(item.instanceId), item.source, item.file);
-        const key = `${currentLanguage()}:${file}:${item.at}`;
-        if (!summaries.has(key)) {
-          const body = await crashes.readCrashText(file).then((r) => r.text, () => '');
-          summaries.set(key, crashes.diagnose(body).problems[0]?.label ?? null);
-        }
-        item.label = summaries.get(key);
-      }),
-    );
-    return recent;
-  });
-  const crashPath = (id, source, file) => crashes.crashFile(crashDirs(id), text(source), text(file));
-  handle('crashes:read', async (id, source, file) => {
-    const { instance } = crashDirs(id);
-    const report = await crashes.readCrashText(crashPath(id, source, file));
-    const java = instance.settings.java === 'custom' ? null : await versions.versionDetails(dirs, instance.version).then((d) => d.java, () => null);
-    return { ...report, ...crashes.diagnose(report.text, { java, ram: instance.settings.ram, javaMode: instance.settings.java }) };
-  });
-  handle('crashes:share', async (id, source, file) => crashes.shareLog((await crashes.readCrashText(crashPath(id, source, file))).text));
+  const crashService = createCrashService({ dirs, instances });
+  const { crashDirs, crashPath } = crashService;
+  handle('crashes:list', () => crashService.list());
+  handle('crashes:read', (id, source, file) => crashService.read(id, source, file));
+  handle('crashes:share', (id, source, file) => crashService.share(id, source, file));
   handle('crashes:open', async (id, source, file) => {
     const error = await shell.openPath(crashPath(id, source, file));
     if (error) throw new Error(error);
@@ -554,7 +346,6 @@ function registerIpc(getWindow) {
     if (error) throw new Error(error);
   });
   // ---------- Mondes et sauvegardes ----------
-  const backupDirOf = (id) => path.join(dirs.backups, instances.get(id).id);
   // Ordre de sortie des versions (manifeste Mojang déjà chargé) : sert à repérer un monde enregistré par une version plus récente.
   const releaseOrder = async () => {
     try {
@@ -694,85 +485,11 @@ function registerIpc(getWindow) {
   handle('launch:state', () => launches.state());
 
   // ---------- Réglages du launcher : thème, Discord, zone de notification ----------
-  let quitting = false;
-  let balloonShown = false;
-  const requestLaunch = (id) => {
-    const win = getWindow();
-    if (!win || win.isDestroyed()) return;
-    tray.showWindow();
-    win.webContents.send('app:launchRequest', id);
-  };
-  const quit = async () => {
-    if (launches.run) {
-      const { response } = await dialog.showMessageBox({
-        type: 'warning',
-        title: t('ipc.quitter_0rzxn_launcher'),
-        message: t('ipc.une_partie_est_en_cours'),
-        detail: t('ipc.le_temps_de_jeu_de'),
-        buttons: [t('common.annuler'), t('common.quitter')],
-        defaultId: 0,
-        cancelId: 0,
-        noLink: true,
-      });
-      if (response !== 1) return;
-    }
-    quitting = true;
-    app.quit();
-  };
-  const tray = new LauncherTray({ getWindow, instances, launches, canPlay: () => Boolean(accounts.list().activeId), onLaunch: requestLaunch, onQuit: quit });
-
-  // Discord : rien n'est envoyé tant que l'option est désactivée ; le statut suit la partie en cours.
-  const presence = new DiscordPresence({ clientId: discordConfig.clientId, pipe: discordConfig.pipe });
-  const countMods = (instance) => {
-    if (instance.loader === 'vanilla') return 0;
-    try {
-      return fs.readdirSync(path.join(instances.gameDir(instance.id), 'mods')).filter((f) => f.endsWith('.jar')).length;
-    } catch {
-      return 0;
-    }
-  };
-  const syncDiscord = async () => {
-    const prefs = services.settings.launcher();
-    const run = launches.run;
-    if (!discordConfig.clientId || !prefs.discord || run?.phase !== 'running') {
-      await presence.close();
-      return;
-    }
-    const instance = instances.get(run.instanceId);
-    await presence.setActivity(
-      gameActivity({ instance, loaderName: LOADER_NAMES[instance.loader], mods: countMods(instance), startedAt: run.startedAt, showName: prefs.discordShowName }),
-    );
-  };
-  let discordQueue = Promise.resolve();
-  const queueDiscord = () => {
-    discordQueue = discordQueue.then(syncDiscord).catch((error) => {
-      if (!app.isPackaged) console.log(`[discord] ${error.message}`);
-    });
-    return discordQueue;
-  };
-  launches.onChange = () => {
-    tray.refresh();
-    queueDiscord();
-    updates.gameChanged();
-  };
-  tray.setEnabled(services.settings.launcher().tray);
-
-  // Mises à jour du launcher : seulement dans la version installée, et jamais pendant une partie.
-  const updates = new UpdateManager({
-    supported: app.isPackaged,
-    loadUpdater: () => require('electron-updater').autoUpdater,
-    isBusy: () => Boolean(launches.session || task),
-    isAutomatic: () => services.settings.launcher().autoUpdate,
-    onState: (status) => {
-      const win = getWindow();
-      if (win && !win.isDestroyed()) win.webContents.send('update:status', status);
-    },
-    log: app.isPackaged ? updateLog(path.join(app.getPath('userData'), 'mises-a-jour.log')) : null,
-  });
+  const appShell = createShell({ getWindow, services, launches, isTaskBusy: () => Boolean(tasks.current()) });
+  const { tray, updates } = appShell;
   handle('update:state', () => ({ ...updates.state }));
   handle('update:check', () => updates.check({ manual: true }));
   handle('update:install', () => updates.install());
-  updates.start();
 
   handle('launcher:get', () => services.settings.launcher());
   // La langue change sans redémarrer : messages d'erreur, dialogues et zone de notification suivent aussitôt.
@@ -785,18 +502,15 @@ function registerIpc(getWindow) {
   handle('launcher:set', (patch) => {
     const prefs = services.settings.setLauncher(patch ?? {});
     tray.setEnabled(prefs.tray);
-    queueDiscord();
+    appShell.queueDiscord();
     return prefs;
   });
-  handle('discord:status', async () => ({
-    configured: Boolean(discordConfig.clientId),
-    running: await presence.isRunning(),
-    showing: Boolean(presence.socket && presence.activity),
-  }));
+  handle('discord:status', () => appShell.discordStatus());
 
   // ---------- Java et espace disque ----------
   const notBusy = (action) => {
     if (launches.session) throw new Error(t('ipc.impossible_de_pendant_une_partie', { action }));
+    const task = tasks.current();
     if (task) throw new Error(t('ipc.patiente_est_en_cours', { task }));
   };
   let systemJavas = null;
@@ -965,22 +679,8 @@ function registerIpc(getWindow) {
       const win = getWindow();
       if (id && win && !win.isDestroyed()) win.webContents.send('app:launchRequest', id);
     },
-    /** Fermer la fenêtre la cache seulement si l'icône de la zone de notification permet de la rouvrir. */
-    hideOnClose() {
-      const prefs = services.settings.launcher();
-      if (quitting || !tray.enabled || !prefs.closeToTray) return false;
-      if (!balloonShown && process.platform === 'win32') {
-        balloonShown = true;
-        tray.tray.displayBalloon({ iconType: 'info', title: '0Rzxn_ Launcher', content: t('ipc.le_launcher_reste_ouvert_ici') });
-      }
-      return true;
-    },
-    beforeQuit() {
-      quitting = true;
-      tray.setEnabled(false);
-      presence.close();
-      updates.stop();
-    },
+    hideOnClose: () => appShell.hideOnClose(),
+    beforeQuit: () => appShell.beforeQuit(),
   };
 }
 
