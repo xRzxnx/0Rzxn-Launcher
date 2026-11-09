@@ -85,7 +85,10 @@ function registerIpc(getWindow) {
       if (id && win && !win.isDestroyed()) win.webContents.send('app:launchRequest', id);
     },
     hideOnClose: () => ctx.appShell.hideOnClose(),
-    beforeQuit: () => ctx.appShell.beforeQuit(),
+    beforeQuit() {
+      ctx.appShell.beforeQuit();
+      services.db.close();
+    },
   };
 }
 

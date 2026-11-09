@@ -10,6 +10,7 @@ const { InstanceStore } = require('../core/instances');
 const microsoft = require('../core/microsoft');
 const { gameDirs } = require('../core/store');
 const { clientId: MICROSOFT_CLIENT_ID } = require('../microsoft-config');
+const { openDatabase } = require('./db');
 const { createSettingsStore } = require('./settings');
 const { vault } = require('./vault');
 
@@ -25,6 +26,8 @@ function createServices() {
     }),
     instances: new InstanceStore(dirs),
     settings: createSettingsStore(path.join(configDir, 'settings.json')),
+    // Historique (tâches, parties) : facultatif, le launcher marche sans.
+    db: openDatabase({ file: path.join(configDir, 'launcher.db') }),
   };
 }
 

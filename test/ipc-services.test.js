@@ -315,3 +315,29 @@ test('lancement : plantage, les logs sont gardés comme rapport', async (t) => {
   assert.equal(status.crash.source, 'log');
   assert.equal(typeof status.crash.file, 'string');
 });
+
+test('lancement : chaque partie est notée dans launcher.db', async (t) => {
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  sessions[0].emit('running');
+  sessions[0].emit('exit', { code: 0, crashed: false, minutes: 1 });
+  await waitFor(() => ipc.win.messages('launch:status').at(-1).exited);
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  sessions[1].emit('failed', { message: 'annulé', cancelled: true });
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true, prepareOnly: true });
+  sessions[2].emit('prepared');
+
+  const { DatabaseSync } = require('node:sqlite');
+  const db = new DatabaseSync(path.join(ipc.root, 'config', 'launcher.db'), { readOnly: true });
+  const rows = db.prepare('SELECT * FROM game_sessions ORDER BY id').all();
+  db.close();
+  assert.deepEqual(rows.map((r) => [r.instance_id, r.version, r.loader, r.outcome, r.exit_code]), [
+    [instance.id, '1.21.1', 'vanilla', 'exited', 0],
+    [instance.id, '1.21.1', 'vanilla', 'cancelled', null],
+    [instance.id, '1.21.1', 'vanilla', 'prepared', null],
+  ]);
+  assert.ok(rows[0].ready_at >= rows[0].started_at && rows[0].ended_at >= rows[0].ready_at);
+  assert.equal(rows[0].prepare_ms, rows[0].ready_at - rows[0].started_at);
+  assert.equal(rows[1].ready_at, null);
+});
