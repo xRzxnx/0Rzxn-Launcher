@@ -1,0 +1,317 @@
+'use strict';
+
+// Comportement des canaux qui orchestrent plusieurs modules (réglages, instances, mondes, tâches, lancement).
+// Écrit sur l'ipc.js d'origine : doit rester vrai sans modification après le découpage en services (phase 3).
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { t: tr } = require('../src/main/i18n');
+const { startIpc, sessions, makeWorld, waitFor, wire, electron } = require('./helpers/ipc');
+
+const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true };
+
+async function newInstance(ipc, name = 'Survie', extra = {}) {
+  const instance = await ipc.invoke('instances:create', { name, version: '1.21.1', loader: 'vanilla', ...extra });
+  const { root } = await ipc.invoke('app:info');
+  return { instance, gameDir: path.join(root, 'instances', instance.id, 'minecraft'), backupDir: path.join(root, 'backups', instance.id), root };
+}
+
+const zips = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir, { recursive: true }).filter((f) => String(f).endsWith('.zip')) : []);
+
+// ---------- Réglages ----------
+
+test('réglages du launcher : valeurs par défaut, filtrage et enregistrement', async (t) => {
+  const ipc = startIpc(t);
+  assert.deepEqual(await ipc.invoke('launcher:get'), LAUNCHER_DEFAULTS);
+  const saved = await ipc.invoke('launcher:set', { accent: '#AABBCC', discord: 'oui', tray: false, language: 'de', inconnu: 1 });
+  assert.deepEqual(saved, { ...LAUNCHER_DEFAULTS, accent: '#aabbcc', tray: false });
+  assert.deepEqual(await ipc.invoke('launcher:set', { accent: 'bleu', closeToTray: true }), { ...saved, accent: 'bleu', closeToTray: true });
+  assert.deepEqual(await ipc.invoke('launcher:set', { accent: 'orange' }), { ...saved, accent: 'bleu', closeToTray: true });
+  const file = JSON.parse(fs.readFileSync(path.join(ipc.root, 'config', 'settings.json'), 'utf8'));
+  assert.equal(file.launcher.accent, 'bleu');
+  assert.deepEqual(await ipc.invoke('launcher:set', null), file.launcher);
+});
+
+test('langue : changée sans redémarrer, les messages suivent', async (t) => {
+  const ipc = startIpc(t);
+  assert.deepEqual(ipc.hooks.language(), { lang: 'fr', locale: 'fr-FR' });
+  t.after(() => ipc.invoke('launcher:setLanguage', 'auto'));
+  assert.deepEqual(await ipc.invoke('launcher:setLanguage', 'es'), { lang: 'es', locale: 'es-ES' });
+  assert.deepEqual(ipc.hooks.language(), { lang: 'es', locale: 'es-ES' });
+  await assert.rejects(ipc.invokeAs({}, 'app:info'), { message: tr('ipc.origine_refusee') });
+  assert.equal((await ipc.invoke('launcher:get')).language, 'es');
+  assert.deepEqual(await ipc.invoke('launcher:setLanguage', 'auto'), { lang: 'fr', locale: 'fr-FR' });
+});
+
+test('préférences d’interface : ui:get et ui:set filtrent ce qu’ils gardent', async (t) => {
+  const ipc = startIpc(t);
+  assert.deepEqual(await ipc.invoke('ui:get'), { selectedId: null, pendingLaunch: null });
+  const groups = [...Array.from({ length: 120 }, (_, i) => `g${i}`), 42, null];
+  const ui = await ipc.invoke('ui:set', { selectedId: 'survie', collapsedGroups: groups, crashesSeenAt: 1234, autre: true });
+  assert.deepEqual(ui, { selectedId: 'survie', collapsedGroups: groups.slice(0, 100), crashesSeenAt: 1234 });
+  assert.deepEqual(await ipc.invoke('ui:set', { selectedId: 12, crashesSeenAt: Infinity }), ui);
+  assert.deepEqual(await ipc.invoke('ui:set', { selectedId: null }), { ...ui, selectedId: null });
+  assert.deepEqual(await ipc.invoke('ui:set', null), { ...ui, selectedId: null });
+});
+
+test('réglages par défaut des instances : lus, modifiés, utilisés à la création', async (t) => {
+  const ipc = startIpc(t);
+  const defaults = await ipc.invoke('settings:get');
+  assert.equal(defaults.ram, 4);
+  const changed = await ipc.invoke('settings:update', { ram: 6 });
+  assert.equal(changed.ram, 6);
+  assert.deepEqual(await ipc.invoke('settings:get'), changed);
+  const { instance } = await newInstance(ipc);
+  assert.equal(instance.settings.ram, 6);
+});
+
+// ---------- Instances ----------
+
+test('instances : création, liste, duplication, suppression dans la corbeille', async (t) => {
+  const ipc = startIpc(t);
+  const { instance } = await newInstance(ipc);
+  assert.equal(instance.id, 'survie');
+  const copy = await ipc.invoke('instances:duplicate', 'survie', 'Survie 2');
+  assert.deepEqual((await ipc.invoke('instances:list')).map((i) => i.id).sort(), ['survie', copy.id].sort());
+
+  await ipc.invoke('ui:set', { selectedId: 'survie' });
+  await ipc.invoke('instances:delete', 'survie');
+  assert.equal(electron.calls.trashed.length, 1);
+  assert.equal(path.basename(electron.calls.trashed[0]), 'survie');
+  assert.equal((await ipc.invoke('ui:get')).selectedId, null);
+  assert.deepEqual((await ipc.invoke('instances:list')).map((i) => i.id), [copy.id]);
+});
+
+test('raccourci bureau : nom nettoyé, arguments du lancement direct', { skip: process.platform !== 'win32' }, async (t) => {
+  const ipc = startIpc(t);
+  await newInstance(ipc, 'Survie: "Nuit"');
+  const id = (await ipc.invoke('instances:list'))[0].id;
+  const name = await ipc.invoke('instances:shortcut', id);
+  assert.equal(name, 'Survie Nuit (0Rzxn_).lnk');
+  const [link] = electron.calls.shortcuts;
+  assert.equal(link.file, path.join(electron.app.getPath('desktop'), name));
+  assert.equal(link.operation, 'create');
+  assert.equal(link.options.target, process.execPath);
+  assert.equal(link.options.args, `"${electron.app.getAppPath()}" --launch=${id}`);
+  assert.equal(link.options.description, tr('ipc.lancer_avec_0rzxn_launcher', { name: 'Survie: "Nuit"' }));
+});
+
+test('protocole fond: : seulement les images « fond-… » du dossier de l’instance', async (t) => {
+  const ipc = startIpc(t);
+  const { gameDir } = await newInstance(ipc);
+  const image = Buffer.from('image');
+  fs.writeFileSync(path.join(gameDir, '..', 'fond-1.png'), image);
+  fs.writeFileSync(path.join(gameDir, '..', 'instance.png'), image);
+  const fond = electron.calls.protocols.get('fond');
+  const ok = await fond({ url: 'fond://survie/fond-1.png' });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get('Content-Type'), 'image/png');
+  assert.deepEqual(Buffer.from(await ok.arrayBuffer()), image);
+  for (const url of ['fond://survie/instance.png', 'fond://survie/fond-2.png', 'fond://inconnue/fond-1.png', 'fond://SURVIE!/fond-1.png']) {
+    assert.equal((await fond({ url })).status, 404, url);
+  }
+});
+
+// ---------- Mondes et tâche longue ----------
+
+test('sauvegarde d’un monde : une seule tâche à la fois, progression puis fin', async (t) => {
+  const ipc = startIpc(t);
+  const { instance, gameDir, backupDir } = await newInstance(ipc);
+  makeWorld(gameDir, 'Monde');
+  const label = tr('ipc.sauvegarde_de', { name: 'Monde' });
+
+  const running = ipc.invoke('worlds:backup', instance.id, 'Monde');
+  await assert.rejects(ipc.invoke('worlds:backup', instance.id, 'Monde'), { message: tr('ipc.patiente_est_en_cours', { task: label }) });
+  await assert.rejects(ipc.invoke('storage:clean', []), { message: tr('ipc.patiente_est_en_cours', { task: label }) });
+  await running;
+
+  const progress = ipc.win.messages('task:progress');
+  assert.deepEqual(progress[0], { label, done: 0, total: 0, cancellable: true });
+  assert.ok(progress.slice(1, -1).every((p) => p.cancellable === true && p.total > 0));
+  assert.equal(progress.at(-1), null);
+  assert.equal(zips(backupDir).length, 1);
+  // La tâche finie, une autre peut commencer.
+  await ipc.invoke('worlds:backup', instance.id, 'Monde');
+  assert.equal(zips(backupDir).length, 2);
+});
+
+test('sauvegarde d’un monde : task:cancel l’arrête', async (t) => {
+  const ipc = startIpc(t);
+  const { instance, gameDir, backupDir } = await newInstance(ipc);
+  makeWorld(gameDir, 'Monde');
+  const running = ipc.invoke('worlds:backup', instance.id, 'Monde');
+  await ipc.invoke('task:cancel');
+  await assert.rejects(running, { message: tr('zip.sauvegarde_annulee') });
+  assert.equal(ipc.win.messages('task:progress').at(-1), null);
+  assert.equal(zips(backupDir).length, 0);
+  await ipc.invoke('task:cancel'); // sans tâche : rien à faire
+});
+
+test('changement de version : les mondes sont sauvegardés avant, sauf demande contraire', async (t) => {
+  const ipc = startIpc(t);
+  const { instance, gameDir, backupDir } = await newInstance(ipc);
+
+  // Sans monde : pas de tâche.
+  assert.equal((await ipc.invoke('instances:update', instance.id, { version: '1.21.2' })).version, '1.21.2');
+  assert.equal(ipc.win.messages('task:progress').length, 0);
+
+  makeWorld(gameDir, 'Monde');
+  assert.equal((await ipc.invoke('instances:update', instance.id, { version: '1.21.4' })).version, '1.21.4');
+  const progress = ipc.win.messages('task:progress');
+  assert.deepEqual(progress[0], { label: tr('ipc.sauvegarde_des_mondes'), done: 0, total: 0, cancellable: true });
+  const labels = new Set(progress.slice(1, -1).map((p) => p.label));
+  assert.deepEqual([...labels].sort(), [tr('ipc.sauvegarde_de', { name: 'Monde' }), tr('ipc.sauvegarde_des_mondes')].sort());
+  assert.equal(progress.at(-1), null);
+  assert.equal(zips(backupDir).length, 1);
+
+  // Le nom seul ne déclenche rien ; « skipBackup » non plus.
+  await ipc.invoke('instances:update', instance.id, { name: 'Survie bis' });
+  await ipc.invoke('instances:update', instance.id, { version: '1.21.5' }, { skipBackup: true });
+  assert.equal(zips(backupDir).length, 1);
+  assert.equal((await ipc.invoke('instances:list'))[0].version, '1.21.5');
+});
+
+test('changement de version : sauvegarde automatique désactivée dans l’instance', async (t) => {
+  const ipc = startIpc(t);
+  const { instance, gameDir, backupDir } = await newInstance(ipc);
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, backupAuto: false } });
+  makeWorld(gameDir, 'Monde');
+  await ipc.invoke('instances:update', instance.id, { version: '1.21.4' });
+  assert.equal(zips(backupDir).length, 0);
+});
+
+// ---------- Lancement ----------
+
+test('lancement : adresse de serveur ou monde invalides refusés avant tout lancement', async (t) => {
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  const start = (quickPlay) => ipc.invoke('launch:start', instance.id, { skipBackup: true, quickPlay });
+  await assert.rejects(start({ type: 'multiplayer', id: 'mauvaise adresse !' }), { message: tr('ipc.adresse_de_serveur_invalide') });
+  await assert.rejects(start({ type: 'singleplayer', id: 'Absent' }));
+  assert.equal(sessions.length, 0);
+
+  await start({ type: 'multiplayer', id: 'play.example.org:25565', name: 'Serveur' });
+  assert.deepEqual(sessions[0].quickPlay, { type: 'multiplayer', id: 'play.example.org:25565', name: 'Serveur' });
+});
+
+test('lancement : sans compte, refusé', async (t) => {
+  const ipc = startIpc(t);
+  const { instance } = await newInstance(ipc);
+  await assert.rejects(ipc.invoke('launch:start', instance.id, { skipBackup: true }), { message: tr('common.ajoute_un_compte_avant_de') });
+  assert.equal(sessions.length, 0);
+});
+
+test('lancement : état, logs envoyés par paquets, partie unique, échec', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  const run = await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  assert.deepEqual(run, { instanceId: instance.id, phase: 'preparing', step: 0, done: 0, total: 0, prepareOnly: false });
+  assert.deepEqual(ipc.win.sent.slice(-2), [['launch:reset', undefined], ['launch:status', { run }]]);
+  const [session] = sessions;
+  assert.equal(session.verify, false);
+
+  // Une seule partie à la fois, et rien ne touche l'instance pendant ce temps.
+  await assert.rejects(ipc.invoke('launch:start', instance.id), { message: tr('ipc.une_partie_ou_une_installation') });
+  await assert.rejects(ipc.invoke('launch:start', instance.id, { skipBackup: true }), { message: tr('ipc.une_partie_ou_une_installation') });
+  await assert.rejects(ipc.invoke('instances:duplicate', instance.id, 'Copie'), { message: tr('ipc.impossible_de_pendant_que_instance', { action: tr('ipc.action_duplicate') }) });
+  await assert.rejects(ipc.invoke('storage:clean', []), { message: tr('ipc.impossible_de_pendant_une_partie', { action: tr('ipc.liberer_de_espace') }) });
+  await assert.rejects(ipc.invoke('instances:update', instance.id, { version: '1.21.4' }), { message: tr('ipc.impossible_de_changer_de_version') });
+
+  // Logs : regroupés toutes les 100 ms.
+  const line = (n) => ({ time: '12:00:00', tag: 'LAUNCHER', msg: `ligne ${n}` });
+  for (const n of [1, 2, 3]) session.emit('log', line(n));
+  assert.equal(ipc.win.messages('launch:logs').length, 0);
+  t.mock.timers.tick(99);
+  assert.equal(ipc.win.messages('launch:logs').length, 0);
+  t.mock.timers.tick(1);
+  assert.deepEqual(ipc.win.messages('launch:logs'), [[line(1), line(2), line(3)]]);
+
+  session.emit('progress', { step: 2, done: 10, total: 40 });
+  assert.deepEqual(ipc.win.messages('launch:progress').at(-1), { ...run, step: 2, done: 10, total: 40 });
+  assert.deepEqual(wire(await ipc.invoke('launch:state')), { run: { ...run, step: 2, done: 10, total: 40 }, logs: [line(1), line(2), line(3)] });
+
+  // Échec : les derniers logs partent avant le changement d'état.
+  session.emit('log', line(4));
+  session.emit('failed', { message: 'boom' });
+  const [logs, failed] = ipc.win.sent.slice(-2);
+  assert.deepEqual(logs, ['launch:logs', [line(4)]]);
+  assert.deepEqual(wire(failed), ['launch:status', { run: null, error: 'boom', instanceId: instance.id }]);
+  assert.equal((await ipc.invoke('launch:state')).run, null);
+
+  // Annulation : pas de message d'erreur.
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  await ipc.invoke('launch:stop');
+  assert.equal(sessions[1].stopped, true);
+  sessions[1].emit('failed', { message: 'annulé', cancelled: true });
+  assert.deepEqual(wire(ipc.win.messages('launch:status').at(-1)), { run: null, error: null, cancelled: true, instanceId: instance.id });
+});
+
+test('lancement : trop de logs d’un coup, l’interface reçoit tout le tampon', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+  for (let n = 1; n <= 5001; n++) session.emit('log', { time: '12:00:00', tag: 'LAUNCHER', msg: `ligne ${n}` });
+  const before = ipc.win.sent.length;
+  t.mock.timers.tick(100);
+  const after = ipc.win.sent.slice(before);
+  assert.deepEqual(after.map(([channel]) => channel), ['launch:reset', 'launch:logs']);
+  const lines = after[1][1];
+  assert.equal(lines.length, 5000);
+  assert.equal(lines[0].msg, 'ligne 2');
+  assert.equal(lines.at(-1).msg, 'ligne 5001');
+  assert.equal((await ipc.invoke('launch:state')).logs.length, 5000);
+});
+
+test('lancement : partie en cours, mode léger, fin de partie', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+
+  session.emit('running');
+  const status = ipc.win.messages('launch:status').at(-1);
+  assert.equal(status.run.phase, 'running');
+  assert.equal(typeof status.run.startedAt, 'number');
+  assert.equal(ipc.win.minimized, true); // réglage « après le lancement : réduire » par défaut
+
+  // Fenêtre réduite : les logs attendent son retour.
+  const line = { time: '12:00:01', tag: 'Render thread/INFO', msg: 'Loaded' };
+  session.emit('log', line);
+  session.emit('log', line);
+  t.mock.timers.tick(500);
+  assert.equal(ipc.win.messages('launch:logs').length, 0);
+  ipc.win.restore();
+  ipc.hooks.windowShown();
+  t.mock.timers.tick(0);
+  assert.deepEqual(ipc.win.messages('launch:logs'), [[line, line]]);
+
+  // Fin de partie : temps de jeu noté, fenêtre réaffichée, état final.
+  ipc.win.minimize();
+  session.emit('exit', { code: 0, crashed: false, minutes: 3 });
+  await waitFor(() => ipc.win.messages('launch:status').at(-1).run === null);
+  assert.deepEqual(wire(ipc.win.messages('launch:status').at(-1)), { run: null, exited: true, code: 0, crashed: false, crash: null, instanceId: instance.id });
+  assert.equal(ipc.win.minimized, false);
+  assert.equal((await ipc.invoke('instances:list'))[0].playtime, 3);
+});
+
+test('lancement : plantage, les logs sont gardés comme rapport', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+  session.emit('running');
+  session.emit('log', { time: '12:00:02', tag: 'Render thread/ERROR', msg: 'Boom' });
+  session.emit('exit', { code: 1, crashed: true, minutes: 0 });
+  await waitFor(() => ipc.win.messages('launch:status').at(-1).exited);
+  const status = ipc.win.messages('launch:status').at(-1);
+  assert.equal(status.crashed, true);
+  assert.equal(status.code, 1);
+  assert.equal(status.crash.source, 'log');
+  assert.equal(typeof status.crash.file, 'string');
+});
