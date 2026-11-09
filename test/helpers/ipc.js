@@ -22,15 +22,16 @@ const OFFLINE = { id: 'offline-test', type: 'offline', name: 'Testeur', uuid: '0
 
 /** `account` : un compte hors ligne actif, nécessaire pour lancer une instance. */
 function startIpc(t, { account = false } = {}) {
-  const root = tempRoot(t);
+  let hooks = null;
+  // launcher.db reste ouverte jusqu'à la fermeture du launcher : fermée avant d'effacer le dossier.
+  const root = tempRoot(t, () => hooks?.beforeQuit());
   electron.reset(root);
   sessions.splice(0);
   if (account) {
     fs.writeFileSync(path.join(root, 'config', 'accounts.json'), JSON.stringify({ activeId: OFFLINE.id, accounts: [OFFLINE] }));
   }
   const win = fakeWindow();
-  const hooks = registerIpc(() => win);
-  t.after(() => hooks.beforeQuit());
+  hooks = registerIpc(() => win);
   const invokeAs = async (sender, channel, ...args) => {
     const handler = electron.calls.handlers.get(channel);
     if (!handler) throw new Error(`no handler for ${channel}`);

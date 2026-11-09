@@ -105,15 +105,26 @@ class LaunchManager {
     this.send('launch:reset');
     this.status();
 
+    // Historique dans launcher.db (sans effet si la base est absente).
+    const history = this.services.db;
+    const sessionId = history?.startSession({ instanceId, version: instance.version, loader: instance.loader }) ?? null;
+
     session.on('log', (line) => this.pushLog(line));
     session.on('progress', ({ step, done, total }) => {
       Object.assign(this.run, { step, done, total });
       this.send('launch:progress', this.run);
     });
     session.on('loaderInstalled', ({ versionId }) => instances.markLoaderInstalled(instanceId, versionId));
-    session.on('prepared', () => this.finish({ prepared: true }));
-    session.on('failed', ({ message, cancelled }) => this.finish({ error: cancelled ? null : message, cancelled }));
+    session.on('prepared', () => {
+      history?.endSession(sessionId, { outcome: 'prepared' });
+      this.finish({ prepared: true });
+    });
+    session.on('failed', ({ message, cancelled }) => {
+      history?.endSession(sessionId, { outcome: cancelled ? 'cancelled' : 'failed' });
+      this.finish({ error: cancelled ? null : message, cancelled });
+    });
     session.on('running', () => {
+      history?.sessionReady(sessionId);
       this.run.phase = 'running';
       this.run.startedAt = Date.now();
       this.status();
@@ -124,6 +135,7 @@ class LaunchManager {
       if (win && instance.settings.afterLaunch === 'hide') win.hide();
     });
     session.on('exit', async ({ code, crashed, minutes }) => {
+      history?.endSession(sessionId, { outcome: crashed ? 'crashed' : 'exited', exitCode: code ?? null });
       instances.recordPlay(instanceId, minutes);
       this.keepQuickPlay(instanceId);
       const win = this.getWindow();

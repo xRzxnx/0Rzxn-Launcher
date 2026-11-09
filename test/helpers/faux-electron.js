@@ -167,9 +167,13 @@ Module._load = function loadWithFakeElectron(request, ...rest) {
   return request === 'electron' ? electron : load.call(this, request, ...rest);
 };
 
-function tempRoot(t) {
+/** Dossier temporaire, effacé à la fin du test ; `before` passe d'abord (fermer ce qui y tient des fichiers ouverts). */
+function tempRoot(t, before = () => {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), '0rzxn-ipc-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => {
+    before();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
   return dir;
 }
 
