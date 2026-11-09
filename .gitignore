@@ -7,7 +7,11 @@ dist/
 # Images de référence UX (privées, hors du dépôt public)
 /Exemple Ux design Launcher *
 
+# Maquettes (privées, hors du dépôt public)
+/Maquettes/
+
 # Notes de travail (privées, hors du dépôt public)
 /docs/PLAN.md
 /docs/PLAN-V2.md
 /docs/PLAN-MONDES.md
+/docs/PLAN-V3.md
