@@ -1,6 +1,6 @@
 ﻿; Ajouts à l'installateur standard.
 ; Il désinstalle déjà la version enregistrée dans Windows. Le launcher retire lui-même, à son prochain
-; démarrage, ce que le registre ne connaît pas (voir src/main/core/anciennes-versions.js).
+; démarrage, ce que le registre ne connaît pas (voir src/main/platform/windows/anciennes-versions.js).
 
 !macro customInstall
   ; Une mise à jour automatique remplace déjà la version en place : rien à demander dans ce cas.

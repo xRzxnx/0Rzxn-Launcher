@@ -14,4 +14,5 @@ module.exports = {
   name: 'autre',
   gpu,
   physicalCores: async () => null,
+  apresInstallation: async () => {},
 };
