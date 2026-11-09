@@ -2,11 +2,12 @@
 
 // Versions, loaders et instances : création, modification, copie, fond, suppression, raccourci, dossier.
 const { t } = require('../i18n');
-const { app, dialog, protocol, shell } = require('electron');
+const { dialog, protocol, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const versions = require('../core/versions');
 const { availableLoaders } = require('../core/loaders');
+const platform = require('../platform');
 const { text } = require('./handle');
 
 function register({ handle, getWindow, services, dirs, instances, launches, backups, notRunning }) {
@@ -60,25 +61,7 @@ function register({ handle, getWindow, services, dirs, instances, launches, back
     await shell.trashItem(instances.dir(text(id)));
     if (services.settings.ui().selectedId === id) services.settings.setUi({ selectedId: null });
   });
-  handle('instances:shortcut', (id) => {
-    if (process.platform !== 'win32') throw new Error(t('ipc.les_raccourcis_bureau_sont_disponibles'));
-    const instance = instances.get(text(id));
-    const safeName = instance.name.replace(/[\\/:*?"<>|]/g, '').trim() || instance.id;
-    const file = path.join(app.getPath('desktop'), `${safeName} (0Rzxn_).lnk`);
-    const options = {
-      target: process.execPath,
-      // En développement, Electron a besoin du dossier du projet avant les arguments.
-      args: app.isPackaged ? `--launch=${instance.id}` : `"${app.getAppPath()}" --launch=${instance.id}`,
-      cwd: path.dirname(process.execPath),
-      description: t('ipc.lancer_avec_0rzxn_launcher', { name: instance.name }),
-      icon: process.execPath,
-      iconIndex: 0,
-    };
-    if (!shell.writeShortcutLink(file, fs.existsSync(file) ? 'replace' : 'create', options)) {
-      throw new Error(t('ipc.windows_pas_pu_creer_le'));
-    }
-    return path.basename(file);
-  });
+  handle('instances:shortcut', (id) => platform.createShortcut(instances.get(text(id))));
   handle('instances:openFolder', async (id) => {
     const dir = instances.gameDir(text(id));
     fs.mkdirSync(dir, { recursive: true });
