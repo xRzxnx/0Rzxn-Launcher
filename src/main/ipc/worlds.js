@@ -35,7 +35,7 @@ function register({ handle, dirs, instances, runTask, backups, trash, notRunning
     return runTask(
       t('ipc.sauvegarde_de', { name: text(folder) }),
       (onProgress, signal) => worlds.backupWorld({ gameDir: instances.gameDir(instance.id), folder: text(folder), backupDir: backupDirOf(instance.id), signal, onProgress }),
-      { cancellable: true },
+      { cancellable: true, kind: 'world-backup', instanceId: instance.id, params: { folder: text(folder) } },
     );
   });
   handle('worlds:restore', (id, file, mode) => {
@@ -45,7 +45,7 @@ function register({ handle, dirs, instances, runTask, backups, trash, notRunning
     return runTask(
       t('ipc.restauration_de', { name: text(file) }),
       (onProgress, signal) => worlds.restoreWorld({ zipFile, gameDir: instances.gameDir(instance.id), mode: text(mode) === 'replace' ? 'replace' : 'beside', trash, signal, onProgress }),
-      { cancellable: true },
+      { cancellable: true, kind: 'world-restore', instanceId: instance.id, params: { file: text(file) } },
     );
   });
   handle('worlds:delete', (id, folder) => {

@@ -10,10 +10,12 @@ const modrinth = require('../core/modrinth');
 const { text } = require('./handle');
 
 function register({ handle, getWindow, services, dirs, instances, tasks, runTask, backups, trash, notRunning }) {
-  handle('task:cancel', () => tasks.cancel());
+  handle('task:cancel', () => {
+    tasks.cancel();
+  });
 
-  const installFromBuffer = (label, buffer, source) =>
-    runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }));
+  const installFromBuffer = (label, buffer, source, kind) =>
+    runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }), { kind, params: source });
 
   handle('modpacks:install', async (projectId, versionId, meta) => {
     const id = text(projectId);
@@ -25,7 +27,7 @@ function register({ handle, getWindow, services, dirs, instances, tasks, runTask
       versionId: chosen,
       title: text(meta?.title) || undefined,
       icon: text(meta?.icon) || null,
-    });
+    }, 'modpack-install');
   });
   handle('modpacks:import', async () => {
     const result = await dialog.showOpenDialog(getWindow(), {
@@ -35,7 +37,7 @@ function register({ handle, getWindow, services, dirs, instances, tasks, runTask
     });
     if (result.canceled) return null;
     const buffer = await fs.promises.readFile(result.filePaths[0]);
-    return installFromBuffer(t('ipc.import_de', { filePaths: path.basename(result.filePaths[0]) }), buffer, null);
+    return installFromBuffer(t('ipc.import_de', { filePaths: path.basename(result.filePaths[0]) }), buffer, null, 'modpack-import');
   });
   handle('modpacks:checkUpdate', (id) => modpacks.checkUpdate(instances.get(text(id))));
   handle('modpacks:update', async (id, versionId, options) => {
@@ -48,7 +50,7 @@ function register({ handle, getWindow, services, dirs, instances, tasks, runTask
     const { buffer } = await modpacks.downloadPack(dirs, text(versionId));
     return runTask(t('ipc.mise_jour_de', { name: instance.name }), (onProgress) =>
       modpacks.updatePack({ instances, instanceId: instance.id, buffer, source: { versionId: text(versionId) }, trash, onProgress }),
-    );
+    { kind: 'modpack-update', instanceId: instance.id, params: { versionId: text(versionId) } });
   });
 
   handle('instances:export', async (id, options) => {

@@ -41,7 +41,8 @@ test('contrat : les événements envoyés sont ceux écoutés par preload.js', (
   const listened = names(preload, /listen\('([\w:]+)'\)/g).sort();
   const sent = new Set(mainSources().flatMap((file) => names(fs.readFileSync(file, 'utf8'), /\bsend\(\s*'([\w:]+)'/g)));
   assert.deepEqual([...sent].sort(), listened);
-  assert.deepEqual(listened, ['app:launchRequest', 'launch:logs', 'launch:progress', 'launch:reset', 'launch:status', 'task:progress', 'update:status']);
+  // « tasks:changed » ajouté par le gestionnaire de tâches (phase 3), pour la page Activité.
+  assert.deepEqual(listened, ['app:launchRequest', 'launch:logs', 'launch:progress', 'launch:reset', 'launch:status', 'task:progress', 'tasks:changed', 'update:status']);
 });
 
 test('contrat : le fichier de types suit preload.js (canaux et événements)', () => {

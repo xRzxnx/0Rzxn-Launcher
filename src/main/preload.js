@@ -127,6 +127,8 @@ contextBridge.exposeInMainWorld('launcher', {
   profiles: { plan: invoke('profiles:plan'), create: invoke('profiles:create'), installMods: invoke('profiles:installMods') },
   storage: { usage: invoke('storage:usage'), plan: invoke('storage:plan'), clean: invoke('storage:clean') },
   update: { state: invoke('update:state'), check: invoke('update:check'), install: invoke('update:install'), onStatus: listen('update:status') },
+  // Tâches longues (page Activité, phase 5).
+  tasks: { onChanged: listen('tasks:changed') },
   launch: {
     start: invoke('launch:start'),
     stop: invoke('launch:stop'),
