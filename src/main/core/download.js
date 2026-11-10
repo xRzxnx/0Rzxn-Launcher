@@ -1,37 +1,17 @@
 // @ts-check
 'use strict';
 
-// Téléchargements vérifiés : SHA-1, taille, 3 essais, plusieurs fichiers en parallèle.
+// Téléchargements vérifiés : SHA-1, taille, plusieurs fichiers en parallèle.
+// Les requêtes (HTTPS, essais, délais, limites) passent par net.js.
 const { t } = require('../i18n');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
-
-const USER_AGENT = '0Rzxn_Launcher/0.1';
-const TIMEOUT_MS = 30_000;
+const { fetchBuffer, fetchJson } = require('./net');
 
 /** @typedef {{ url: string, path: string, sha1?: string | null, size?: number | null }} DownloadTask */
 /** @typedef {{ done: number, total: number, doneBytes: number, totalBytes: number }} DownloadProgress */
-
-/** @param {string} url @param {{ signal?: AbortSignal }} [options] */
-async function request(url, { signal } = {}) {
-  const timeout = AbortSignal.timeout(TIMEOUT_MS);
-  const res = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-  });
-  if (!res.ok) throw Object.assign(new Error(t('download.reponse_de', { status: res.status, host: new URL(url).host })), { status: res.status });
-  return res;
-}
-
-async function fetchJson(url, options) {
-  return (await request(url, options)).json();
-}
-
-async function fetchBuffer(url, options) {
-  return Buffer.from(await (await request(url, options)).arrayBuffer());
-}
 
 function sha1(buffer) {
   return crypto.createHash('sha1').update(buffer).digest('hex');
@@ -69,24 +49,24 @@ async function isValid(task, verify) {
  * @param {{ signal?: AbortSignal, verify?: boolean, retries?: number }} [options]
  * @returns {Promise<boolean>}
  */
-async function downloadFile(task, { signal, verify = false, retries = 3 } = {}) {
+async function downloadFile(task, { signal, verify = false, retries = 2 } = {}) {
   if (await isValid(task, verify)) return false;
+  // Les erreurs réseau sont déjà réessayées par net.js : ici, seulement un fichier reçu mais faux (taille, SHA-1).
   let lastError;
   for (let attempt = 1; attempt <= retries; attempt++) {
+    const data = await fetchBuffer(task.url, { signal });
     try {
-      const data = await fetchBuffer(task.url, { signal });
       if (task.size != null && data.length !== task.size) throw new Error(t('download.taille_inattendue_pour', { path: path.basename(task.path) }));
       if (task.sha1 && sha1(data) !== task.sha1) throw new Error(t('download.fichier_corrompu_sha', { path: path.basename(task.path) }));
-      await fsp.mkdir(path.dirname(task.path), { recursive: true });
-      const tmp = `${task.path}.${process.pid}.${attempt}.tmp`;
-      await fsp.writeFile(tmp, data);
-      await fsp.rename(tmp, task.path);
-      return true;
     } catch (error) {
-      if (signal?.aborted) throw error;
       lastError = error;
-      if (attempt < retries) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      continue;
     }
+    await fsp.mkdir(path.dirname(task.path), { recursive: true });
+    const tmp = `${task.path}.${process.pid}.${attempt}.tmp`;
+    await fsp.writeFile(tmp, data);
+    await fsp.rename(tmp, task.path);
+    return true;
   }
   throw lastError;
 }
