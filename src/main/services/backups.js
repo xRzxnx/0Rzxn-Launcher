@@ -32,7 +32,12 @@ function createBackups({ dirs, instances, runTask, trash }) {
   const backupBefore = async (instance, reason) => {
     if (!worldsToBackUp(instance, reason) || !worlds.scanWorlds(instances.gameDir(instance.id)).some(worldsToBackUp(instance, reason))) return null;
     try {
-      await runTask(t('ipc.sauvegarde_des_mondes'), (onProgress, signal) => autoBackup(instance, reason, onProgress, signal), { cancellable: true });
+      await runTask(t('ipc.sauvegarde_des_mondes'), (onProgress, signal) => autoBackup(instance, reason, onProgress, signal), {
+        cancellable: true,
+        kind: 'worlds-auto-backup',
+        instanceId: instance.id,
+        params: { reason },
+      });
       return null;
     } catch (error) {
       return { backupError: error.message };

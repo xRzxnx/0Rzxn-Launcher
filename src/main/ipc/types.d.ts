@@ -141,6 +141,22 @@ export interface LaunchStatus {
 /** Progression de la tâche longue (« task:progress ») ; null quand elle se termine. */
 export type TaskProgress = { label: string; done: number; total: number; cancellable: boolean } | null;
 
+/** Tâche en attente ou en cours (« tasks:changed »). */
+export interface TaskSnapshot {
+  id: string;
+  kind: string;
+  label: string;
+  instanceId: string | null;
+  priority: 'high' | 'normal' | 'low';
+  cancellable: boolean;
+  state: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  createdAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
+  error: string | null;
+  progress: { label: string; done: number; total: number };
+}
+
 /** Messages envoyés à l'interface (webContents.send) et leur contenu. */
 export interface Events {
   'app:launchRequest': string;
@@ -149,5 +165,6 @@ export interface Events {
   'launch:reset': undefined;
   'launch:status': LaunchStatus;
   'task:progress': TaskProgress;
+  'tasks:changed': TaskSnapshot[];
   'update:status': object;
 }

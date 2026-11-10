@@ -6,7 +6,7 @@ const { resolveLanguage, setLanguage, t } = require('../i18n');
 const { app, shell } = require('electron');
 const { createServices } = require('../services/container');
 const { LaunchManager } = require('../services/launches');
-const { createTaskRunner } = require('../services/tasks');
+const { TaskManager } = require('../services/tasks');
 const { createBackups } = require('../services/backups');
 const { createContentService } = require('../services/content');
 const { createShell } = require('../services/shell');
@@ -39,8 +39,9 @@ function registerIpc(getWindow) {
   applyLanguage();
 
   const launches = new LaunchManager(services, getWindow);
-  const tasks = createTaskRunner(getWindow);
-  const runTask = tasks.run;
+  const tasks = new TaskManager({ getWindow, history: services.db });
+  // Tâches longues d'aujourd'hui : une à la fois, « Patiente… » sinon (la file s'ouvrira avec la page Activité).
+  const runTask = (label, work, options) => tasks.runLong(label, work, options);
   const trash = (file) => shell.trashItem(file);
 
   const ctx = {
@@ -68,7 +69,7 @@ function registerIpc(getWindow) {
       if (task) throw new Error(t('ipc.patiente_est_en_cours', { task }));
     },
     // Zone de notification, Discord et mises à jour : suivent la partie en cours.
-    appShell: createShell({ getWindow, services, launches, isTaskBusy: () => Boolean(tasks.current()) }),
+    appShell: createShell({ getWindow, services, launches, isTaskBusy: () => tasks.busy() }),
   };
   for (const domain of DOMAINS) domain.register(ctx);
 

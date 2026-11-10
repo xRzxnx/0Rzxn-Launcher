@@ -341,3 +341,23 @@ test('lancement : chaque partie est notée dans launcher.db', async (t) => {
   assert.equal(rows[0].prepare_ms, rows[0].ready_at - rows[0].started_at);
   assert.equal(rows[1].ready_at, null);
 });
+
+test('tâches : chaque tâche finie est notée dans launcher.db', async (t) => {
+  const ipc = startIpc(t);
+  const { instance, gameDir } = await newInstance(ipc);
+  makeWorld(gameDir, 'Monde');
+  await ipc.invoke('worlds:backup', instance.id, 'Monde');
+  const cancelled = ipc.invoke('worlds:backup', instance.id, 'Monde');
+  await ipc.invoke('task:cancel');
+  await assert.rejects(cancelled);
+
+  const { DatabaseSync } = require('node:sqlite');
+  const db = new DatabaseSync(path.join(ipc.root, 'config', 'launcher.db'), { readOnly: true });
+  const rows = db.prepare('SELECT * FROM tasks ORDER BY created_at, id').all();
+  db.close();
+  assert.deepEqual(rows.map((r) => [r.kind, r.state, r.instance_id, r.label, JSON.parse(r.params).folder]), [
+    ['world-backup', 'done', instance.id, tr('ipc.sauvegarde_de', { name: 'Monde' }), 'Monde'],
+    ['world-backup', 'cancelled', instance.id, tr('ipc.sauvegarde_de', { name: 'Monde' }), 'Monde'],
+  ]);
+  assert.equal(rows[1].error, tr('zip.sauvegarde_annulee'));
+});

@@ -193,6 +193,7 @@ module.exports = {
   'ipc.origine_refusee': "Origen rechazado.",
   'ipc.pack_performances': "Pack de rendimiento",
   'ipc.patiente_est_en_cours': "Espera: «{task}» está en curso.",
+  'ipc.tache_annulee_avant_debut': "«{task}» se canceló antes de empezar.",
   'ipc.quitter_0rzxn_launcher': "Salir de 0Rzxn_ Launcher",
   'ipc.session_illisible': "Sesión ilegible.",
   'ipc.skin_minecraft_png': "Skin de Minecraft (PNG)",
