@@ -31,7 +31,7 @@ const VIEWS = {
   settings: renderSettings,
 };
 const FLUSH_VIEWS = new Set(['versions', 'console', 'mods', 'worlds']);
-const PREACT_VIEWS = new Set(['console', 'home']);
+const PREACT_VIEWS = new Set(['console', 'home', 'mods']);
 
 let lastView = null;
 
