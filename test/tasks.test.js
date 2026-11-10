@@ -245,3 +245,21 @@ test('progression d’un téléchargement : octets et vitesse dans tasks:changed
   done.resolve();
   await running;
 });
+
+test('tâche de fond (hidden) : pas de carte de tâche, ne compte pas comme occupé, mais visible dans la liste', async () => {
+  const { manager, messages } = setup();
+  const background = controlled(manager, { label: 'Nettoyage', hidden: true, priority: 'low' });
+  assert.equal(messages('task:progress').length, 0);
+  assert.equal(manager.busy(), false);
+  assert.equal(manager.current(), null);
+  assert.equal(manager.cancel(), false);
+  assert.deepEqual(manager.list().map((task) => [task.label, task.hidden]), [['Nettoyage', true]]);
+  // Une tâche longue démarre à côté et, elle, s'affiche.
+  const done = deferred();
+  const long = manager.runLong('Installation', () => done.promise);
+  assert.deepEqual(messages('task:progress').at(-1), { label: 'Installation', done: 0, total: 0, cancellable: false });
+  background.gate.resolve();
+  done.resolve();
+  await Promise.all([background.promise, long]);
+  assert.equal(messages('task:progress').at(-1), null);
+});

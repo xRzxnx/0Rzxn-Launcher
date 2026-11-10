@@ -155,6 +155,8 @@ export interface TaskSnapshot {
   instanceId: string | null;
   priority: 'high' | 'normal' | 'low';
   cancellable: boolean;
+  /** Travail de fond (nettoyage…) : pas de carte de tâche. */
+  hidden: boolean;
   state: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   createdAt: number;
   startedAt: number | null;

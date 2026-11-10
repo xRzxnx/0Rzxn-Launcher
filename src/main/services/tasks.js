@@ -22,6 +22,7 @@ const { t } = require('../i18n');
  * @property {string | null} group
  * @property {Priority} priority
  * @property {boolean} cancellable
+ * @property {boolean} hidden travail de fond : jamais affiché dans la carte de tâche, ne compte pas comme occupé
  * @property {any} params
  * @property {TaskState} state
  * @property {number} seq
@@ -77,9 +78,9 @@ class TaskManager extends EventEmitter {
   /**
    * Ajoute une tâche ; la promesse rend le résultat de `work`.
    * policy 'reject-if-busy' : refusée tout de suite (« Patiente… ») si elle ne peut pas démarrer maintenant.
-   * @param {{ kind: string, label: string, work: Task['work'], instanceId?: string | null, group?: string | null, priority?: Priority, cancellable?: boolean, params?: any, policy?: 'queue' | 'reject-if-busy' }} options
+   * @param {{ kind: string, label: string, work: Task['work'], instanceId?: string | null, group?: string | null, priority?: Priority, cancellable?: boolean, hidden?: boolean, params?: any, policy?: 'queue' | 'reject-if-busy' }} options
    */
-  run({ kind, label, work, instanceId = null, group = null, priority = 'normal', cancellable = false, params = null, policy = 'queue' }) {
+  run({ kind, label, work, instanceId = null, group = null, priority = 'normal', cancellable = false, hidden = false, params = null, policy = 'queue' }) {
     return new Promise((resolve, reject) => {
       const createdAt = this.now();
       /** @type {Task} */
@@ -91,6 +92,7 @@ class TaskManager extends EventEmitter {
         group,
         priority: priority in RANK ? priority : 'normal',
         cancellable,
+        hidden,
         params,
         state: 'queued',
         seq: this.seq,
@@ -198,8 +200,10 @@ class TaskManager extends EventEmitter {
 
   /** « task:progress » suit la plus ancienne tâche en cours ; null quand il n'y en a plus. */
   showProgress() {
-    const [first] = this.running().sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0) || a.seq - b.seq);
-    if (first === this.shown) return;
+    const [first] = this.running()
+      .filter((task) => !task.hidden)
+      .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0) || a.seq - b.seq);
+    if ((first ?? null) === this.shown) return;
     this.shown = first ?? null;
     this.send('task:progress', first ? progressPayload(first) : null);
   }
@@ -223,7 +227,7 @@ class TaskManager extends EventEmitter {
 
   /** Une tâche en attente ou en cours. */
   busy() {
-    return this.tasks.length > 0;
+    return this.tasks.some((task) => !task.hidden);
   }
 
   /** Nom de la tâche affichée, ou null. */
@@ -233,8 +237,8 @@ class TaskManager extends EventEmitter {
 
   /** @param {Task} task */
   snapshot(task) {
-    const { id, kind, label, instanceId, priority, cancellable, state, createdAt, startedAt, endedAt, error, progress } = task;
-    return { id, kind, label, instanceId, priority, cancellable, state, createdAt, startedAt, endedAt, error, progress: { ...progress } };
+    const { id, kind, label, instanceId, priority, cancellable, hidden, state, createdAt, startedAt, endedAt, error, progress } = task;
+    return { id, kind, label, instanceId, priority, cancellable, hidden, state, createdAt, startedAt, endedAt, error, progress: { ...progress } };
   }
 
   /** Tâches en attente et en cours, dans l'ordre où elles passeront. */

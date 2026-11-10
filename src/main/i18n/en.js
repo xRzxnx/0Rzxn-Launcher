@@ -200,6 +200,7 @@ module.exports = {
   'ipc.pack_performances': "Performance Pack",
   'ipc.patiente_est_en_cours': "Please wait: “{task}” is in progress.",
   'ipc.tache_annulee_avant_debut': "“{task}” was cancelled before it started.",
+  'ipc.nettoyage_des_fichiers_temporaires': "Cleaning up temporary files",
   'ipc.quitter_0rzxn_launcher': "Quit 0Rzxn_ Launcher",
   'ipc.session_illisible': "Unreadable session.",
   'ipc.skin_minecraft_png': "Minecraft skin (PNG)",

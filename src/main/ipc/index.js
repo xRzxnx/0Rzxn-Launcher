@@ -11,6 +11,10 @@ const { createBackups } = require('../services/backups');
 const { createContentService } = require('../services/content');
 const { createShell } = require('../services/shell');
 const { createHandle, launchArgument } = require('./handle');
+const { journal } = require('../core/journal');
+const { cleanTemporaryFiles } = require('../core/temp-files');
+
+const CLEANUP_DELAY = 30 * 1000;
 
 const DOMAINS = [
   require('./app'),
@@ -74,6 +78,15 @@ function registerIpc(getWindow) {
   };
   for (const domain of DOMAINS) domain.register(ctx);
 
+  // Fichiers temporaires abandonnés : retirés en tâche de fond, un peu après l'ouverture.
+  const cleanup = setTimeout(() => {
+    tasks
+      .run({ kind: 'temp-cleanup', label: t('ipc.nettoyage_des_fichiers_temporaires'), priority: 'low', hidden: true, work: ({ signal }) => cleanTemporaryFiles({ dirs, signal }) })
+      .then(({ count, bytes }) => count && journal.info(`Temporary files removed: ${count} (${bytes} bytes)`))
+      .catch((error) => journal.warn('Temporary files cleanup failed:', error));
+  }, CLEANUP_DELAY);
+  cleanup.unref?.();
+
   return {
     /** La fenêtre réapparaît (mode léger) : les logs en attente sont envoyés. */
     windowShown() {
@@ -88,6 +101,7 @@ function registerIpc(getWindow) {
     },
     hideOnClose: () => ctx.appShell.hideOnClose(),
     beforeQuit() {
+      clearTimeout(cleanup);
       ctx.appShell.beforeQuit();
       services.db.close();
     },
