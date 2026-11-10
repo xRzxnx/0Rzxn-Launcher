@@ -89,6 +89,7 @@ export type InvokeChannel =
   | 'storage:usage'
   | 'system:memory'
   | 'task:cancel'
+  | 'tasks:list'
   | 'titlemenu:apply'
   | 'titlemenu:auto'
   | 'titlemenu:disable'
