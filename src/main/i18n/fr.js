@@ -118,6 +118,7 @@ module.exports = {
   'discord.erreur_de_discord': "Erreur de Discord.",
   'download.failed': {"one":"{count} fichier n'a pas pu être téléchargé ({file} : {error}). Vérifie ta connexion puis réessaie.","other":"{count} fichiers n'ont pas pu être téléchargés ({file} : {error}). Vérifie ta connexion puis réessaie."},
   'download.fichier_corrompu_sha': "Fichier corrompu (SHA-1) : {path}",
+  'download.fichier_corrompu_sha512': "Fichier corrompu (SHA-512) : {path}",
   'download.reponse_de': "Réponse {status} de {host}",
   'download.taille_inattendue_pour': "Taille inattendue pour {path}",
   'net.adresse_refusee': "Adresse refusée (seul HTTPS est accepté) : {url}",

@@ -255,16 +255,16 @@ function retryable(error) {
  * Exécute `work` (une requête et sa lecture) avec jusqu'à 4 essais.
  * @template T
  * @param {(attempt: number) => Promise<T>} work
- * @param {{ signal?: AbortSignal, attempts?: number, host?: string }} [options]
+ * @param {{ signal?: AbortSignal, attempts?: number, host?: string, retryIf?: (error: any) => boolean }} [options]
  * @returns {Promise<T>}
  */
-async function withRetries(work, { signal, attempts = ATTEMPTS, host = '' } = {}) {
+async function withRetries(work, { signal, attempts = ATTEMPTS, host = '', retryIf = () => true } = {}) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await work(attempt);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
-      if (attempt >= attempts || !retryable(error)) throw error;
+      if (attempt >= attempts || !retryable(error) || !retryIf(error)) throw error;
       const wait = error?.retryAfter ?? backoffMs(attempt);
       if (wait > MAX_RETRY_AFTER_MS) {
         throw Object.assign(new Error(t('net.attendre_avant_de_reessayer', { host, seconds: Math.ceil(wait / 1000) })), { status: error.status });
