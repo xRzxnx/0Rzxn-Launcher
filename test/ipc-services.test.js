@@ -9,7 +9,8 @@ const path = require('node:path');
 const { t: tr } = require('../src/main/i18n');
 const { startIpc, sessions, makeWorld, waitFor, wire, electron } = require('./helpers/ipc');
 
-const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true };
+// downloads ajouté en phase 4 (limites de téléchargement).
+const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, downloads: { concurrency: 16, perHost: 8 } };
 
 async function newInstance(ipc, name = 'Survie', extra = {}) {
   const instance = await ipc.invoke('instances:create', { name, version: '1.21.1', loader: 'vanilla', ...extra });
@@ -388,4 +389,17 @@ test('lancement : octets, vitesse et temps restant transmis pendant un télécha
   assert.deepEqual(wire(ipc.win.messages('launch:progress').at(-1)), { instanceId: instance.id, phase: 'preparing', step: 3, done: 0, total: 0, prepareOnly: false });
   await ipc.invoke('launch:stop');
   session.emit('failed', { message: 'annulé', cancelled: true });
+});
+
+test('limites de téléchargement : bornées, enregistrées et appliquées tout de suite', async (t) => {
+  const net = require('../src/main/core/net');
+  t.after(() => net.configure({ concurrency: 16, perHost: 8 }));
+  const ipc = startIpc(t);
+  assert.deepEqual(net.limits(), { concurrency: 16, perHost: 8 });
+  const prefs = await ipc.invoke('launcher:set', { downloads: { concurrency: 200, perHost: 0 } });
+  assert.deepEqual(prefs.downloads, { concurrency: 64, perHost: 1 });
+  assert.deepEqual(net.limits(), { concurrency: 64, perHost: 1 });
+  assert.deepEqual((await ipc.invoke('launcher:set', { downloads: { concurrency: 'beaucoup', perHost: 4 } })).downloads, { concurrency: 64, perHost: 4 });
+  assert.deepEqual((await ipc.invoke('launcher:set', { accent: 'bleu' })).downloads, { concurrency: 64, perHost: 4 });
+  assert.deepEqual(net.limits(), { concurrency: 64, perHost: 4 });
 });

@@ -7,16 +7,26 @@ const { readJson, writeJson } = require('../core/store');
 
 // Réglages du launcher lui-même (Paramètres › Launcher).
 // lightMode : le launcher se met en veille pendant une partie ; gpuHighPerformance : accord donné pour la carte dédiée.
-const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true };
+// downloads : téléchargements simultanés au total et par serveur (sans écran avant la page Activité).
+const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, downloads: { concurrency: 16, perHost: 8 } };
 const ACCENTS = new Set(['violet', 'bleu', 'cyan', 'vert', 'ambre', 'rouge', 'rose']);
 
+/** @param {any} value @param {number} min @param {number} max @param {number} fallback */
+const bounded = (value, min, max, fallback) => (Number.isInteger(value) ? Math.min(max, Math.max(min, value)) : fallback);
+
 function sanitizeLauncher(input, base = LAUNCHER_DEFAULTS) {
-  const s = { ...base };
+  const s = { ...base, downloads: { ...LAUNCHER_DEFAULTS.downloads, ...base.downloads } };
   if (input == null) return s;
   if (input.language === 'auto' || SUPPORTED.includes(input.language)) s.language = input.language;
   // Couleur d'accent : un thème prédéfini ou une couleur perso « #rrggbb ».
   if (ACCENTS.has(input.accent) || /^#[0-9a-f]{6}$/i.test(input.accent ?? '')) s.accent = input.accent.toLowerCase();
   for (const key of ['discord', 'discordShowName', 'tray', 'closeToTray', 'lightMode', 'gpuHighPerformance', 'autoUpdate']) if (typeof input[key] === 'boolean') s[key] = input[key];
+  if (input.downloads && typeof input.downloads === 'object') {
+    s.downloads = {
+      concurrency: bounded(input.downloads.concurrency, 1, 64, s.downloads.concurrency),
+      perHost: bounded(input.downloads.perHost, 1, 32, s.downloads.perHost),
+    };
+  }
   return s;
 }
 
