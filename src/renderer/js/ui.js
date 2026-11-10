@@ -11,16 +11,25 @@ export { formatGo, formatPlaytime, formatShortTime, formatSize, slugify } from '
  * Traduit les propriétés de dom.js pour Preact :
  * - `svg` (icônes statiques de icons.js) → dangerouslySetInnerHTML, seul HTML autorisé, comme dans dom.js ;
  * - `onClick`, `onKeyDown`… → nom d'événement en minuscules, comme addEventListener dans dom.js ;
- * - null et false → propriété absente ; `key` → clé Preact (identité d'un élément dans une liste).
+ * - null et false → propriété absente ; `key` → clé Preact (identité d'un élément dans une liste), `ref` → élément affiché ;
+ * - les autres attributs passent par setAttribute/removeAttribute, comme dans dom.js : Preact affecterait sinon la
+ *   propriété DOM (title ou class vides laissés derrière lui, spellcheck = 'false' compris comme vrai…). Seuls value, et
+ *   checked/selected des champs, restent des propriétés : l'utilisateur peut les changer entre deux rendus.
  */
+// style reste une propriété (style.cssText, comme dom.js) : la CSP refuse setAttribute('style'). Un style retiré laisse
+// style="" sur l'élément, sans effet.
+const KEPT = new Set(['style', 'value', 'key', 'ref']);
+const FORM_STATE = new Set(['checked', 'selected']);
+
 export function h(tag, props, ...children) {
   const p = {};
   for (const [name, value] of Object.entries(props || {})) {
     if (value == null || value === false) continue;
     if (name === 'svg') p.dangerouslySetInnerHTML = { __html: value };
     else if (name.startsWith('on') && typeof value === 'function') p[`on${name.slice(2).toLowerCase()}`] = value;
-    // true : propriété DOM (disabled, checked…) ; attribut aria-/data- vide, comme setAttribute(nom, '') dans dom.js.
-    else p[name] = value === true && name.includes('-') ? '' : value;
+    else if (KEPT.has(name) || (FORM_STATE.has(name) && (tag === 'input' || tag === 'option'))) p[name] = value;
+    // Nom commençant par une majuscule : absent des propriétés DOM, Preact passe par setAttribute (qui le remet en minuscules).
+    else p[name[0].toUpperCase() + name.slice(1)] = value === true ? '' : String(value);
   }
   for (const child of children.flat(Infinity)) {
     if (typeof Node !== 'undefined' && child instanceof Node) throw new Error(`ui.js: <${tag}> received a DOM element from dom.js`);

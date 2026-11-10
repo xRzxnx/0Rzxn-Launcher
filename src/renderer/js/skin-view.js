@@ -14,18 +14,19 @@ function zone(url, x, y, w, h_, scale) {
 }
 
 /** Tête : la face et le calque du chapeau. L'avatar reste dessous si la texture ne se charge pas. */
-export function skinHead(account, size) {
+/** `make` : h de dom.js (par défaut) ou de ui.js pour un écran Preact. */
+export function skinHead(account, size, make = h) {
   const hash = account?.look?.skin?.hash;
-  const fallback = avatar(account?.type === 'microsoft' ? 'a' : 'b', size);
+  const fallback = avatar(account?.type === 'microsoft' ? 'a' : 'b', size, make);
   if (!hash) return fallback;
   const scale = size / 8;
   const url = textureUrl(hash);
-  return h(
+  return make(
     'span',
     { class: 'skin-head', 'aria-hidden': 'true', style: `width:${size}px;height:${size}px` },
     fallback,
-    h('span', { class: 'skin-head__layer', style: zone(url, 8, 8, 8, 8, scale) }),
-    h('span', { class: 'skin-head__layer', style: zone(url, 40, 8, 8, 8, scale) }),
+    make('span', { class: 'skin-head__layer', style: zone(url, 8, 8, 8, 8, scale) }),
+    make('span', { class: 'skin-head__layer', style: zone(url, 40, 8, 8, 8, scale) }),
   );
 }
 

@@ -5,11 +5,11 @@ import { checkModpackUpdate, installedContent, pendingModUpdates, updateItems, u
 import { openRecap } from '../recap-actions.js';
 import { ramGuide,refreshFreeRam } from '../perf-actions.js';
 import { FILES_STEP, JAVA_STEP, LAUNCH_STEPS, LOADER_NAMES, LOADER_STEP, MEMORY_STEP, formatLastPlayed, loaderLabel, ramRange, ramVerdict, ramZones } from '../data.js';
-import { formatGo, formatPlaytime, formatShortTime, h, icon } from '../dom.js';
+import { formatGo, formatPlaytime, formatShortTime, h, icon } from '../ui.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceAccount, instanceStatus, runPercent, selectedInstance, state, update } from '../state.js';
 import { go, openNewInstance } from './chrome.js';
-import { resumeControl } from './resume.js';
+import { resumeControl } from './resume-control.js';
 
 const javaLabel = (details) => (details ? `Java ${details.java}` : 'Java');
 
@@ -30,7 +30,7 @@ function playButton(instance, status) {
 function fixedAccount(instance) {
   const account = instanceAccount(instance);
   if (!account) return null;
-  return h('span', { class: 'hero__account' }, skinHead(account, 28), h('span', null, t('home.toujours_avec', { name: account.name })));
+  return h('span', { class: 'hero__account' }, skinHead(account, 28, h), h('span', null, t('home.toujours_avec', { name: account.name })));
 }
 
 const UPDATE_ROWS = 3;
@@ -183,12 +183,19 @@ const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)'
 const pose = { x: 0, y: 0, turns: 0 };
 
 /** Bloc de l'instance en 3D : suit la souris, tourne au clic. Hors du verre flou, seul le cube bouge. */
+// Élément affiché du bloc (écran Preact : il reste le même d'un rendu à l'autre).
+let cubeEl = null;
+
 function blockCube(instance, still) {
-  const cube = h('span', { class: `cube cube--${instance.icon}` }, CUBE_FACES.map((face) => h('i', { class: `cube__face cube__face--${face}` })));
+  const transform = () => `rotateX(${-24 - pose.y * 14}deg) rotateY(${-38 + pose.x * 22 + pose.turns * 360}deg)`;
+  const cube = h(
+    'span',
+    { class: `cube cube--${instance.icon}`, style: `transform:${transform()}`, ref: (el) => { cubeEl = el; } },
+    CUBE_FACES.map((face) => h('i', { class: `cube__face cube__face--${face}` })),
+  );
   const paint = () => {
-    cube.style.transform = `rotateX(${-24 - pose.y * 14}deg) rotateY(${-38 + pose.x * 22 + pose.turns * 360}deg)`;
+    if (cubeEl) cubeEl.style.transform = transform();
   };
-  paint();
   let frame = 0;
   const aim = (x, y) => {
     pose.x = x;
@@ -206,9 +213,9 @@ function blockCube(instance, still) {
       onClick: () => {
         if (reducedMotion()) return;
         pose.turns += 1;
-        cube.classList.add('cube--spin');
+        cubeEl?.classList.add('cube--spin');
         paint();
-        setTimeout(() => cube.classList.remove('cube--spin'), SPIN_MS);
+        setTimeout(() => cubeEl?.classList.remove('cube--spin'), SPIN_MS);
       },
     },
     h('span', { class: 'cube-stage__halo', 'aria-hidden': 'true' }),
@@ -219,21 +226,33 @@ function blockCube(instance, still) {
 
 const RAM_MIN = 1;
 
+// Éléments affichés de la tuile Mémoire, modifiés directement pendant le glissement du curseur.
+const ram = { value: null, badge: null, advice: null };
+
+/** Change le texte d'un élément Preact sans remplacer son nœud texte (Preact le garde en référence). */
+function setText(el, text) {
+  if (!el) return;
+  if (el.firstChild?.nodeType === Node.TEXT_NODE && el.childNodes.length === 1) el.firstChild.data = text;
+  else el.textContent = text;
+}
+
 /** Tuile Mémoire : le conseil suit le curseur, d'après l'instance et les composants du PC. */
 function ramTile(instance, guide, busy) {
   const settings = instance.settings;
   const max = Math.max(2, settings.ram, Math.floor(state.memory.totalGb * 2) / 2);
-  const value = h('span', { class: 'spec-tile__value' }, formatGo(settings.ram));
-  const badge = h('span', { class: 'ram-badge' });
-  const advice = h('p', { class: 'ram-advice' });
+  const verdict = guide ? ramVerdict(settings.ram, guide, state.memory.freeGb) : null;
+  const value = h('span', { class: 'spec-tile__value', ref: (el) => { ram.value = el; } }, formatGo(settings.ram));
+  const badge = h('span', { class: verdict ? `ram-badge ram-badge--${verdict.level}` : 'ram-badge', ref: (el) => { ram.badge = el; } }, verdict?.title);
+  const advice = h('p', { class: 'ram-advice', ref: (el) => { ram.advice = el; } }, verdict?.text);
+  // Pendant le glissement, sans redessin : seuls ces trois textes suivent le curseur.
   const showVerdict = () => {
+    setText(ram.value, formatGo(settings.ram));
     if (!guide) return;
-    const verdict = ramVerdict(settings.ram, guide, state.memory.freeGb);
-    badge.className = `ram-badge ram-badge--${verdict.level}`;
-    badge.textContent = verdict.title;
-    advice.textContent = verdict.text;
+    const next = ramVerdict(settings.ram, guide, state.memory.freeGb);
+    if (ram.badge) ram.badge.className = `ram-badge ram-badge--${next.level}`;
+    setText(ram.badge, next.title);
+    setText(ram.advice, next.text);
   };
-  showVerdict();
   return h(
     'div',
     { class: 'spec-tile spec-tile--ram' },
@@ -271,7 +290,6 @@ function ramTile(instance, guide, busy) {
       // Sans redessin, pour garder le curseur en main ; enregistré au relâchement.
       onInput: (e) => {
         settings.ram = Number(e.target.value);
-        value.textContent = formatGo(settings.ram);
         showVerdict();
       },
       onChange: () => saveSettings('instance', instance.id),

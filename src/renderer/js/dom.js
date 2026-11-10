@@ -49,13 +49,13 @@ const AVATAR_COLORS = {
   O: '#5b6475', E: '#1f2937', m: '#a0644f',
 };
 
-/** Avatar pixel en attendant les vraies têtes de skin (étape 4). */
-export function avatar(variant, size) {
+/** Avatar pixel en attendant les vraies têtes de skin (étape 4). `make` : h de dom.js ou de ui.js. */
+export function avatar(variant, size, make = h) {
   const cells = AVATARS[variant === 'b' ? 'b' : 'a'].join('').split('');
-  return h(
+  return make(
     'span',
     { class: 'avatar', 'aria-hidden': 'true', style: `width:${size}px;height:${size}px` },
-    cells.map((c) => h('span', { style: `background:${AVATAR_COLORS[c]}` })),
+    cells.map((c) => make('span', { style: `background:${AVATAR_COLORS[c]}` })),
   );
 }
 
