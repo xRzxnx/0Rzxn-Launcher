@@ -29,7 +29,7 @@ const { t } = require('../i18n');
  * @property {number | null} startedAt
  * @property {number | null} endedAt
  * @property {string | null} error
- * @property {{ label: string, done: number, total: number }} progress
+ * @property {{ label: string, done: number, total: number, doneBytes?: number, totalBytes?: number, speed?: number, eta?: number }} progress
  * @property {AbortController} controller
  * @property {(ctx: { signal: AbortSignal, progress: (p: { label?: string, done: number, total: number }) => void }) => any} work
  * @property {(value: any) => void} resolve
@@ -39,6 +39,10 @@ const { t } = require('../i18n');
 const RANK = { high: 0, normal: 1, low: 2 };
 const GROUP_LIMITS = { long: 1 };
 const EVENT_INTERVAL = 100; // au plus 10 envois par seconde de la liste des tâches
+const BYTE_FIELDS = ['doneBytes', 'totalBytes', 'speed', 'eta'];
+
+/** Contenu de « task:progress », inchangé depuis la phase 2 : l'interface d'aujourd'hui n'attend que ces quatre champs. @param {Task} task */
+const progressPayload = (task) => ({ label: task.progress.label, done: task.progress.done, total: task.progress.total, cancellable: task.cancellable });
 
 class TaskManager extends EventEmitter {
   /**
@@ -145,7 +149,9 @@ class TaskManager extends EventEmitter {
     const progress = (p) => {
       if (task.state !== 'running') return;
       task.progress = { label: p.label ?? task.label, done: p.done, total: p.total };
-      if (this.shown === task) this.send('task:progress', { ...task.progress, cancellable: task.cancellable });
+      // Téléchargement : octets, vitesse et temps restant, pour la page Activité (tasks:changed).
+      for (const key of BYTE_FIELDS) if (p[key] != null) task.progress[key] = p[key];
+      if (this.shown === task) this.send('task:progress', progressPayload(task));
       this.changed(false);
     };
     let result;
@@ -195,7 +201,7 @@ class TaskManager extends EventEmitter {
     const [first] = this.running().sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0) || a.seq - b.seq);
     if (first === this.shown) return;
     this.shown = first ?? null;
-    this.send('task:progress', first ? { ...first.progress, cancellable: first.cancellable } : null);
+    this.send('task:progress', first ? progressPayload(first) : null);
   }
 
   /**
@@ -260,7 +266,7 @@ class TaskManager extends EventEmitter {
    * Comme l'ancien runTask : une seule tâche longue à la fois, refus « Patiente… » sinon.
    * @template T
    * @param {string} label
-   * @param {(onProgress: (p: { label?: string, done: number, total: number }) => void, signal?: AbortSignal) => Promise<T>} work
+   * @param {(onProgress: (p: { label?: string, done: number, total: number, doneBytes?: number, totalBytes?: number, speed?: number | null, eta?: number | null }) => void, signal?: AbortSignal) => Promise<T>} work
    * @param {{ cancellable?: boolean, kind?: string, instanceId?: string | null, params?: any }} [options]
    * @returns {Promise<T>}
    */

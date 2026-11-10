@@ -152,3 +152,54 @@ test('même fichier demandé deux fois en même temps : un seul téléchargement
   assert.equal(b, true);
   assert.equal(requests.length, 1);
 });
+
+test('speedMeter : moyenne sur les 3 dernières secondes, rien avant une demi-seconde', () => {
+  let now = 0;
+  const meter = require('../src/main/core/download').speedMeter({ now: () => now });
+  assert.equal(meter.sample(0), null);
+  now = 400;
+  assert.equal(meter.sample(400_000), null);
+  now = 1000;
+  assert.equal(meter.sample(1_000_000), 1_000_000); // 1 Mo en 1 s
+  now = 5000;
+  assert.equal(meter.sample(1_000_000), 0); // plus rien reçu depuis 4 s
+});
+
+test('downloadAll : octets à leur arrivée, vitesse, temps restant ; un fichier déjà présent compte sans fausser la vitesse', async (t) => {
+  const dir = tempDir(t);
+  const data = crypto.randomBytes(256 * 1024);
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Length': data.length });
+    let sent = 0;
+    const timer = setInterval(() => {
+      res.write(data.subarray(sent, sent + 32 * 1024));
+      sent += 32 * 1024;
+      if (sent >= data.length) {
+        clearInterval(timer);
+        res.end();
+      }
+    }, 100); // 8 morceaux : environ 0,8 s par fichier
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const url = `http://127.0.0.1:${server.address().port}/f`;
+  const present = path.join(dir, 'deja.bin');
+  fs.writeFileSync(present, data);
+  const tasks = [
+    { url, path: present, sha1: hash(data), size: data.length },
+    { url, path: path.join(dir, 'a.bin'), sha1: hash(data), size: data.length },
+    { url, path: path.join(dir, 'b.bin'), sha1: hash(data), size: data.length },
+  ];
+  const reports = [];
+  await require('../src/main/core/download').downloadAll(tasks, { concurrency: 2, onProgress: (p) => reports.push(p) });
+  const last = reports.at(-1);
+  assert.deepEqual([last.done, last.total, last.doneBytes, last.totalBytes], [3, 3, 3 * data.length, 3 * data.length]);
+  const middle = reports.filter((p) => p.doneBytes > data.length && p.doneBytes < 3 * data.length);
+  assert.ok(middle.length >= 3, 'des octets arrivent avant la fin des fichiers');
+  const withSpeed = reports.filter((p) => p.speed != null);
+  assert.ok(withSpeed.length > 0, 'vitesse mesurée');
+  // Deux fichiers de 256 Ko en environ 0,8 s : bien moins que si le fichier déjà présent comptait comme reçu.
+  assert.ok(withSpeed.every((p) => p.speed < 3 * data.length), `vitesse : ${withSpeed.map((p) => Math.round(p.speed)).join(', ')}`);
+  assert.ok(withSpeed.some((p) => p.eta != null && p.eta >= 0));
+  assert.ok(reports.every((p, i) => i === 0 || p.doneBytes >= reports[i - 1].doneBytes));
+});

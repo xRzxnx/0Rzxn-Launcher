@@ -228,3 +228,20 @@ test('sans fenêtre ni base : tout fonctionne', async () => {
   assert.equal(await manager.run({ kind: 'x', label: 'A', work: async () => 1 }), 1);
   assert.equal(await manager.runLong('B', async () => 2), 2);
 });
+
+test('progression d’un téléchargement : octets et vitesse dans tasks:changed, task:progress inchangé', async () => {
+  const { manager, messages } = setup();
+  let step;
+  const done = deferred();
+  const running = manager.runLong('Installation de X', (onProgress) => {
+    step = onProgress;
+    return done.promise;
+  });
+  step({ done: 3, total: 10, doneBytes: 1500, totalBytes: 5000, speed: 750, eta: 5 });
+  assert.deepEqual(messages('task:progress').at(-1), { label: 'Installation de X', done: 3, total: 10, cancellable: false });
+  assert.deepEqual(manager.list()[0].progress, { label: 'Installation de X', done: 3, total: 10, doneBytes: 1500, totalBytes: 5000, speed: 750, eta: 5 });
+  step({ done: 4, total: 10, doneBytes: 2000, totalBytes: 5000, speed: null, eta: null });
+  assert.deepEqual(manager.list()[0].progress, { label: 'Installation de X', done: 4, total: 10, doneBytes: 2000, totalBytes: 5000 });
+  done.resolve();
+  await running;
+});

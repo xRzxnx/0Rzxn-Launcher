@@ -124,6 +124,11 @@ export interface Run {
   total: number;
   prepareOnly: boolean;
   startedAt?: number;
+  /** Pendant un téléchargement : octets reçus, octets attendus, octets par seconde, secondes restantes. */
+  doneBytes?: number;
+  totalBytes?: number;
+  speed?: number;
+  eta?: number;
 }
 
 /** Changement d'état de la partie (« launch:status »). */
@@ -155,7 +160,7 @@ export interface TaskSnapshot {
   startedAt: number | null;
   endedAt: number | null;
   error: string | null;
-  progress: { label: string; done: number; total: number };
+  progress: { label: string; done: number; total: number; doneBytes?: number; totalBytes?: number; speed?: number; eta?: number };
 }
 
 /** Messages envoyés à l'interface (webContents.send) et leur contenu. */

@@ -10,6 +10,7 @@ const { gpu } = require('../platform');
 const worlds = require('../core/worlds');
 
 const LOG_BUFFER = 5000;
+const BYTE_FIELDS = ['doneBytes', 'totalBytes', 'speed', 'eta'];
 const text = (value) => (typeof value === 'string' ? value : '');
 
 /** Une seule partie (ou préparation) à la fois, comme dans l'interface. */
@@ -110,8 +111,13 @@ class LaunchManager {
     const sessionId = history?.startSession({ instanceId, version: instance.version, loader: instance.loader }) ?? null;
 
     session.on('log', (line) => this.pushLog(line));
-    session.on('progress', ({ step, done, total }) => {
+    session.on('progress', ({ step, done, total, ...bytes }) => {
       Object.assign(this.run, { step, done, total });
+      // Octets, vitesse et temps restant du téléchargement en cours (pas encore affichés) ; retirés hors téléchargement.
+      for (const key of BYTE_FIELDS) {
+        if (bytes[key] != null) this.run[key] = bytes[key];
+        else delete this.run[key];
+      }
       this.send('launch:progress', this.run);
     });
     session.on('loaderInstalled', ({ versionId }) => instances.markLoaderInstalled(instanceId, versionId));
