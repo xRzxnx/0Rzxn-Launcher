@@ -23,6 +23,7 @@ const DOMAINS = [
   require('./accounts'),
   require('./launch'),
   require('./system'),
+  require('./tasks'),
 ];
 
 function registerIpc(getWindow) {

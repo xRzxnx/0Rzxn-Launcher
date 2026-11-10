@@ -361,3 +361,18 @@ test('tâches : chaque tâche finie est notée dans launcher.db', async (t) => {
   ]);
   assert.equal(rows[1].error, tr('zip.sauvegarde_annulee'));
 });
+
+test('tasks:list : la tâche en cours, puis plus rien', async (t) => {
+  const ipc = startIpc(t);
+  const { instance, gameDir } = await newInstance(ipc);
+  makeWorld(gameDir, 'Monde');
+  assert.deepEqual(await ipc.invoke('tasks:list'), []);
+  const running = ipc.invoke('worlds:backup', instance.id, 'Monde');
+  const [task] = await ipc.invoke('tasks:list');
+  assert.deepEqual([task.kind, task.state, task.instanceId, task.cancellable, task.label], ['world-backup', 'running', instance.id, true, tr('ipc.sauvegarde_de', { name: 'Monde' })]);
+  await running;
+  assert.deepEqual(await ipc.invoke('tasks:list'), []);
+  const changed = ipc.win.messages('tasks:changed');
+  assert.equal(changed.at(-1).length, 0);
+  assert.ok(changed.some((list) => list[0]?.state === 'running'));
+});

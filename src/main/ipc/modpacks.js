@@ -1,6 +1,6 @@
 'use strict';
 
-// Modpacks : installation depuis Modrinth ou un fichier .mrpack, mise à jour, export ; annulation de la tâche longue.
+// Modpacks : installation depuis Modrinth ou un fichier .mrpack, mise à jour, export.
 const { t } = require('../i18n');
 const { app, dialog } = require('electron');
 const fs = require('node:fs');
@@ -9,11 +9,7 @@ const modpacks = require('../core/modpacks');
 const modrinth = require('../core/modrinth');
 const { text } = require('./handle');
 
-function register({ handle, getWindow, services, dirs, instances, tasks, runTask, backups, trash, notRunning }) {
-  handle('task:cancel', () => {
-    tasks.cancel();
-  });
-
+function register({ handle, getWindow, services, dirs, instances, runTask, backups, trash, notRunning }) {
   const installFromBuffer = (label, buffer, source, kind) =>
     runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }), { kind, params: source });
 

@@ -29,7 +29,7 @@ test('contrat : les canaux enregistrés sont exactement ceux exposés par preloa
   const registered = [...electron.calls.handlers.keys()].sort();
   assert.equal(new Set(exposed).size, exposed.length, 'canal exposé deux fois dans preload.js');
   assert.deepEqual(registered, exposed);
-  assert.equal(registered.length, 103);
+  assert.equal(registered.length, 104); // 103 + tasks:list (gestionnaire de tâches, phase 3)
 });
 
 test('contrat : protocoles fond: et skin:', (t) => {
