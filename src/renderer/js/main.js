@@ -1,7 +1,8 @@
 // Point d'entrée de l'interface : redessine tout à chaque changement d'état,
 // en conservant le focus, la saisie en cours et la position de défilement.
 // Les écrans migrés vers Preact (PREACT_VIEWS) ne sont pas reconstruits : Preact ne change que ce qui a bougé.
-import { renderModal, renderToasts, renderWelcome } from './views/modals.js';
+import { renderModal, renderWelcome } from './views/modals.js';
+import { renderToasts } from './views/toasts.js';
 import { renderSidebar, renderTabs, renderTitlebarUpdate, renderTopbarRight } from './views/chrome.js';
 import { renderConsole } from './views/console.js';
 import { renderHome } from './views/home.js';
@@ -122,7 +123,7 @@ function render() {
 
   const overlays = [renderWelcome(), renderModal() ?? renderSidebarMenu()].filter(Boolean);
   $('modal-root').replaceChildren(...overlays);
-  $('toasts').replaceChildren(...renderToasts());
+  mount($('toasts'), renderToasts());
 
   restore(snap, sameView);
 }
