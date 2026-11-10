@@ -376,3 +376,16 @@ test('tasks:list : la tâche en cours, puis plus rien', async (t) => {
   assert.equal(changed.at(-1).length, 0);
   assert.ok(changed.some((list) => list[0]?.state === 'running'));
 });
+
+test('lancement : octets, vitesse et temps restant transmis pendant un téléchargement, retirés ensuite', async (t) => {
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+  session.progress(2, 10, 40, { doneBytes: 1000, totalBytes: 4000, speed: 500, eta: 6, done: 10 });
+  assert.deepEqual(wire(ipc.win.messages('launch:progress').at(-1)), { instanceId: instance.id, phase: 'preparing', step: 2, done: 10, total: 40, prepareOnly: false, doneBytes: 1000, totalBytes: 4000, speed: 500, eta: 6 });
+  session.progress(3);
+  assert.deepEqual(wire(ipc.win.messages('launch:progress').at(-1)), { instanceId: instance.id, phase: 'preparing', step: 3, done: 0, total: 0, prepareOnly: false });
+  await ipc.invoke('launch:stop');
+  session.emit('failed', { message: 'annulé', cancelled: true });
+});

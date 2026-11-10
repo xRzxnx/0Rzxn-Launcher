@@ -16,7 +16,7 @@ const { fetchBuffer, fetchJson, request, sleep, withRetries } = require('./net')
 const RESUME_MIN_BYTES = 4 * 1024 * 1024;
 
 /** @typedef {{ url: string, path: string, sha1?: string | null, sha512?: string | null, size?: number | null }} DownloadTask */
-/** @typedef {{ done: number, total: number, doneBytes: number, totalBytes: number }} DownloadProgress */
+/** @typedef {{ done: number, total: number, doneBytes: number, totalBytes: number, speed: number | null, eta: number | null }} DownloadProgress */
 
 function sha1(buffer) {
   return crypto.createHash('sha1').update(buffer).digest('hex');
@@ -175,39 +175,87 @@ async function download(task, { signal, verify = false, onBytes } = {}) {
 }
 
 /**
- * Télécharge une liste de fichiers (16 à la fois par défaut).
- * onProgress reçoit { done, total, doneBytes, totalBytes }, au plus toutes les 100 ms.
- * @param {DownloadTask[]} tasks
- * @param {{ concurrency?: number, signal?: AbortSignal, verify?: boolean, onProgress?: (progress: DownloadProgress) => void }} [options]
+ * Vitesse de téléchargement : moyenne glissante sur les 3 dernières secondes (null tant qu'il n'y a pas
+ * au moins une demi-seconde de mesures).
+ * @param {{ now?: () => number, window?: number }} [options]
  */
-async function downloadAll(tasks, { concurrency = 16, signal, verify = false, onProgress } = {}) {
+function speedMeter({ now = Date.now, window = 3000 } = {}) {
+  /** @type {Array<{ at: number, bytes: number }>} */
+  const samples = [];
+  return {
+    /** @param {number} transferred octets reçus depuis le début @returns {number | null} octets par seconde */
+    sample(transferred) {
+      const at = now();
+      samples.push({ at, bytes: transferred });
+      while (samples.length > 2 && at - samples[1].at >= window) samples.shift();
+      const first = samples[0];
+      const elapsed = at - first.at;
+      return elapsed >= 500 ? ((transferred - first.bytes) * 1000) / elapsed : null;
+    },
+  };
+}
+
+/**
+ * Télécharge une liste de fichiers (16 à la fois par défaut ; net.js applique aussi ses limites globale et par serveur).
+ * onProgress reçoit { done, total, doneBytes, totalBytes, speed, eta }, au plus toutes les 100 ms :
+ * octets comptés à leur arrivée, vitesse en octets par seconde, temps restant en secondes (null si une taille manque).
+ * @param {DownloadTask[]} tasks
+ * @param {{ concurrency?: number, signal?: AbortSignal, verify?: boolean, onProgress?: (progress: DownloadProgress) => void, now?: () => number }} [options]
+ */
+async function downloadAll(tasks, { concurrency = 16, signal, verify = false, onProgress, now = Date.now } = {}) {
   const unique = [...new Map(tasks.map((t) => [path.resolve(t.path).toLowerCase(), t])).values()];
   const total = unique.length;
   const totalBytes = unique.reduce((sum, t) => sum + (t.size ?? 0), 0);
+  const sizesKnown = unique.every((t) => t.size != null);
+  const meter = speedMeter({ now });
+  /** Octets reçus de chaque fichier en cours. @type {Map<DownloadTask, number>} */
+  const current = new Map();
   let done = 0;
-  let doneBytes = 0;
+  let finishedBytes = 0; // fichiers terminés (ou déjà présents)
+  let transferred = 0; // octets vraiment reçus, pour la vitesse
   let next = 0;
   let lastReport = 0;
+  /** @type {number | null} */
+  let speed = null;
   const errors = [];
 
   const report = (force) => {
-    const now = Date.now();
-    if (!onProgress || (!force && now - lastReport < 100)) return;
-    lastReport = now;
-    onProgress({ done, total, doneBytes, totalBytes });
+    if (!onProgress) return;
+    const at = now();
+    if (!force && at - lastReport < 100) return;
+    lastReport = at;
+    speed = meter.sample(transferred) ?? speed;
+    let doneBytes = finishedBytes;
+    for (const bytes of current.values()) doneBytes += bytes;
+    const eta = sizesKnown && speed ? Math.max(0, Math.round((totalBytes - doneBytes) / speed)) : null;
+    onProgress({ done, total, doneBytes, totalBytes, speed, eta });
   };
 
   async function worker() {
     while (next < unique.length) {
       const task = unique[next++];
+      /** @type {number | null} */
+      let seen = null;
+      current.set(task, 0);
       try {
-        await downloadFile(task, { signal, verify });
+        await downloadFile(task, {
+          signal,
+          verify,
+          onBytes: (received) => {
+            // Une reprise compte comme déjà reçu ; seuls les nouveaux octets font la vitesse.
+            if (seen != null && received > seen) transferred += received - seen;
+            seen = received;
+            current.set(task, received);
+            report(false);
+          },
+        });
       } catch (error) {
         if (signal?.aborted) throw error;
         errors.push({ task, error });
       }
+      current.delete(task);
       done += 1;
-      doneBytes += task.size ?? 0;
+      finishedBytes += task.size ?? seen ?? 0;
       report(false);
     }
   }
@@ -226,4 +274,4 @@ async function downloadAll(tasks, { concurrency = 16, signal, verify = false, on
   }
 }
 
-module.exports = { fetchJson, fetchBuffer, downloadFile, downloadAll, sha1 };
+module.exports = { fetchJson, fetchBuffer, downloadFile, downloadAll, sha1, hashFile, speedMeter };

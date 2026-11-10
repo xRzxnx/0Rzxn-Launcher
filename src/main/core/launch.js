@@ -61,9 +61,15 @@ class LaunchSession extends EventEmitter {
     this.emit('log', { time: clock(), tag, msg: censor(msg, this.secrets) });
   }
 
-  progress(step, done = 0, total = 0) {
+  /**
+   * `bytes` : progression d'un téléchargement (doneBytes, totalBytes, speed, eta), transmise telle quelle.
+   * @param {number} step @param {number} [done] @param {number} [total] @param {Record<string, any> | null} [bytes]
+   */
+  progress(step, done = 0, total = 0, bytes = null) {
     this.step = step;
-    this.emit('progress', { step, done, total });
+    const extra = {};
+    for (const key of ['doneBytes', 'totalBytes', 'speed', 'eta']) if (bytes?.[key] != null) extra[key] = bytes[key];
+    this.emit('progress', { step, done, total, ...extra });
   }
 
   async start() {
@@ -106,7 +112,7 @@ class LaunchSession extends EventEmitter {
     const assets = await install.prepareAssets(version, dirs, { signal, verify: this.verify });
     const tasks = [install.clientTask(version, dirs), install.loggingTask(version, dirs), ...libraries.tasks, ...assets.tasks].filter(Boolean);
     const started = Date.now();
-    await downloadAll(tasks, { signal, verify: this.verify, onProgress: (p) => this.progress(2, p.done, p.total) });
+    await downloadAll(tasks, { signal, verify: this.verify, onProgress: (p) => this.progress(2, p.done, p.total, p) });
     this.log(t('launch.files_ready', { count: tasks.length, seconds: num((Date.now() - started) / 1000, { maximumFractionDigits: 1, minimumFractionDigits: 1 }) }));
 
     // 4. Java
@@ -118,7 +124,7 @@ class LaunchSession extends EventEmitter {
       javaExe = settings.javaPath;
     } else {
       const component = version.javaVersion?.component ?? 'jre-legacy';
-      javaExe = await ensureRuntime(dirs, component, { signal, onProgress: (p) => this.progress(3, p.done, p.total) });
+      javaExe = await ensureRuntime(dirs, component, { signal, onProgress: (p) => this.progress(3, p.done, p.total, p) });
     }
 
     // 5. Loader de mods (après Java : les processeurs de Forge et NeoForge sont des programmes Java)
@@ -133,7 +139,7 @@ class LaunchSession extends EventEmitter {
         loaderVersion: instance.loaderVersion,
         javaExe,
         signal,
-        onProgress: (p) => this.progress(4, p.done, p.total),
+        onProgress: (p) => this.progress(4, p.done, p.total, p),
         log: (msg, tag) => this.log(msg, tag),
       });
       this.emit('loaderInstalled', { versionId });
@@ -150,7 +156,7 @@ class LaunchSession extends EventEmitter {
       }
       gameLibraries = install.resolveLibraries(game, dirs);
       const loaderTasks = [install.clientTask(game, dirs), ...gameLibraries.tasks].filter(Boolean);
-      await downloadAll(loaderTasks, { signal, verify: this.verify, onProgress: (p) => this.progress(4, p.done, p.total) });
+      await downloadAll(loaderTasks, { signal, verify: this.verify, onProgress: (p) => this.progress(4, p.done, p.total, p) });
       this.log(t('launch.pret', { LOADER_NAMES: LOADER_NAMES[instance.loader], loaderVersion: instance.loaderVersion, id: game.id }));
     }
     signal.throwIfAborted();
