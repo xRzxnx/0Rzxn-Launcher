@@ -8,6 +8,7 @@ const path = require('node:path');
 const { AccountStore } = require('../core/accounts');
 const { InstanceStore } = require('../core/instances');
 const microsoft = require('../core/microsoft');
+const net = require('../core/net');
 const { gameDirs } = require('../core/store');
 const { clientId: MICROSOFT_CLIENT_ID } = require('../microsoft-config');
 const { openDatabase } = require('./db');
@@ -15,6 +16,7 @@ const { createSettingsStore } = require('./settings');
 const { vault } = require('./vault');
 
 function createServices() {
+  net.configure({ version: app.getVersion() });
   const configDir = app.getPath('userData');
   const dirs = gameDirs(path.join(app.getPath('appData'), '.0rzxn'));
   for (const dir of [dirs.instances, dirs.cache]) fs.mkdirSync(dir, { recursive: true });
