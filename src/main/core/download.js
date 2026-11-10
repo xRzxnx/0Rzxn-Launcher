@@ -1,25 +1,31 @@
 // @ts-check
 'use strict';
 
-// Téléchargements vérifiés : SHA-1, taille, plusieurs fichiers en parallèle.
+// Téléchargements vérifiés : écrits au fil de l'eau dans un « .part », SHA-1 / SHA-512 et taille contrôlés au passage,
+// reprise des gros fichiers coupés, plusieurs fichiers en parallèle.
 // Les requêtes (HTTPS, essais, délais, limites) passent par net.js.
 const { t } = require('../i18n');
 const crypto = require('node:crypto');
+const { once } = require('node:events');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
-const { fetchBuffer, fetchJson } = require('./net');
+const { fetchBuffer, fetchJson, request, sleep, withRetries } = require('./net');
 
-/** @typedef {{ url: string, path: string, sha1?: string | null, size?: number | null }} DownloadTask */
+/** Taille à partir de laquelle un fichier coupé reprend où il s'était arrêté (en dessous, il recommence). */
+const RESUME_MIN_BYTES = 4 * 1024 * 1024;
+
+/** @typedef {{ url: string, path: string, sha1?: string | null, sha512?: string | null, size?: number | null }} DownloadTask */
 /** @typedef {{ done: number, total: number, doneBytes: number, totalBytes: number }} DownloadProgress */
 
 function sha1(buffer) {
   return crypto.createHash('sha1').update(buffer).digest('hex');
 }
 
-function sha1File(file) {
+/** Empreinte d'un fichier, lu par morceaux. @param {string} file @param {'sha1' | 'sha512'} [algorithm] @returns {Promise<string>} */
+function hashFile(file, algorithm = 'sha1') {
   return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha1');
+    const hash = crypto.createHash(algorithm);
     fs.createReadStream(file)
       .on('data', (chunk) => hash.update(chunk))
       .on('end', () => resolve(hash.digest('hex')))
@@ -29,7 +35,8 @@ function sha1File(file) {
 
 /**
  * Un fichier déjà présent est gardé si sa taille est bonne (rapide). Avec `verify`,
- * ou si seule l'empreinte est connue, on recalcule le SHA-1.
+ * ou si seule l'empreinte est connue, on recalcule l'empreinte (SHA-512 si connu, sinon SHA-1).
+ * @param {DownloadTask} task @param {boolean} verify
  */
 async function isValid(task, verify) {
   let stat;
@@ -39,36 +46,132 @@ async function isValid(task, verify) {
     return false;
   }
   if (task.size != null && stat.size !== task.size) return false;
-  if (task.sha1 && (verify || task.size == null)) return (await sha1File(task.path)) === task.sha1;
+  if (verify || task.size == null) {
+    if (task.sha512) return (await hashFile(task.path, 'sha512')) === task.sha512;
+    if (task.sha1) return (await hashFile(task.path, 'sha1')) === task.sha1;
+  }
   return stat.size > 0;
 }
 
+/** Fichier reçu mais faux (taille ou empreinte) : le « .part » est jeté et le fichier recommence une fois de zéro. */
+const badFile = (message) => Object.assign(new Error(message), { code: 'DOWNLOAD_BAD' });
+
+/** Renommage final ; sous Windows, un antivirus peut tenir le fichier un instant. @param {string} from @param {string} to */
+async function renameWithRetry(from, to) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await fsp.rename(from, to);
+      return;
+    } catch (error) {
+      if (attempt >= 5 || !['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
+      await sleep(100 * attempt);
+    }
+  }
+}
+
 /**
- * Télécharge `task` ({ url, path, sha1?, size? }) si besoin. Renvoie true si un téléchargement a eu lieu.
+ * Un essai : reprend `part` là où il s'est arrêté (gros fichier dont la taille et l'empreinte sont connues), sinon recommence.
+ * Le corps est écrit au fil de l'eau, empreintes et taille calculées au passage. Lève `DOWNLOAD_BAD` si le fichier reçu est faux.
+ * @param {DownloadTask} task @param {string} part
+ * @param {{ signal?: AbortSignal, onBytes?: (received: number) => void, resume: boolean }} options
+ */
+async function fetchToPart(task, part, { signal, onBytes, resume }) {
+  const canResume = resume && task.size != null && task.size >= RESUME_MIN_BYTES && Boolean(task.sha1 || task.sha512);
+  let offset = 0;
+  if (canResume) {
+    try {
+      offset = (await fsp.stat(part)).size;
+    } catch {
+      offset = 0;
+    }
+    if (task.size != null && offset >= task.size) offset = 0; // « .part » complet mais jamais renommé : on recommence
+  }
+
+  // Un seul essai ici : withRetries (dans download) refait tout l'échange, corps compris.
+  let handle = await request(task.url, { signal, attempts: 1, headers: offset > 0 ? { Range: `bytes=${offset}-` } : {} });
+  if (offset > 0) {
+    const range = /^bytes (\d+)-/.exec(handle.response.headers.get('content-range') ?? '');
+    if (handle.status !== 206 || Number(range?.[1]) !== offset) {
+      // Le serveur renvoie le fichier entier (ou un autre morceau) : on repart de zéro.
+      handle.close();
+      offset = 0;
+      handle = await request(task.url, { signal, attempts: 1 });
+    }
+  }
+
+  /** @type {Array<{ algorithm: 'sha1' | 'sha512', expected: string, hash: crypto.Hash }>} */
+  const hashes = [];
+  if (task.sha1) hashes.push({ algorithm: 'sha1', expected: task.sha1, hash: crypto.createHash('sha1') });
+  if (task.sha512) hashes.push({ algorithm: 'sha512', expected: task.sha512, hash: crypto.createHash('sha512') });
+  if (offset > 0) {
+    for await (const chunk of fs.createReadStream(part, { end: offset - 1 })) for (const h of hashes) h.hash.update(chunk);
+  }
+
+  let received = offset;
+  onBytes?.(received);
+  const out = fs.createWriteStream(part, { flags: offset > 0 ? 'a' : 'w' });
+  try {
+    for await (const chunk of handle.chunks()) {
+      for (const h of hashes) h.hash.update(chunk);
+      received += chunk.length;
+      if (task.size != null && received > task.size) throw badFile(t('download.taille_inattendue_pour', { path: path.basename(task.path) }));
+      if (!out.write(chunk)) await once(out, 'drain');
+      onBytes?.(received);
+    }
+    out.end();
+    await once(out, 'finish');
+  } finally {
+    handle.close();
+    if (!out.closed) {
+      out.destroy();
+      await once(out, 'close').catch(() => {});
+    }
+  }
+  if (task.size != null && received !== task.size) throw badFile(t('download.taille_inattendue_pour', { path: path.basename(task.path) }));
+  for (const h of hashes) {
+    if (h.hash.digest('hex') !== h.expected) throw badFile(t(h.algorithm === 'sha512' ? 'download.fichier_corrompu_sha512' : 'download.fichier_corrompu_sha', { path: path.basename(task.path) }));
+  }
+}
+
+/** Téléchargements en cours, par fichier : deux demandes du même fichier attendent le même téléchargement. @type {Map<string, Promise<boolean>>} */
+const inflight = new Map();
+
+/**
+ * Télécharge `task` ({ url, path, sha1?, sha512?, size? }) si besoin. Renvoie true si un téléchargement a eu lieu.
+ * `onBytes(reçus)` : octets du fichier déjà reçus (reprise comprise), à chaque morceau.
  * @param {DownloadTask} task
- * @param {{ signal?: AbortSignal, verify?: boolean, retries?: number }} [options]
+ * @param {{ signal?: AbortSignal, verify?: boolean, onBytes?: (received: number) => void }} [options]
  * @returns {Promise<boolean>}
  */
-async function downloadFile(task, { signal, verify = false, retries = 2 } = {}) {
+function downloadFile(task, options = {}) {
+  const key = path.resolve(task.path).toLowerCase();
+  const running = inflight.get(key);
+  if (running) return running;
+  const promise = download(task, options).finally(() => inflight.delete(key));
+  inflight.set(key, promise);
+  return promise;
+}
+
+/** @param {DownloadTask} task @param {{ signal?: AbortSignal, verify?: boolean, onBytes?: (received: number) => void }} options */
+async function download(task, { signal, verify = false, onBytes } = {}) {
   if (await isValid(task, verify)) return false;
-  // Les erreurs réseau sont déjà réessayées par net.js : ici, seulement un fichier reçu mais faux (taille, SHA-1).
-  let lastError;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    const data = await fetchBuffer(task.url, { signal });
+  await fsp.mkdir(path.dirname(task.path), { recursive: true });
+  const part = `${task.path}.part`;
+  // Une coupure en cours de route est réessayée (en reprenant si possible) ; un fichier faux recommence une fois de zéro.
+  for (let fresh = 0; ; fresh++) {
     try {
-      if (task.size != null && data.length !== task.size) throw new Error(t('download.taille_inattendue_pour', { path: path.basename(task.path) }));
-      if (task.sha1 && sha1(data) !== task.sha1) throw new Error(t('download.fichier_corrompu_sha', { path: path.basename(task.path) }));
+      await withRetries(() => fetchToPart(task, part, { signal, onBytes, resume: fresh === 0 }), { signal, host: new URL(task.url).host, retryIf: (error) => error.code !== 'DOWNLOAD_BAD' && !error.syscall });
+      await renameWithRetry(part, task.path);
+      return true;
     } catch (error) {
-      lastError = error;
-      continue;
+      if (signal?.aborted) throw signal.reason ?? error;
+      if (error.code !== 'DOWNLOAD_BAD' || fresh >= 1) {
+        if (error.code === 'DOWNLOAD_BAD') await fsp.rm(part, { force: true });
+        throw error;
+      }
+      await fsp.rm(part, { force: true });
     }
-    await fsp.mkdir(path.dirname(task.path), { recursive: true });
-    const tmp = `${task.path}.${process.pid}.${attempt}.tmp`;
-    await fsp.writeFile(tmp, data);
-    await fsp.rename(tmp, task.path);
-    return true;
   }
-  throw lastError;
 }
 
 /**
