@@ -309,4 +309,7 @@ async function fetchJson(url, options = {}) {
   return JSON.parse((await fetchBuffer(url, options)).toString('utf8'));
 }
 
-module.exports = { configure, secureUrl, retryAfterMs, backoffMs, send, request, withRetries, fetchBuffer, fetchJson, sleep };
+/** Limites en vigueur (tests, diagnostic). */
+const limits = () => ({ concurrency: settings.concurrency, perHost: settings.perHost });
+
+module.exports = { configure, limits, secureUrl, retryAfterMs, backoffMs, send, request, withRetries, fetchBuffer, fetchJson, sleep };

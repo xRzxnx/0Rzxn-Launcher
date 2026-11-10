@@ -6,6 +6,7 @@ const { app, dialog, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const net = require('../core/net');
 const discordConfig = require('../discord-config');
 const { clientId: MICROSOFT_CLIENT_ID } = require('../microsoft-config');
 const { launchArgument, text } = require('./handle');
@@ -83,6 +84,7 @@ function register({ handle, getWindow, services, dirs, appShell, applyLanguage }
   });
   handle('launcher:set', (patch) => {
     const prefs = services.settings.setLauncher(patch ?? {});
+    net.configure(prefs.downloads);
     tray.setEnabled(prefs.tray);
     appShell.queueDiscord();
     return prefs;

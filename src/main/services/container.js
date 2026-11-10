@@ -16,8 +16,9 @@ const { createSettingsStore } = require('./settings');
 const { vault } = require('./vault');
 
 function createServices() {
-  net.configure({ version: app.getVersion() });
   const configDir = app.getPath('userData');
+  const settings = createSettingsStore(path.join(configDir, 'settings.json'));
+  net.configure({ version: app.getVersion(), ...settings.launcher().downloads });
   const dirs = gameDirs(path.join(app.getPath('appData'), '.0rzxn'));
   for (const dir of [dirs.instances, dirs.cache]) fs.mkdirSync(dir, { recursive: true });
   return {
@@ -27,7 +28,7 @@ function createServices() {
       renew: MICROSOFT_CLIENT_ID ? (refreshToken) => microsoft.renew(MICROSOFT_CLIENT_ID, refreshToken) : null,
     }),
     instances: new InstanceStore(dirs),
-    settings: createSettingsStore(path.join(configDir, 'settings.json')),
+    settings,
     // Historique (tâches, parties) : facultatif, le launcher marche sans.
     db: openDatabase({ file: path.join(configDir, 'launcher.db') }),
   };
