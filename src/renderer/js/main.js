@@ -1,5 +1,6 @@
 // Point d'entrée de l'interface : redessine tout à chaque changement d'état,
 // en conservant le focus, la saisie en cours et la position de défilement.
+// Les écrans migrés vers Preact (PREACT_VIEWS) ne sont pas reconstruits : Preact ne change que ce qui a bougé.
 import { renderModal, renderToasts, renderWelcome } from './views/modals.js';
 import { renderSidebar, renderTabs, renderTitlebarUpdate, renderTopbarRight } from './views/chrome.js';
 import { renderConsole } from './views/console.js';
@@ -14,6 +15,7 @@ import { init } from './actions.js';
 import { checkOtherInstances } from './mods-actions.js';
 import { renderScene } from './scene.js';
 import { h } from './dom.js';
+import { mount, unmount } from './ui.js';
 import { t } from './i18n.js';
 import { state, subscribe } from './state.js';
 
@@ -28,6 +30,7 @@ const VIEWS = {
   settings: renderSettings,
 };
 const FLUSH_VIEWS = new Set(['versions', 'console', 'mods', 'worlds']);
+const PREACT_VIEWS = new Set([]);
 
 let lastView = null;
 
@@ -111,8 +114,11 @@ function render() {
 
   const main = $('main');
   main.classList.toggle('main--flush', FLUSH_VIEWS.has(state.view) && state.ready);
-  if (state.ready) main.replaceChildren(VIEWS[state.view]());
-  else main.replaceChildren(loadingView());
+  if (state.ready && PREACT_VIEWS.has(state.view)) mount(main, VIEWS[state.view]());
+  else {
+    unmount(main);
+    main.replaceChildren(state.ready ? VIEWS[state.view]() : loadingView());
+  }
 
   const overlays = [renderWelcome(), renderModal() ?? renderSidebarMenu()].filter(Boolean);
   $('modal-root').replaceChildren(...overlays);
