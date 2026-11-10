@@ -1,28 +1,35 @@
 'use strict';
 
 const { t } = require('../i18n');
+const net = require('./net');
 
 // Client de l'API Modrinth v2 (sans clé) : https://docs.modrinth.com/api/
-const API = 'https://api.modrinth.com/v2';
-const USER_AGENT = '0Rzxn_Launcher/0.1 (launcher Minecraft personnel)';
+// Les requêtes passent par net.js : User-Agent du projet, essais, Retry-After et limite de 300 requêtes par minute.
+// LAUNCHER_MODRINTH_API pointe le launcher vers un faux serveur pour les tests.
+const API = (process.env.LAUNCHER_MODRINTH_API ?? '').trim() || 'https://api.modrinth.com/v2';
 const TIMEOUT_MS = 20_000;
 
 async function call(path, { method = 'GET', body } = {}) {
-  let res;
+  let handle;
   try {
-    res = await fetch(`${API}${path}`, {
+    handle = await net.request(`${API}${path}`, {
       method,
-      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      idleTimeout: TIMEOUT_MS,
     });
   } catch (error) {
-    throw new Error(t('modrinth.modrinth_ne_repond_pas', { code: error.cause?.code ?? error.message }));
+    if (error.status === 404) return null;
+    if (error.status === 429) throw new Error(t('modrinth.trop_de_requetes_vers_modrinth'));
+    if (error.status != null) throw new Error(t('modrinth.modrinth_repondu', { status: error.status }));
+    if (error.code === 'NET_INSECURE' || error.code === 'NET_REDIRECTS') throw error;
+    throw new Error(t('modrinth.modrinth_ne_repond_pas', { code: error.cause?.code ?? error.code ?? error.message }));
   }
-  if (res.status === 404) return null;
-  if (res.status === 429) throw new Error(t('modrinth.trop_de_requetes_vers_modrinth'));
-  if (!res.ok) throw new Error(t('modrinth.modrinth_repondu', { status: res.status }));
-  return res.json();
+  try {
+    return JSON.parse((await handle.buffer()).toString('utf8'));
+  } finally {
+    handle.close();
+  }
 }
 
 const q = (value) => encodeURIComponent(JSON.stringify(value));
@@ -87,7 +94,7 @@ function simplifyVersion(v) {
     loaders: v.loaders,
     gameVersions: v.game_versions,
     dependencies: v.dependencies ?? [],
-    file: file && { url: file.url, filename: file.filename, sha1: file.hashes.sha1, size: file.size },
+    file: file && { url: file.url, filename: file.filename, sha1: file.hashes.sha1, sha512: file.hashes.sha512, size: file.size },
     files: v.files.map((f) => ({ url: f.url, filename: f.filename, sha1: f.hashes.sha1, sha512: f.hashes.sha512, size: f.size })),
   };
 }
