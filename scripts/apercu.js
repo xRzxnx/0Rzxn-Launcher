@@ -96,4 +96,20 @@ if (demo) {
   };
   UpdateManager.prototype.install = () => {};
 }
+// Démonstration d'un lancement, sans jeu ni réseau : electron scripts/apercu.js --lancement=demo
+// La préparation s'arrête à l'étape 4 avec 640 lignes de logs fixes (console, progression) ; Annuler y met fin.
+if (process.argv.includes('--lancement=demo')) {
+  const { LaunchSession } = require('../src/main/core/launch.js');
+  const TAGS = ['LAUNCHER', 'main/INFO', 'Render thread/INFO', 'Render thread/WARN', 'Worker-Main-2/ERROR'];
+  LaunchSession.prototype.start = function start() {
+    for (let i = 1; i <= 640; i++) {
+      const time = `21:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}`;
+      this.emit('log', { time, tag: TAGS[i % TAGS.length], msg: `Demo log line ${i}` });
+    }
+    this.emit('progress', { step: 3, done: 120, total: 480 });
+  };
+  LaunchSession.prototype.stop = function stop() {
+    this.emit('failed', { message: 'demo', cancelled: true });
+  };
+}
 require('../src/main/main.js');
