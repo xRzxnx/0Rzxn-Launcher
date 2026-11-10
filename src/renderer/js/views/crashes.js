@@ -1,7 +1,7 @@
 // Console › Rapports de crash : liste, explication de l'erreur, rapport complet, partage sur mclo.gs.
 import { formatDateTime, num, t } from '../i18n.js';
 import { askShare, copyCrash, crashKey, crashReport, openCrashFile, openCrashesFolder, runFix, selectCrash, selectedCrash } from '../crash-actions.js';
-import { h, icon } from '../dom.js';
+import { h, icon } from '../ui.js';
 import { state } from '../state.js';
 
 const TIME = { hour: '2-digit', minute: '2-digit' };

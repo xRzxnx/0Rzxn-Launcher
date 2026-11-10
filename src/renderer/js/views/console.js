@@ -1,6 +1,7 @@
 // Console : logs du launcher et du jeu, filtrables, et rapports de crash expliqués.
+// Écran Preact (ui.js) : à chaque paquet de logs, seules les nouvelles lignes sont ajoutées.
 import { num, t } from '../i18n.js';
-import { h, icon } from '../dom.js';
+import { h, icon } from '../ui.js';
 import { stopGame } from '../actions.js';
 import { openCrashes } from '../crash-actions.js';
 import { state, toast, update } from '../state.js';
@@ -33,6 +34,15 @@ const FILTERS = [
   { id: 'warn', get label() { return t('console.avertissements'); } },
   { id: 'error', get label() { return t('console.erreurs'); } },
 ];
+
+// Clé stable de chaque ligne (l'objet reçu du processus principal) : Preact ajoute et retire des lignes au lieu de toutes les réécrire.
+const lineKeys = new WeakMap();
+let nextKey = 0;
+function keyOf(line) {
+  let key = lineKeys.get(line);
+  if (key === undefined) lineKeys.set(line, (key = ++nextKey));
+  return key;
+}
 
 function levelOf(line) {
   if (line.tag.endsWith('/ERROR') || line.tag.endsWith('/FATAL')) return 'error';
@@ -119,7 +129,7 @@ export function renderConsole() {
         : lines.map((l) =>
             h(
               'div',
-              { class: `log__line log__line--${levelOf(l)}` },
+              { key: keyOf(l), class: `log__line log__line--${levelOf(l)}` },
               h('span', { class: 'log__time' }, l.time),
               h('span', { class: 'log__tag' }, `[${l.tag}]`),
               h('span', { class: 'log__msg' }, l.msg),
