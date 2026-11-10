@@ -1,7 +1,8 @@
 // Onglet Mods : contenu installé dans l'instance et découverte sur Modrinth.
+// Écran Preact (ui.js) : chaque ligne garde sa clé (fichier ou projet), filtrer ou installer ne redessine que ce qui change.
 import { compactNum, t } from '../i18n.js';
 import { LOADER_NAMES } from '../data.js';
-import { blockIcon, h, icon } from '../dom.js';
+import { blockIcon, h, icon } from '../ui.js';
 import { openPack } from '../perf-actions.js';
 import {
   KIND_LABELS,
@@ -22,7 +23,7 @@ import {
   updateItems,
 } from '../mods-actions.js';
 import { selectedInstance, state, update } from '../state.js';
-import { modSetsBar } from './mod-sets.js';
+import { modSetsBar } from './mod-sets-bar.js';
 
 const SORTS = () => [
   ['relevance', t('mods.pertinence')],
@@ -88,7 +89,7 @@ function installedView(instance, running) {
   const rows = items.map((item) =>
     h(
       'div',
-      { class: `content-row${item.enabled ? '' : ' content-row--off'}` },
+      { key: item.file, class: `content-row${item.enabled ? '' : ' content-row--off'}` },
       contentIcon(item.icon),
       h(
         'div',
@@ -192,7 +193,7 @@ function discoverView(instance, running) {
   const rows = search.hits.map((hit) =>
     h(
       'div',
-      { class: 'content-row content-row--hit', 'aria-selected': hit.id === state.mods.selected ? 'true' : 'false', onClick: () => update((s) => { s.mods.selected = hit.id; }) },
+      { key: hit.id, class: 'content-row content-row--hit', 'aria-selected': hit.id === state.mods.selected ? 'true' : 'false', onClick: () => update((s) => { s.mods.selected = hit.id; }) },
       contentIcon(hit.icon),
       h(
         'div',
@@ -303,7 +304,7 @@ function detailPanel(instance, running) {
           ? h('p', { class: 'hint hint--warn' }, modpacks ? t('mods.aucune_version_telechargeable') : t('mods.no_version_for', { target: [instance.version, state.mods.kind === 'mods' && LOADER_NAMES[instance.loader]].filter(Boolean).join(' · ') }))
           : h(
               'select',
-              { id: selectId, class: 'select' },
+              { key: selectId, id: selectId, class: 'select' },
               versions.slice(0, 40).map((v, i) => {
                 // Contenu : la dernière version stable. Modpack : la plus récente (comme le bouton Installer de la liste).
                 const preferred = modpacks ? 0 : Math.max(0, versions.findIndex((x) => x.type === 'release'));
