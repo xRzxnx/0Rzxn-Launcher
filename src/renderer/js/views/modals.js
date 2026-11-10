@@ -11,7 +11,7 @@ import { LOADER_NAMES, LOADERS, loaderLabel, VERSION_TYPES } from '../data.js';
 import { blockIcon, formatGo, formatPlaytime, h, icon, slugify } from '../dom.js';
 import { openSkins } from '../skins-actions.js';
 import { skinHead } from '../skin-view.js';
-import { dismissToast, state, update } from '../state.js';
+import { state, update } from '../state.js';
 import { gpuConfirmDialog, packDialog } from './performance.js';
 import { skinsDialog } from './skins.js';
 import { openBackground } from '../background-actions.js';
@@ -576,47 +576,6 @@ export function renderWelcome() {
       h('p', { class: 'trust' }, icon('lock'), t('modals.la_connexion_se_fait_sur')),
     ),
   );
-}
-
-/** Carte de progression d'une tâche longue (installation ou mise à jour d'un modpack). */
-function taskCard(task) {
-  const percent = task.total ? Math.round((task.done / task.total) * 100) : null;
-  return h(
-    'div',
-    { class: 'toast toast--info', role: 'status' },
-    h('span', { class: 'toast__icon' }, icon('download')),
-    h(
-      'span',
-      { class: 'toast__body' },
-      h('span', { class: 'toast__title' }, task.label),
-      h('span', { class: 'toast__text' }, task.total ? t('modals.task_files', { done: task.done, total: task.total }) : t('modals.preparation')),
-      h('span', { class: 'progress', style: 'margin-top:6px;height:10px' }, h('span', { class: 'progress__fill', style: `display:block;width:${percent ?? 5}%` })),
-    ),
-  );
-}
-
-export function renderToasts() {
-  const toasts = state.toasts.map((item) =>
-    h(
-      'div',
-      { class: `toast toast--${item.kind}`, role: item.kind === 'error' ? 'alert' : 'status' },
-      h('span', { class: 'toast__icon' }, icon(item.kind === 'success' ? 'check' : item.kind === 'error' ? 'alert' : 'info')),
-      h(
-        'span',
-        { class: 'toast__body' },
-        h('span', { class: 'toast__title' }, item.title),
-        item.text && h('span', { class: 'toast__text' }, item.text),
-        item.actions.length > 0 &&
-          h(
-            'span',
-            { class: 'toast__actions' },
-            item.actions.map((a) => h('button', { class: 'btn', onClick: () => { dismissToast(item.id); a.run(); } }, a.label)),
-          ),
-      ),
-      h('button', { class: 'dialog__close', style: 'width:28px;height:28px', 'aria-label': t('modals.fermer_la_notification'), onClick: () => dismissToast(item.id) }, icon('close')),
-    ),
-  );
-  return state.task ? [taskCard(state.task), ...toasts] : toasts;
 }
 
 function importRows(items, row) {
