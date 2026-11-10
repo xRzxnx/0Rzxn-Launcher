@@ -66,7 +66,7 @@ function fileTasks(gameDir, index) {
         }
       });
       if (!url) throw new Error(t('modpacks.source_de_telechargement_non_autorisee', { path: f.path }));
-      return { url, path: safeTarget(gameDir, f.path), sha1: f.hashes?.sha1, size: f.fileSize, rel: f.path.replace(/\\/g, '/') };
+      return { url, path: safeTarget(gameDir, f.path), sha1: f.hashes?.sha1, sha512: f.hashes?.sha512, size: f.fileSize, rel: f.path.replace(/\\/g, '/') };
     });
 }
 
@@ -92,7 +92,7 @@ async function downloadPack(dirs, versionId, signal) {
   const file = v.files.find((f) => f.filename.endsWith('.mrpack')) ?? v.file;
   if (!file?.filename.endsWith('.mrpack')) throw new Error(t('modpacks.cette_version_est_pas_un'));
   const target = path.join(dirs.cache, 'modpacks', path.basename(file.filename));
-  await downloadFile({ url: file.url, path: target, sha1: file.sha1, size: file.size }, { signal });
+  await downloadFile({ url: file.url, path: target, sha1: file.sha1, sha512: file.sha512, size: file.size }, { signal });
   return { buffer: await fsp.readFile(target), version: v };
 }
 

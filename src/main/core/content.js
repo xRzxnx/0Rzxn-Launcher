@@ -258,7 +258,7 @@ async function install({ gameDir, kind, instance, projectId, versionId = null, t
     if (!existing.some((i) => i.versionId === v.id)) {
       const filename = path.basename(v.file.filename);
       if (!filename.toLowerCase().endsWith(info.extension)) throw new Error(t('content.fichier_inattendu', { filename }));
-      await downloadFile({ url: v.file.url, path: path.join(dir, filename), sha1: v.file.sha1, size: v.file.size });
+      await downloadFile({ url: v.file.url, path: path.join(dir, filename), sha1: v.file.sha1, sha512: v.file.sha512, size: v.file.size });
       for (const old of existing) {
         if (old.file !== filename) await trash(path.join(dir, old.file));
       }
