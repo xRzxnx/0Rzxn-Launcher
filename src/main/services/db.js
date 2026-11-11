@@ -40,6 +40,27 @@ const MIGRATIONS = [
      prepare_ms INTEGER
    );
    CREATE INDEX sessions_instance ON game_sessions(instance_id, started_at);`,
+  // 2 (phase 6) : menu du jeu atteint, pic de mémoire ; empreintes des jars ; historique des optimisations.
+  `ALTER TABLE game_sessions ADD COLUMN menu_ms INTEGER;
+   ALTER TABLE game_sessions ADD COLUMN peak_memory INTEGER;
+   CREATE TABLE file_hashes (
+     path TEXT PRIMARY KEY,
+     size INTEGER NOT NULL,
+     mtime_ms REAL NOT NULL,
+     sha1 TEXT NOT NULL,
+     meta TEXT,
+     used_at INTEGER NOT NULL
+   );
+   CREATE TABLE optimizations (
+     id INTEGER PRIMARY KEY,
+     instance_id TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     created_at INTEGER NOT NULL,
+     summary TEXT,
+     snapshot TEXT NOT NULL,
+     added TEXT
+   );
+   CREATE INDEX optimizations_instance ON optimizations(instance_id, created_at);`,
 ];
 
 const BACKUPS_KEPT = 2;
@@ -48,6 +69,7 @@ const PROGRESS_KEY = '_progress';
 const HIDDEN_KEY = '_hidden';
 const TASKS_KEPT = 1000;
 const TASKS_MAX_AGE = 90 * 24 * 3600 * 1000;
+const HASHES_KEPT = 20000;
 
 const sqlText = (value) => `'${String(value).replace(/'/g, "''")}'`;
 const pad = (n) => String(n).padStart(2, '0');
@@ -174,7 +196,15 @@ function openDatabase({ file, migrations = MIGRATIONS, now = Date.now }) {
   safely('purge', (d) => {
     d.prepare('DELETE FROM tasks WHERE ended_at IS NOT NULL AND ended_at < ?').run(now() - TASKS_MAX_AGE);
     d.prepare('DELETE FROM tasks WHERE id NOT IN (SELECT id FROM tasks ORDER BY created_at DESC LIMIT ?)').run(TASKS_KEPT);
+    if (version >= 2) d.prepare('DELETE FROM file_hashes WHERE path NOT IN (SELECT path FROM file_hashes ORDER BY used_at DESC LIMIT ?)').run(HASHES_KEPT);
   });
+  const parse = (text) => {
+    try {
+      return text == null ? null : JSON.parse(String(text));
+    } catch {
+      return null;
+    }
+  };
 
   return {
     available: Boolean(db),
@@ -250,6 +280,86 @@ function openDatabase({ file, migrations = MIGRATIONS, now = Date.now }) {
       if (id == null) return null;
       return safely('endSession', (d) => d.prepare('UPDATE game_sessions SET ended_at = ?, outcome = ?, exit_code = ? WHERE id = ?').run(endedAt, outcome, exitCode, id));
     },
+    /** Menu du jeu atteint (ligne repérée dans les logs) : temps depuis le démarrage de Java. */
+    sessionMenu(id, menuAt = now()) {
+      if (id == null || version < 2) return null;
+      return safely('sessionMenu', (d) => d.prepare('UPDATE game_sessions SET menu_ms = ? - ready_at WHERE id = ? AND ready_at IS NOT NULL AND menu_ms IS NULL').run(menuAt, id));
+    },
+    /** Pic de mémoire du jeu (octets), gardé s'il dépasse le précédent. */
+    sessionPeak(id, bytes) {
+      if (id == null || version < 2 || !(bytes > 0)) return null;
+      return safely('sessionPeak', (d) => d.prepare('UPDATE game_sessions SET peak_memory = MAX(COALESCE(peak_memory, 0), ?) WHERE id = ?').run(Math.round(bytes), id));
+    },
+    /** Dernière partie lancée d'une instance : temps de préparation, jusqu'au menu, pic de mémoire. */
+    lastLaunch(instanceId) {
+      if (version < 2) return null;
+      const row = safely('lastLaunch', (d) =>
+        d.prepare('SELECT started_at, prepare_ms, menu_ms, peak_memory FROM game_sessions WHERE instance_id = ? AND ready_at IS NOT NULL ORDER BY started_at DESC, id DESC LIMIT 1').get(String(instanceId)),
+      );
+      if (!row) return null;
+      return { startedAt: Number(row.started_at), prepareMs: row.prepare_ms == null ? null : Number(row.prepare_ms), menuMs: row.menu_ms == null ? null : Number(row.menu_ms), peakMemory: row.peak_memory == null ? null : Number(row.peak_memory) };
+    },
+
+    /** Empreinte connue d'un fichier, si sa taille et sa date n'ont pas changé : { sha1, meta } ou null. */
+    fileHash(file, size, mtimeMs) {
+      if (version < 2) return null;
+      const row = safely('fileHash', (d) => d.prepare('SELECT size, mtime_ms, sha1, meta FROM file_hashes WHERE path = ?').get(String(file)));
+      if (!row || Number(row.size) !== size || Number(row.mtime_ms) !== mtimeMs) return null;
+      return { sha1: String(row.sha1), meta: parse(row.meta) };
+    },
+    /** Note l'empreinte d'un fichier lu (ou met à jour ses métadonnées). */
+    saveFileHash(file, { size, mtimeMs, sha1, meta = null }) {
+      if (version < 2) return null;
+      return safely('saveFileHash', (d) =>
+        d
+          .prepare('INSERT OR REPLACE INTO file_hashes (path, size, mtime_ms, sha1, meta, used_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(String(file), size, mtimeMs, String(sha1), meta == null ? null : JSON.stringify(meta), now()),
+      );
+    },
+
+    /** Optimisation notée avant d'être appliquée ; renvoie son identifiant. */
+    addOptimization({ instanceId, kind, summary = null, snapshot, added = null, createdAt = now() }) {
+      if (version < 2) return null;
+      return safely('addOptimization', (d) => {
+        const { lastInsertRowid } = d
+          .prepare('INSERT INTO optimizations (instance_id, kind, created_at, summary, snapshot, added) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(String(instanceId), String(kind), createdAt, summary == null ? null : JSON.stringify(summary), String(snapshot), added == null ? null : JSON.stringify(added));
+        return Number(lastInsertRowid);
+      });
+    },
+    /** Résumé d'une optimisation mis à jour (changements rapprochés regroupés). */
+    setOptimizationSummary(id, summary) {
+      if (id == null || version < 2) return null;
+      return safely('setOptimizationSummary', (d) => d.prepare('UPDATE optimizations SET summary = ? WHERE id = ?').run(JSON.stringify(summary), id));
+    },
+    /** Fichiers ajoutés par une optimisation (connus après coup, par exemple les mods d'un pack). */
+    setOptimizationAdded(id, added) {
+      if (id == null || version < 2) return null;
+      return safely('setOptimizationAdded', (d) => d.prepare('UPDATE optimizations SET added = ? WHERE id = ?').run(JSON.stringify(added ?? []), id));
+    },
+    /** Optimisations d'une instance, de la plus récente à la plus ancienne. */
+    optimizations(instanceId) {
+      if (version < 2) return [];
+      return (
+        safely('optimizations', (d) => d.prepare('SELECT * FROM optimizations WHERE instance_id = ? ORDER BY created_at DESC, id DESC').all(String(instanceId))) ?? []
+      ).map((row) => ({
+        id: Number(row.id),
+        instanceId: String(row.instance_id),
+        kind: String(row.kind),
+        createdAt: Number(row.created_at),
+        summary: parse(row.summary),
+        snapshot: String(row.snapshot),
+        added: parse(row.added) ?? [],
+      }));
+    },
+    removeOptimizations(ids) {
+      if (version < 2 || !ids.length) return null;
+      return safely('removeOptimizations', (d) => {
+        const remove = d.prepare('DELETE FROM optimizations WHERE id = ?');
+        for (const id of ids) remove.run(id);
+      });
+    },
+
     /** Dernières sessions d'une instance, de la plus récente à la plus ancienne. */
     recentSessions(instanceId, limit = 50) {
       return safely('recentSessions', (d) => d.prepare('SELECT * FROM game_sessions WHERE instance_id = ? ORDER BY started_at DESC, id DESC LIMIT ?').all(String(instanceId), limit)) ?? [];

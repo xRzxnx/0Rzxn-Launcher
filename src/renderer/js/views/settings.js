@@ -120,8 +120,41 @@ function javaSection({ settings, save }, version) {
         }),
         h('button', { class: 'btn btn--lg', onClick: browse }, t('settings.parcourir')),
       ),
+    custom && java32Notice(settings, choose),
     custom && systemJavaPicks(settings, save, details?.java),
     custom && details && h('p', { class: 'hint' }, t('settings.minecraft_demande_java_le_launcher', { version, java: details.java })),
+  );
+}
+
+/** Version et 32/64 bits d'un Java personnalisé (java -version, lancé une fois par chemin). */
+function javaProbe(file) {
+  if (!file) return null;
+  if (!(file in state.javaProbes)) {
+    state.javaProbes[file] = { loading: true };
+    api.probeJava(file).then(
+      (info) => update((s) => { s.javaProbes[file] = info; }),
+      () => update((s) => { s.javaProbes[file] = null; }),
+    );
+  }
+  return state.javaProbes[file];
+}
+
+/** Java 32 bits avec plus de mémoire qu'il ne peut en prendre : dit tout de suite, avec la solution. */
+function java32Notice(settings, choose) {
+  const probe = javaProbe(settings.javaPath);
+  if (probe?.bits !== 32) return null;
+  return h(
+    'div',
+    { class: 'notice notice--warn', role: 'status' },
+    icon('alert'),
+    h(
+      'span',
+      null,
+      h('strong', null, t('settings.java_32_bits')),
+      ' ',
+      settings.ram > 1.5 ? t('settings.java_32_bits_trop', { ram: formatGo(settings.ram) }) : t('settings.java_32_bits_limite'),
+      h('span', { class: 'notice__actions' }, h('button', { class: 'btn btn--sm', onClick: () => choose('auto') }, t('settings.repasser_java_automatique'))),
+    ),
   );
 }
 
@@ -149,6 +182,7 @@ function systemJavaPicks(settings, save, required) {
         h('span', { class: 'java-pick__major' }, j.major),
         h('span', { class: 'java-pick__name' }, j.name),
         required && j.major < required && h('span', { class: 'tag tag--bad' }, t('settings.trop_ancien')),
+        j.bits === 32 && h('span', { class: 'tag tag--bad' }, t('settings.bits_32')),
       ),
     ),
   );
@@ -245,7 +279,8 @@ function afterLaunchSection({ settings, save }) {
       'div',
       { style: 'flex:1;min-width:240px;display:flex;flex-direction:column;gap:4px' },
       h('h2', { class: 'settings__title', id: 'after-title' }, t('settings.apres_le_lancement')),
-      h('p', { class: 'hint', style: 'font-size:13px' }, t('settings.le_launcher_revient_quand_tu')),
+      // « Masquer » ferme l'interface pendant la partie (avec le mode léger et l'icône près de l'horloge).
+      h('p', { class: 'hint', style: 'font-size:13px' }, settings.afterLaunch === 'hide' ? t('settings.masquer_ferme_interface') : t('settings.le_launcher_revient_quand_tu')),
     ),
     h(
       'div',

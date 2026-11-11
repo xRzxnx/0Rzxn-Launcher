@@ -15,6 +15,7 @@ module.exports = {
   name: 'autre',
   gpu,
   physicalCores: async () => null,
+  processMetrics: { supported: false, watch: () => ({ stop() {} }), peak: async () => null },
   createShortcut: () => {
     throw new Error(t('ipc.les_raccourcis_bureau_sont_disponibles'));
   },

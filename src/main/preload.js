@@ -112,6 +112,7 @@ contextBridge.exposeInMainWorld('launcher', {
   java: {
     runtimes: invoke('java:runtimes'),
     system: invoke('java:system'),
+    probe: invoke('java:probe'),
     removeRuntime: invoke('java:removeRuntime'),
     openRuntime: invoke('java:openRuntime'),
   },
@@ -127,6 +128,8 @@ contextBridge.exposeInMainWorld('launcher', {
   profiles: { plan: invoke('profiles:plan'), create: invoke('profiles:create'), installMods: invoke('profiles:installMods') },
   storage: { usage: invoke('storage:usage'), plan: invoke('storage:plan'), clean: invoke('storage:clean') },
   update: { state: invoke('update:state'), check: invoke('update:check'), install: invoke('update:install'), onStatus: listen('update:status') },
+  // Historique des optimisations d'une instance (phase 6).
+  optimizations: { list: invoke('optimizations:list'), revert: invoke('optimizations:revert') },
   // Tâches longues (page Activité, phase 5).
   tasks: {
     list: invoke('tasks:list'),
@@ -141,6 +144,7 @@ contextBridge.exposeInMainWorld('launcher', {
     state: invoke('launch:state'),
     onStatus: listen('launch:status'),
     onProgress: listen('launch:progress'),
+    onMetrics: listen('launch:metrics'),
     onLogs: listen('launch:logs'),
     onReset: listen('launch:reset'),
   },

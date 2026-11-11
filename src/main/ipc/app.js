@@ -15,7 +15,7 @@ const { launchArgument, text } = require('./handle');
 const RECAP_MAX_BYTES = 4 * 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-function register({ handle, getWindow, services, dirs, appShell, applyLanguage }) {
+function register({ handle, getWindow, services, dirs, appShell, applyLanguage, launches }) {
   const { tray, updates } = appShell;
 
   handle('app:info', () => ({
@@ -30,11 +30,17 @@ function register({ handle, getWindow, services, dirs, appShell, applyLanguage }
   // Raccourci bureau : « --launch=<instance> » lance directement l'instance.
   let pendingLaunch = launchArgument(process.argv);
   handle('ui:get', () => {
-    const ui = { ...services.settings.ui(), pendingLaunch };
+    // Fenêtre recréée pendant ou juste après une partie : elle revient sur l'écran où elle était.
+    const ui = { ...services.settings.ui(), pendingLaunch, reopenView: launches.takeReopenView() };
     pendingLaunch = null;
     return ui;
   });
-  handle('ui:set', (patch) => services.settings.setUi(patch ?? {}));
+  handle('ui:set', (patch) => {
+    // L'écran affiché reste en mémoire seulement (pour rouvrir la fenêtre au même endroit), sans écrire les réglages.
+    const { view, ...rest } = patch ?? {};
+    if (typeof view === 'string') launches.view = view.slice(0, 40);
+    return Object.keys(rest).length ? services.settings.setUi(rest) : services.settings.ui();
+  });
 
   handle('stats:saveRecapImage', async (month, bytes) => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(text(month))) throw new Error(t('ipc.mois_invalide'));

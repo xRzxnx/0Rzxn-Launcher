@@ -7,15 +7,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const versions = require('../core/versions');
 const { availableLoaders } = require('../core/loaders');
+const { sanitizeSettings } = require('../core/instances');
 const platform = require('../platform');
 const { text } = require('./handle');
 
-function register({ handle, getWindow, services, dirs, instances, launches, backups, notRunning }) {
+function register({ handle, getWindow, services, dirs, instances, launches, backups, notRunning, optimizations }) {
   handle('versions:list', () => versions.listVersions(dirs));
   handle('versions:details', (id) => versions.versionDetails(dirs, text(id)));
   handle('loaders:available', (mc) => availableLoaders(text(mc)));
 
-  handle('instances:list', () => instances.list());
+  // Dernier lancement (launcher.db) : temps de préparation, jusqu'au menu, pic de mémoire.
+  handle('instances:list', () => instances.list().map((instance) => ({ ...instance, lastLaunch: services.db.lastLaunch(instance.id) })));
   handle('instances:create', (data) => instances.create(data ?? {}, services.settings.defaults()));
   // Changer de version ou de loader convertit les mondes sans retour possible : ils sont sauvegardés avant.
   handle('instances:update', async (id, patch, options) => {
@@ -27,7 +29,15 @@ function register({ handle, getWindow, services, dirs, instances, launches, back
       const failed = await backups.backupBefore(current, reason);
       if (failed) return failed;
     }
+    // Mémoire, préréglage Java, priorité, arguments : notés dans l'historique des optimisations (copie d'avant).
+    if (patch?.settings) optimizations.settingsChanging(current, sanitizeSettings(patch.settings, sanitizeSettings(current.settings)));
     return instances.update(text(id), patch ?? {});
+  });
+  handle('optimizations:list', (id) => optimizations.list(instances.get(text(id)).id));
+  handle('optimizations:revert', (id, optimizationId) => {
+    const instance = instances.get(text(id));
+    notRunning(instance.id, t('ipc.revenir_avant_optimisation'));
+    return optimizations.revert(instance.id, Number(optimizationId));
   });
   handle('instances:duplicate', (id, name) => {
     notRunning(text(id), t('ipc.action_duplicate'));

@@ -5,7 +5,7 @@
 import { Fragment, h as createElement, render } from '../vendor/preact.js';
 import { ICONS } from './icons.js';
 
-export { formatGo, formatPlaytime, formatShortTime, formatSize, slugify } from './dom.js';
+export { formatGo, formatMemory, formatPlaytime, formatShortTime, formatSize, slugify } from './dom.js';
 
 /**
  * Traduit les propriétés de dom.js pour Preact :

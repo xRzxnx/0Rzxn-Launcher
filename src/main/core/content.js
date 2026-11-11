@@ -9,6 +9,7 @@ const path = require('node:path');
 const { downloadFile } = require('./download');
 const modrinth = require('./modrinth');
 const zip = require('./zip');
+const hashCache = require('./hash-cache');
 
 const KINDS = {
   mods: { folder: 'mods', projectType: 'mod', extension: '.jar' },
@@ -122,6 +123,13 @@ async function readItem(dir, entry, kind) {
 
   const hit = cache.get(file);
   if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size) return { ...hit.item, ...base };
+  // Déjà lu lors d'une ouverture précédente du launcher (launcher.db) : pas besoin de relire le jar.
+  const kept = hashCache.recall(file, stat, 'content');
+  if (kept) {
+    const item = { ...base, sha1: kept.sha1, ...kept.value };
+    cache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, item });
+    return item;
+  }
 
   const buffer = await fsp.readFile(file);
   const sha1 = crypto.createHash('sha1').update(buffer).digest('hex');
@@ -134,6 +142,7 @@ async function readItem(dir, entry, kind) {
   }
   const item = { ...base, sha1, name: meta.name || displayName, version: meta.version ?? null, description: meta.description ?? null, icon: meta.icon ?? null, modId: meta.modId ?? null };
   cache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, item });
+  hashCache.remember(file, stat, sha1, 'content', { name: item.name, version: item.version, description: item.description, icon: item.icon, modId: item.modId });
   return item;
 }
 

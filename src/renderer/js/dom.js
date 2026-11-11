@@ -78,6 +78,11 @@ export function formatGo(value) {
   return `${num(Number(value))} ${t('unit.gb')}`;
 }
 
+/** Mémoire en octets → « 5,2 Go » (une décimale au plus). */
+export function formatMemory(bytes) {
+  return formatGo(Math.round((bytes / 1024 ** 3) * 10) / 10);
+}
+
 export function slugify(name) {
   return (
     name

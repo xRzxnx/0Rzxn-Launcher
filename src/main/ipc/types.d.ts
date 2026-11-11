@@ -42,6 +42,7 @@ export type InvokeChannel =
   | 'instances:update'
   | 'java:openRuntime'
   | 'java:removeRuntime'
+  | 'java:probe'
   | 'java:runtimes'
   | 'java:system'
   | 'launch:start'
@@ -65,6 +66,8 @@ export type InvokeChannel =
   | 'modsets:create'
   | 'modsets:delete'
   | 'modsets:rename'
+  | 'optimizations:list'
+  | 'optimizations:revert'
   | 'perf:installPack'
   | 'perf:metrics'
   | 'perf:pack'
@@ -187,10 +190,20 @@ export interface TaskRecord {
   progress: { done?: number; total?: number; doneBytes?: number; totalBytes?: number; step?: number } | null;
 }
 
+/** Mémoire et processeur du jeu en cours (« launch:metrics », toutes les 2 s fenêtre ouverte). Octets ; cpu en % du PC. */
+export interface GameMetrics {
+  instanceId: string;
+  memory: number | null;
+  peak: number | null;
+  cpu: number | null;
+  allocated: number;
+}
+
 /** Messages envoyés à l'interface (webContents.send) et leur contenu. */
 export interface Events {
   'app:launchRequest': string;
   'launch:logs': LogLine[];
+  'launch:metrics': GameMetrics;
   'launch:progress': Run;
   'launch:reset': undefined;
   'launch:status': LaunchStatus;

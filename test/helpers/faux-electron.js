@@ -15,6 +15,7 @@ const calls = {
   opened: [],
   shortcuts: [],
   dialogs: [],
+  trays: [], // icônes de la zone de notification créées (clics simulés par `click()`)
 };
 const paths = {};
 
@@ -86,8 +87,15 @@ class Tray {
   constructor(image) {
     this.image = image;
     this.tooltip = null;
+    this.listeners = {};
+    calls.trays.push(this);
   }
-  on() {}
+  on(event, listener) {
+    this.listeners[event] = listener;
+  }
+  click() {
+    this.listeners.click?.();
+  }
   setImage(image) {
     this.image = image;
   }

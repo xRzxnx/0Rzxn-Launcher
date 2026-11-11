@@ -12,7 +12,7 @@ const path = require('node:path');
 const { buildArguments } = require('./args');
 const { downloadAll } = require('./download');
 const install = require('./install');
-const { ensureRuntime, probeJava } = require('./java');
+const { JAVA_32_MAX_GB, ensureRuntime, probeJavaCached } = require('./java');
 const { GameLogParser, censor, clock } = require('./logs');
 const { LOADER_NAMES, installLoader } = require('./loaders');
 const titleMenu = require('./title-menu');
@@ -29,7 +29,7 @@ const GC_NAMES = { get g1() { return t('launch.g1_regle'); }, get zgc() { return
  *  - 'loaderInstalled' { versionId }        le loader de mods est installé
  *  - 'prepared'                            tout est prêt (mode prepareOnly, sans lancer le jeu)
  *  - 'running'  { pid }                     le jeu est démarré
- *  - 'failed'   { message, cancelled }      échec avant le démarrage du jeu
+ *  - 'failed'   { message, cancelled, code } échec avant le démarrage du jeu (code : JAVA_32_BIT…)
  *  - 'exit'     { code, crashed, minutes }  le jeu s'est fermé
  */
 class LaunchSession extends EventEmitter {
@@ -78,7 +78,7 @@ class LaunchSession extends EventEmitter {
     } catch (error) {
       const cancelled = this.controller.signal.aborted;
       if (!cancelled) this.log(t('launch.echec', { message: error.message }), 'LAUNCHER/ERROR');
-      this.emit('failed', { message: cancelled ? t('launch.lancement_annule') : error.message, cancelled });
+      this.emit('failed', { message: cancelled ? t('launch.lancement_annule') : error.message, cancelled, code: cancelled ? null : (error.code ?? null) });
     }
   }
 
@@ -163,8 +163,12 @@ class LaunchSession extends EventEmitter {
 
     // 6. Vérification de Java
     this.progress(5);
-    const java = await probeJava(javaExe);
+    const java = await probeJavaCached(javaExe);
     this.log(t('launch.java', { major: java.major, description: java.description, javaExe }));
+    // Java 32 bits : il ne peut pas réserver plus d'environ 1,5 Go ; mieux vaut le dire que laisser Java échouer.
+    if (java.bits === 32 && settings.ram > JAVA_32_MAX_GB) {
+      throw Object.assign(new Error(t('launch.java_32_bits', { ram: gb(settings.ram) })), { code: 'JAVA_32_BIT' });
+    }
     if (java.major < required) throw new Error(t('launch.minecraft_demande_java_mais_ce', { version: instance.version, required, major: java.major }));
     if (java.major !== required) this.log(t('launch.attention_java_est_recommande_pour', { required, major: java.major }), 'LAUNCHER/WARN');
     this.javaMajor = java.major;

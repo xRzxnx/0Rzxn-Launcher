@@ -16,7 +16,8 @@ function trayIcon(playing) {
 const minutesSince = (at) => Math.max(0, Math.round((Date.now() - at) / 60000));
 
 /**
- * `ctx` : getWindow, instances (InstanceStore), launches (LaunchManager), canPlay(), onLaunch(id), onQuit().
+ * `ctx` : getWindow, openWindow() (recrée la fenêtre fermée pendant une partie), instances (InstanceStore),
+ * launches (LaunchManager), canPlay(), onLaunch(id), onQuit().
  * L'icône suit la partie en cours grâce à `refresh()`, appelé à chaque changement d'état.
  */
 class LauncherTray {
@@ -45,14 +46,20 @@ class LauncherTray {
 
   toggleWindow() {
     const win = this.ctx.getWindow();
-    if (!win || win.isDestroyed()) return;
+    if (!win || win.isDestroyed()) {
+      this.showWindow();
+      return;
+    }
     if (win.isVisible() && !win.isMinimized() && win.isFocused()) win.hide();
     else this.showWindow();
   }
 
   showWindow() {
     const win = this.ctx.getWindow();
-    if (!win || win.isDestroyed()) return;
+    if (!win || win.isDestroyed()) {
+      this.ctx.openWindow?.();
+      return;
+    }
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();

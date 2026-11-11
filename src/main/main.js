@@ -78,6 +78,24 @@ function createWindow() {
 
 let ipc = null;
 
+/** Ouvre la fenêtre, ou la recrée si elle a été fermée pendant une partie (réglage « Masquer »). */
+function openWindow() {
+  if (!mainWindow) {
+    createWindow();
+    ipc?.windowCreated();
+    return mainWindow;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  return mainWindow;
+}
+
+/** Ferme vraiment la fenêtre (le processus de l'interface s'arrête) ; le moteur et la zone de notification restent. */
+function closeWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+}
+
 const NETTOYAGE_DELAI = 5 * 1000;
 
 /** Après une installation manuelle : attend que la fenêtre soit ouverte pour ne pas ralentir le démarrage. */
@@ -113,16 +131,13 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => journal.info('Quitting'));
   app.on('before-quit', () => ipc?.beforeQuit());
   app.on('second-instance', (_event, argv) => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
+    openWindow();
     ipc?.handleArgv(argv);
   });
 
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
-    ipc = registerIpc(() => mainWindow);
+    ipc = registerIpc(() => mainWindow, { open: openWindow, close: closeWindow });
     createWindow();
     planifierNettoyage();
     app.on('activate', () => {
@@ -130,7 +145,8 @@ if (!app.requestSingleInstanceLock()) {
     });
   });
 
+  // Fenêtre fermée pendant une partie : le launcher continue (logs, fin de partie, zone de notification).
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    if (process.platform !== 'darwin' && !ipc?.keepsRunning()) app.quit();
   });
 }
