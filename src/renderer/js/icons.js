@@ -11,6 +11,7 @@ export const ICONS = {
   archive: svg('<path d="M4 8h16v12H4zM3 4h18v4H3zM10 12h4"/>'),
   restore: svg('<path d="M4 4v6h6"/><path d="M4.5 15a8 8 0 1 0 1.5-8.5L4 10"/>'),
   next: svg('<path d="M9 5l7 7-7 7"/>', 'stroke-width="2.5"'),
+  activity: svg('<path d="M3 12h4l3-8 4 16 3-8h4"/>', 'stroke-linejoin="round"'),
   console: svg('<path d="M4 17l6-5-6-5M12 19h8"/>'),
   folder: svg('<path d="M3 6h6l2 2h10v11H3z"/>', 'stroke-linejoin="round"'),
   plus: svg('<path d="M12 4v16M4 12h16"/>', 'stroke-width="2.5"'),

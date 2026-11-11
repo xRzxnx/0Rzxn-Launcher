@@ -195,7 +195,7 @@ export function packDialog(modal) {
     body: [h('p', { class: 'label', style: 'margin:0 0 10px' }, `${instance.name} · ${instance.loader === 'vanilla' ? 'Vanilla' : instance.loader} · Minecraft ${instance.version}`), body],
     foot: [
       h('button', { class: 'btn btn--lg', onClick: close }, t('common.annuler')),
-      h('button', { class: 'btn btn--primary btn--lg', disabled: !chosen.length || Boolean(state.task), onClick: () => installPack(modal) }, label),
+      h('button', { class: 'btn btn--primary btn--lg', disabled: !chosen.length, onClick: () => installPack(modal) }, label),
     ],
   });
 }

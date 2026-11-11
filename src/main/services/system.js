@@ -114,7 +114,7 @@ function createSystemService({ services, dirs, instances, launches, runTask, tra
       }
       const result = await runTask(t('ipc.pack_performances'), (onProgress) =>
         performance.installPack({ gameDir: instances.gameDir(instance.id), instance, slugs: list, trash, onProgress }),
-      { kind: 'perf-pack', instanceId: instance.id, params: { slugs: list } });
+      { kind: 'perf-pack', instanceId: instance.id, params: { slugs: list, name: instance.name } });
       return { ...result, instance };
     },
 
@@ -143,7 +143,7 @@ function createSystemService({ services, dirs, instances, launches, runTask, tra
       const p = profiles.profile(text(profileId));
       return runTask(t('ipc.mods_du_profil', { title: p.title }), (onProgress) =>
         profiles.installMods({ profileId: p.id, gameDir: instances.gameDir(instance.id), instance, trash, onProgress }),
-      { kind: 'profile-mods', instanceId: instance.id, params: { profileId: p.id } });
+      { kind: 'profile-mods', instanceId: instance.id, params: { profileId: p.id, name: instance.name } });
     },
 
     metrics() {

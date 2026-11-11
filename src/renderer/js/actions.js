@@ -2,6 +2,7 @@
 import { t } from './i18n.js';
 import { api } from './api.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
+import { listenToTasks } from './activity-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
 import { loadUpdate } from './update-actions.js';
 import { autoTitleMenu } from './title-menu-actions.js';
@@ -77,7 +78,7 @@ export async function init() {
     return;
   }
   listenToLaunches();
-  api.on.task((task) => update((s) => { s.task = task; }));
+  listenToTasks();
   rememberSelection(ui.selectedId);
   api.on.launchRequest(launchFromShortcut);
   if (ui.pendingLaunch) launchFromShortcut(ui.pendingLaunch);

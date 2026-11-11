@@ -170,3 +170,18 @@ test('sessions de jeu : début, jeu prêt, fin', (t) => {
   );
   db.close();
 });
+
+test('tâches : progression finale et travail de fond rangés dans params sans changer le format, historique effaçable', (t) => {
+  const file = dbFile(t);
+  const db = openDatabase({ file });
+  db.recordTask({ id: 'a', kind: 'modpack-install', state: 'done', createdAt: 1, params: { title: 'X' }, progress: { done: 25, total: 25, totalBytes: 1500 } });
+  db.recordTask({ id: 'b', kind: 'temp-cleanup', state: 'done', createdAt: 2, hidden: true, progress: {} });
+  db.recordTask({ id: 'c', kind: 'x', state: 'running', createdAt: 3 });
+  const [c, b, a] = db.recentTasks();
+  assert.deepEqual([a.params, a.progress, a.hidden], [{ title: 'X' }, { done: 25, total: 25, totalBytes: 1500 }, false]);
+  assert.deepEqual([b.params, b.progress, b.hidden], [null, null, true]);
+  assert.deepEqual([c.params, c.progress, c.hidden], [null, null, false]);
+  db.clearTasks();
+  assert.deepEqual(db.recentTasks().map((r) => r.id), ['c']); // une tâche pas finie n'est pas effacée
+  db.close();
+});

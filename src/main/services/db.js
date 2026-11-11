@@ -43,6 +43,9 @@ const MIGRATIONS = [
 ];
 
 const BACKUPS_KEPT = 2;
+// Clés réservées dans la colonne params des tâches.
+const PROGRESS_KEY = '_progress';
+const HIDDEN_KEY = '_hidden';
 const TASKS_KEPT = 1000;
 const TASKS_MAX_AGE = 90 * 24 * 3600 * 1000;
 
@@ -180,8 +183,15 @@ function openDatabase({ file, migrations = MIGRATIONS, now = Date.now }) {
     problem,
     file,
 
-    /** Tâche terminée (ou mise à jour d'une tâche connue). */
+    /**
+     * Tâche terminée (ou mise à jour d'une tâche connue). La progression finale (fichiers, octets) et le drapeau
+     * « travail de fond » voyagent dans la colonne params, sous des clés à part : le format de la base ne change pas.
+     */
     recordTask(task) {
+      const extra = {};
+      if (task.progress && Object.keys(task.progress).length) extra[PROGRESS_KEY] = task.progress;
+      if (task.hidden) extra[HIDDEN_KEY] = true;
+      const params = Object.keys(extra).length ? { ...(task.params ?? {}), ...extra } : task.params;
       return safely('recordTask', (d) =>
         d
           .prepare(
@@ -198,20 +208,27 @@ function openDatabase({ file, migrations = MIGRATIONS, now = Date.now }) {
             task.startedAt ?? null,
             task.endedAt ?? null,
             task.error ?? null,
-            task.params == null ? null : JSON.stringify(task.params),
+            params == null ? null : JSON.stringify(params),
           ),
       );
     },
-    /** Dernières tâches, de la plus récente à la plus ancienne. */
+    /** Dernières tâches, de la plus récente à la plus ancienne ({ progress, hidden } sortis de params). */
     recentTasks(limit = 50) {
       return (
         safely('recentTasks', (d) =>
           d
             .prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?')
             .all(limit)
-            .map((row) => ({ ...row, params: row.params ? JSON.parse(String(row.params)) : null })),
+            .map((row) => {
+              const { [PROGRESS_KEY]: progress = null, [HIDDEN_KEY]: hidden = false, ...params } = row.params ? JSON.parse(String(row.params)) : {};
+              return { ...row, params: row.params && Object.keys(params).length ? params : null, progress, hidden };
+            }),
         ) ?? []
       );
+    },
+    /** Efface l'historique des tâches finies (page Activité). */
+    clearTasks() {
+      return safely('clearTasks', (d) => d.prepare("DELETE FROM tasks WHERE state IN ('done', 'failed', 'cancelled')").run());
     },
 
     /** Début d'une préparation ou d'une partie : renvoie l'identifiant de la session (ou null). */

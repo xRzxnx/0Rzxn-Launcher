@@ -14,7 +14,7 @@ function worldsToBackUp(instance, reason) {
   return s.backupAuto ? () => true : null;
 }
 
-/** `runTask` : la tâche longue unique (services/tasks.js) ; `trash` : corbeille de Windows. */
+/** `runTask` : file des tâches longues (services/tasks.js) ; `trash` : corbeille de Windows. */
 function createBackups({ dirs, instances, runTask, trash }) {
   // Renvoie null si rien n'était à faire ; lève une erreur si la copie échoue (l'opération est alors arrêtée).
   const autoBackup = (instance, reason, onProgress, signal) => {
@@ -36,7 +36,9 @@ function createBackups({ dirs, instances, runTask, trash }) {
         cancellable: true,
         kind: 'worlds-auto-backup',
         instanceId: instance.id,
-        params: { reason },
+        params: { reason, name: instance.name },
+        // Avant une partie ou une mise à jour : passe avant les tâches qui attendent.
+        priority: 'high',
       });
       return null;
     } catch (error) {

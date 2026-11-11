@@ -8,7 +8,7 @@ import { cleanStorage, loadStorage, refreshDiscord, removeRuntime, selectedClean
 import { SHORTCUTS } from '../shortcuts.js';
 import { ACCENTS, accentTokens, applyAccent } from '../theme.js';
 import { checkUpdate, installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
-import { selectedInstance, state, toastError, update } from '../state.js';
+import { selectedInstance, state, tasksBusy, toastError, update } from '../state.js';
 import { close, dialog } from './modals.js';
 import { languageSection } from './language.js';
 import { gameSection, gpuSection } from './performance.js';
@@ -200,6 +200,54 @@ function updateSection(prefs) {
 
 const keys = (list) => h('span', { class: 'keys' }, list.map((k) => h('kbd', { class: 'kbd' }, k)));
 
+// Limites des téléchargements (core/net.js) : mêmes bornes que services/settings.js.
+const DOWNLOAD_LIMITS = { concurrency: { min: 1, max: 64, advised: 16 }, perHost: { min: 1, max: 32, advised: 8 } };
+
+function setDownloads(prefs, patch) {
+  setLauncherPref({ downloads: { ...prefs.downloads, ...patch } });
+}
+
+/** Rangée « − valeur + » d'une limite de téléchargement. */
+function stepperRow(prefs, key, title, text) {
+  const { min, max } = DOWNLOAD_LIMITS[key];
+  const value = prefs.downloads?.[key] ?? DOWNLOAD_LIMITS[key].advised;
+  const id = `downloads-${key}`;
+  return h(
+    'div',
+    { class: 'stepper-row' },
+    h('div', { class: 'stepper-row__text' }, h('b', { id }, title), h('span', null, text)),
+    h(
+      'div',
+      { class: 'stepper', role: 'group', 'aria-labelledby': id },
+      h('button', { class: 'stepper__btn', 'aria-label': t('launcher.moins'), disabled: value <= min, onClick: () => setDownloads(prefs, { [key]: value - 1 }) }, '−'),
+      h('output', { class: 'stepper__value', 'aria-live': 'polite' }, value),
+      h('button', { class: 'stepper__btn', 'aria-label': t('launcher.plus'), disabled: value >= max, onClick: () => setDownloads(prefs, { [key]: value + 1 }) }, '+'),
+    ),
+  );
+}
+
+function downloadsSection(prefs) {
+  const advised = prefs.downloads?.concurrency === DOWNLOAD_LIMITS.concurrency.advised && prefs.downloads?.perHost === DOWNLOAD_LIMITS.perHost.advised;
+  return h(
+    'section',
+    { class: 'settings__section', 'aria-labelledby': 'downloads-title' },
+    h('h2', { class: 'settings__title', id: 'downloads-title' }, t('launcher.telechargements')),
+    stepperRow(prefs, 'concurrency', t('launcher.telechargements_simultanes'), t('launcher.telechargements_simultanes_detail')),
+    stepperRow(prefs, 'perHost', t('launcher.par_serveur'), t('launcher.par_serveur_detail')),
+    h(
+      'p',
+      { class: 'hint' },
+      t('launcher.telechargements_conseil'),
+      ' ',
+      h(
+        'button',
+        { class: 'link-btn', disabled: advised, onClick: () => setDownloads(prefs, { concurrency: DOWNLOAD_LIMITS.concurrency.advised, perHost: DOWNLOAD_LIMITS.perHost.advised }) },
+        t('launcher.valeurs_conseillees', { concurrency: DOWNLOAD_LIMITS.concurrency.advised, perHost: DOWNLOAD_LIMITS.perHost.advised }),
+      ),
+    ),
+  );
+}
+
 function shortcutsSection() {
   const rows = SHORTCUTS().flatMap((g) => g.rows).filter((r) => !r.helpOnly);
   return h(
@@ -222,13 +270,13 @@ export function renderLauncherTab() {
     'div',
     null,
     h('p', { class: 'settings__scope-note' }, icon('settings', 20), t('launcher.reglages_du_launcher_lui_meme')),
-    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
+    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), downloadsSection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
   );
 }
 
 // ---------- Java et stockage ----------
 
-const busy = () => Boolean(state.run || state.task || state.storage.busy);
+const busy = () => Boolean(state.run || tasksBusy() || state.storage.busy);
 
 function runtimeRow(r) {
   const used = r.usedBy.length > 0;

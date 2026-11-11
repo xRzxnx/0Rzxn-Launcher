@@ -62,6 +62,7 @@ test('tâche terminée : résultat rendu, historique écrit, plus rien en cours'
   assert.equal(records.length, 1);
   assert.deepEqual({ ...records[0], id: 'x', createdAt: 0, startedAt: 0, endedAt: 0 }, {
     id: 'x', kind: 'modpack-install', label: 'A', instanceId: 'survie', state: 'done', createdAt: 0, startedAt: 0, endedAt: 0, error: null, params: { projectId: 'p' },
+    progress: { done: 0, total: 0 }, hidden: false,
   });
   assert.deepEqual(messages('tasks:changed').at(-1), []);
 });
@@ -160,16 +161,70 @@ test('annulation d’une tâche en cours : seulement si elle l’accepte', async
   await locked.promise;
 });
 
-test('compatibilité : une tâche longue à la fois, refus « Patiente… »', async () => {
+test('file : deux installations à la suite sur la même instance, la seconde attend son tour', async () => {
   const { manager } = setup();
-  let release;
-  const first = manager.runLong('Installation de X', () => new Promise((resolve) => { release = resolve; }));
-  await assert.rejects(manager.runLong('Sauvegarde de Monde', async () => {}), { message: tr('ipc.patiente_est_en_cours', { task: 'Installation de X' }) });
-  // Une tâche hors du groupe « long » n'est pas bloquée.
-  assert.equal(await manager.run({ kind: 'x', label: 'Autre', work: async () => 'ok' }), 'ok');
-  release('fait');
-  assert.equal(await first, 'fait');
-  assert.equal(await manager.runLong('Suivante', async () => 'ok'), 'ok');
+  const first = deferred();
+  const order = [];
+  const a = manager.runLong('Installation de X', () => { order.push('A'); return first.promise; }, { instanceId: 'survie' });
+  const b = manager.runLong('Mise à jour de X', async () => { order.push('B'); return 'b'; }, { instanceId: 'survie' });
+  assert.deepEqual(states(manager), ['Installation de X:running', 'Mise à jour de X:queued']);
+  // Une autre instance n'attend pas : deux tâches à la fois.
+  assert.equal(await manager.runLong('Sauvegarde de Monde', async () => 'c', { instanceId: 'creatif' }), 'c');
+  first.resolve('a');
+  assert.deepEqual([await a, await b], ['a', 'b']);
+  assert.deepEqual(order, ['A', 'B']);
+});
+
+test('file : rien ne démarre sur une instance en cours de partie, la tâche part à la fin', async () => {
+  let playing = 'survie';
+  const { manager } = setup({ inGame: (id) => id === playing });
+  const waiting = manager.runLong('Mise à jour', async () => 'fait', { instanceId: 'survie' });
+  assert.deepEqual(states(manager), ['Mise à jour:queued']);
+  assert.equal(manager.runningOn('survie'), null);
+  playing = null;
+  manager.pump(); // fin de la partie (LaunchManager.finish)
+  assert.equal(await waiting, 'fait');
+});
+
+test('tâche immédiate (préparation d’une partie) : tout de suite, hors limite, pas dans task:progress', async () => {
+  const { manager, messages } = setup({ limit: 1 });
+  const long = controlled(manager, { label: 'Installation', instanceId: 'creatif' });
+  const prepare = controlled(manager, { label: 'Préparation', kind: 'launch-prepare', instanceId: 'survie', immediate: true, cancellable: true });
+  assert.deepEqual(states(manager), ['Installation:running', 'Préparation:running']);
+  assert.equal(messages('task:progress').at(-1).label, 'Installation');
+  // La tâche immédiate garde son instance : une sauvegarde de « survie » attend, et ne compte pas pour la partie.
+  const backup = controlled(manager, { label: 'Sauvegarde', instanceId: 'survie' });
+  assert.equal(backup.calls.started, 0);
+  assert.equal(manager.runningOn('survie'), null);
+  prepare.calls.progress({ done: 3, total: 9, step: 2 });
+  assert.equal(manager.list().find((task) => task.kind === 'launch-prepare').progress.step, 2);
+  prepare.gate.reject(Object.assign(new Error('Lancement annulé.'), { cancelled: true }));
+  await assert.rejects(prepare.promise);
+  long.gate.resolve();
+  await long.promise;
+  assert.equal(backup.calls.started, 1);
+  backup.gate.resolve();
+  await backup.promise;
+});
+
+test('historique : 50 dernières tâches, sans le travail de fond, effaçable', async () => {
+  const rows = [
+    { id: 'b', kind: 'world-backup', label: 'Sauvegarde de Monde', instance_id: 'survie', state: 'cancelled', created_at: 2, started_at: 2, ended_at: 3, error: 'Annulée', params: { folder: 'Monde' }, progress: { done: 1, total: 4 }, hidden: false },
+    { id: 'n', kind: 'temp-cleanup', label: 'Nettoyage', instance_id: null, state: 'done', created_at: 1, started_at: 1, ended_at: 1, error: null, params: null, progress: null, hidden: true },
+    { id: 'ancien', kind: 'temp-cleanup', label: 'Nettoyage', instance_id: null, state: 'done', created_at: 0, started_at: 0, ended_at: 0, error: null, params: null, progress: null, hidden: false },
+  ];
+  const asked = [];
+  let cleared = 0;
+  const manager = new TaskManager({ history: { recordTask() {}, recentTasks: (limit) => (asked.push(limit), rows), clearTasks: () => cleared++ } });
+  assert.deepEqual(manager.recent(), [
+    { id: 'b', kind: 'world-backup', label: 'Sauvegarde de Monde', instanceId: 'survie', state: 'cancelled', createdAt: 2, startedAt: 2, endedAt: 3, error: 'Annulée', params: { folder: 'Monde' }, progress: { done: 1, total: 4 } },
+  ]);
+  manager.recent(500);
+  manager.recent('n’importe quoi');
+  assert.deepEqual(asked, [100, 100, 100]);
+  manager.clearHistory();
+  assert.equal(cleared, 1);
+  assert.deepEqual(new TaskManager().recent(), []);
 });
 
 test('compatibilité : task:progress comme avant (début, étapes, null à la fin)', async () => {

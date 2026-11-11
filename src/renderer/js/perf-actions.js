@@ -1,4 +1,5 @@
 // Performances : aperçu des arguments Java, Pack Performances, consommation du launcher et carte graphique.
+import { activityAction } from './activity-actions.js';
 import { t } from './i18n.js';
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
@@ -98,11 +99,12 @@ export async function installPack(modal) {
         deps > 0 && t('perf.dependances_ajoutees', { count: deps }),
         result.failed.length > 0 && t('perf.echec', { failed: result.failed.map((f) => f.title).join(', '), message: result.failed[0].message }),
       ].filter(Boolean).join(' ') || t('perf.les_fps_changent_au_prochain'),
+      actions: [activityAction()],
       timeout: 9000,
     });
     refreshInstalled(state.instances.find((i) => i.id === instance.id) ?? instance, 'mods');
   } catch (error) {
-    toastError(t('perf.pack_performances_non_installe'), error);
+    toastError(t('perf.pack_performances_non_installe'), error, [activityAction()]);
   }
 }
 

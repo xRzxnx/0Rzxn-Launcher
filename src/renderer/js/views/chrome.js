@@ -10,6 +10,7 @@ import { openWizard } from '../wizard-actions.js';
 import { installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceStatus, state, update } from '../state.js';
+import { activitySummary } from '../task-labels.js';
 import { openSidebarMenu } from './resume.js';
 
 export const TABS = [
@@ -20,6 +21,22 @@ export const TABS = [
 ];
 // Onglets propres à une instance : on y reste quand on change d'instance dans la barre latérale.
 const INSTANCE_VIEWS = new Set(['mods', 'worlds']);
+
+/** Entrée « Activité » : nombre de tâches et mini barre de progression tant qu'il y en a (l'indicateur discret). */
+function activityLink() {
+  const { count, running, percent } = activitySummary(state.tasks);
+  const label = count ? t('chrome.activity_status', { count, percent }) : null;
+  return [
+    h(
+      'button',
+      { class: 'side-link', 'aria-current': state.view === 'activity' ? 'page' : null, title: label, onClick: () => go('activity') },
+      icon('activity'),
+      t('chrome.activite'),
+      count > 0 && h('span', { class: 'count-badge count-badge--accent', 'aria-label': label }, count),
+    ),
+    running > 0 && h('span', { class: 'side-link__progress', 'aria-hidden': 'true' }, h('span', { style: `width:${percent}%` })),
+  ];
+}
 
 export function go(view) {
   update((s) => {
@@ -264,6 +281,7 @@ export function renderSidebar() {
     h(
       'div',
       { class: 'sidebar__foot' },
+      activityLink(),
       h(
         'button',
         { class: 'side-link', 'aria-current': state.view === 'console' ? 'page' : null, onClick: () => go('console') },

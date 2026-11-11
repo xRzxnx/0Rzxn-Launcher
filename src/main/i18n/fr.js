@@ -199,6 +199,8 @@ module.exports = {
   'ipc.origine_refusee': "Origine refusée.",
   'ipc.pack_performances': "Pack Performances",
   'ipc.patiente_est_en_cours': "Patiente : « {task} » est en cours.",
+  'ipc.preparation_de_la_partie': "Préparation de {name}",
+  'ipc.verification_de': "Vérification de {name}",
   'ipc.tache_annulee_avant_debut': "« {task} » a été annulé avant de commencer.",
   'ipc.nettoyage_des_fichiers_temporaires': "Nettoyage des fichiers temporaires",
   'ipc.quitter_0rzxn_launcher': "Quitter 0Rzxn_ Launcher",

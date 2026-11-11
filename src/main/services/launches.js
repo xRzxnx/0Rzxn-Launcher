@@ -15,9 +15,11 @@ const text = (value) => (typeof value === 'string' ? value : '');
 
 /** Une seule partie (ou préparation) à la fois, comme dans l'interface. */
 class LaunchManager {
-  constructor(services, getWindow) {
+  /** `tasks` : la préparation apparaît dans la page Activité (tâche « launch-prepare »). */
+  constructor(services, getWindow, tasks = null) {
     this.services = services;
     this.getWindow = getWindow;
+    this.tasks = tasks;
     this.session = null;
     this.run = null; // { instanceId, phase, step, done, total, prepareOnly }
     this.logs = [];
@@ -82,6 +84,9 @@ class LaunchManager {
     const instance = instances.get(instanceId);
     const accountId = accounts.resolveId(instance.accountId);
     if (!accountId) throw new Error(t('common.ajoute_un_compte_avant_de'));
+    // Une tâche longue (sauvegarde, mise à jour…) touche cette instance : la partie attend qu'elle finisse.
+    const busy = this.tasks?.runningOn(instanceId);
+    if (busy) throw new Error(t('ipc.patiente_est_en_cours', { task: busy.label }));
 
     const session = new LaunchSession({
       dirs,
@@ -155,8 +160,40 @@ class LaunchManager {
       this.finish({ exited: true, code, crashed, crash });
     });
 
+    this.trackPreparation(session, instance, prepareOnly);
     session.start();
     return this.run;
+  }
+
+  /**
+   * Préparation visible dans la page Activité : finie quand le jeu démarre ou que les fichiers sont prêts (elle ne
+   * peut donc plus être annulée depuis la page une fois le jeu lancé). Annuler la tâche arrête la préparation.
+   */
+  trackPreparation(session, instance, prepareOnly) {
+    if (!this.tasks) return;
+    let report = null;
+    const ended = new Promise((resolve, reject) => {
+      session.once('running', resolve);
+      session.once('prepared', resolve);
+      session.once('exit', resolve);
+      session.once('failed', ({ message, cancelled }) => reject(Object.assign(new Error(message ?? ''), { cancelled: Boolean(cancelled) })));
+    });
+    session.on('progress', ({ step, done, total, ...bytes }) => report?.({ step, done, total, ...bytes }));
+    this.tasks
+      .run({
+        kind: 'launch-prepare',
+        label: prepareOnly ? t('ipc.verification_de', { name: instance.name }) : t('ipc.preparation_de_la_partie', { name: instance.name }),
+        instanceId: instance.id,
+        immediate: true,
+        cancellable: true,
+        params: { name: instance.name, prepareOnly },
+        work: ({ signal, progress }) => {
+          report = progress;
+          signal.addEventListener('abort', () => session.stop(), { once: true });
+          return ended;
+        },
+      })
+      .catch(() => {}); // l'échec est déjà montré par l'accueil (launch:status)
   }
 
   /** Rapport du plantage : celui écrit par le jeu ou par Java, sinon les logs de la partie, gardés par le launcher. */
@@ -196,6 +233,8 @@ class LaunchManager {
     if (win && !win.isDestroyed()) win.webContents.setBackgroundThrottling(false);
     const instanceId = this.run?.instanceId;
     this.run = null;
+    // Les tâches qui attendaient la fin de la partie sur cette instance peuvent démarrer.
+    this.tasks?.pump();
     // Les derniers logs (et ceux gardés par le mode léger) partent avant le changement d'état.
     clearTimeout(this.flushTimer);
     this.flushLogs();

@@ -89,6 +89,9 @@ export type InvokeChannel =
   | 'storage:usage'
   | 'system:memory'
   | 'task:cancel'
+  | 'tasks:cancel'
+  | 'tasks:clearHistory'
+  | 'tasks:history'
   | 'tasks:list'
   | 'titlemenu:apply'
   | 'titlemenu:auto'
@@ -155,14 +158,33 @@ export interface TaskSnapshot {
   instanceId: string | null;
   priority: 'high' | 'normal' | 'low';
   cancellable: boolean;
-  /** Travail de fond (nettoyage…) : pas de carte de tâche. */
+  /** Travail de fond (nettoyage…) : absent de la page Activité. */
   hidden: boolean;
+  /** Démarre tout de suite, hors limite (préparation d'une partie). */
+  immediate: boolean;
+  /** De quoi refaire le libellé dans la langue du moment (avec `kind`). */
+  params: any;
   state: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   createdAt: number;
   startedAt: number | null;
   endedAt: number | null;
   error: string | null;
-  progress: { label: string; done: number; total: number; doneBytes?: number; totalBytes?: number; speed?: number; eta?: number };
+  progress: { label: string; done: number; total: number; doneBytes?: number; totalBytes?: number; speed?: number; eta?: number; step?: number };
+}
+
+/** Tâche finie (« tasks:history », depuis launcher.db). */
+export interface TaskRecord {
+  id: string;
+  kind: string;
+  label: string | null;
+  instanceId: string | null;
+  state: 'done' | 'failed' | 'cancelled' | string;
+  createdAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
+  error: string | null;
+  params: any;
+  progress: { done?: number; total?: number; doneBytes?: number; totalBytes?: number; step?: number } | null;
 }
 
 /** Messages envoyés à l'interface (webContents.send) et leur contenu. */

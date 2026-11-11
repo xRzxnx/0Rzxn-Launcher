@@ -116,25 +116,49 @@ test('protocole fond: : seulement les images « fond-… » du dossier de l’in
 
 // ---------- Mondes et tâche longue ----------
 
-test('sauvegarde d’un monde : une seule tâche à la fois, progression puis fin', async (t) => {
+test('sauvegarde d’un monde : la seconde attend son tour (même instance), progression puis fin', async (t) => {
   const ipc = startIpc(t);
   const { instance, gameDir, backupDir } = await newInstance(ipc);
   makeWorld(gameDir, 'Monde');
   const label = tr('ipc.sauvegarde_de', { name: 'Monde' });
 
   const running = ipc.invoke('worlds:backup', instance.id, 'Monde');
-  await assert.rejects(ipc.invoke('worlds:backup', instance.id, 'Monde'), { message: tr('ipc.patiente_est_en_cours', { task: label }) });
+  const queued = ipc.invoke('worlds:backup', instance.id, 'Monde');
+  assert.deepEqual((await ipc.invoke('tasks:list')).map((task) => task.state), ['running', 'queued']);
+  // Libérer de l'espace reste refusé pendant une tâche.
   await assert.rejects(ipc.invoke('storage:clean', []), { message: tr('ipc.patiente_est_en_cours', { task: label }) });
-  await running;
+  await Promise.all([running, queued]);
 
   const progress = ipc.win.messages('task:progress');
   assert.deepEqual(progress[0], { label, done: 0, total: 0, cancellable: true });
-  assert.ok(progress.slice(1, -1).every((p) => p.cancellable === true && p.total > 0));
   assert.equal(progress.at(-1), null);
-  assert.equal(zips(backupDir).length, 1);
-  // La tâche finie, une autre peut commencer.
-  await ipc.invoke('worlds:backup', instance.id, 'Monde');
   assert.equal(zips(backupDir).length, 2);
+});
+
+test('tasks:cancel retire une tâche en attente par son identifiant ; tasks:history et tasks:clearHistory', async (t) => {
+  const ipc = startIpc(t);
+  const { instance, gameDir } = await newInstance(ipc);
+  makeWorld(gameDir, 'Monde');
+  const running = ipc.invoke('worlds:backup', instance.id, 'Monde');
+  const queued = ipc.invoke('worlds:backup', instance.id, 'Monde');
+  queued.catch(() => {});
+  const [, waiting] = await ipc.invoke('tasks:list');
+  assert.equal(await ipc.invoke('tasks:cancel'), false); // sans identifiant : rien
+  assert.equal(await ipc.invoke('tasks:cancel', 'inconnue'), false);
+  assert.equal(await ipc.invoke('tasks:cancel', waiting.id), true);
+  await assert.rejects(queued, { message: tr('ipc.tache_annulee_avant_debut', { task: tr('ipc.sauvegarde_de', { name: 'Monde' }) }) });
+  await running;
+
+  const history = await ipc.invoke('tasks:history');
+  // Créées dans la même milliseconde parfois : comparées sans l'ordre.
+  assert.deepEqual(history.map((task) => [task.kind, task.state, task.instanceId, task.params]).sort((a, b) => a[1].localeCompare(b[1])), [
+    ['world-backup', 'cancelled', instance.id, { folder: 'Monde', name: 'Survie' }],
+    ['world-backup', 'done', instance.id, { folder: 'Monde', name: 'Survie' }],
+  ]);
+  const done = history.find((task) => task.state === 'done');
+  assert.ok(done.progress.total > 0 && done.progress.done === done.progress.total);
+  await ipc.invoke('tasks:clearHistory');
+  assert.deepEqual(await ipc.invoke('tasks:history'), []);
 });
 
 test('sauvegarde d’un monde : task:cancel l’arrête', async (t) => {
@@ -209,9 +233,12 @@ test('lancement : état, logs envoyés par paquets, partie unique, échec', asyn
   const { instance } = await newInstance(ipc);
   const run = await ipc.invoke('launch:start', instance.id, { skipBackup: true });
   assert.deepEqual(run, { instanceId: instance.id, phase: 'preparing', step: 0, done: 0, total: 0, prepareOnly: false });
-  assert.deepEqual(ipc.win.sent.slice(-2), [['launch:reset', undefined], ['launch:status', { run }]]);
+  assert.deepEqual(ipc.win.sent.filter(([channel]) => channel.startsWith('launch:')).slice(-2), [['launch:reset', undefined], ['launch:status', { run }]]);
   const [session] = sessions;
   assert.equal(session.verify, false);
+  // La préparation est aussi une tâche (page Activité), hors de la file.
+  const [prepare] = await ipc.invoke('tasks:list');
+  assert.deepEqual([prepare.kind, prepare.state, prepare.instanceId, prepare.immediate, prepare.cancellable, prepare.params], ['launch-prepare', 'running', instance.id, true, true, { name: 'Survie', prepareOnly: false }]);
 
   // Une seule partie à la fois, et rien ne touche l'instance pendant ce temps.
   await assert.rejects(ipc.invoke('launch:start', instance.id), { message: tr('ipc.une_partie_ou_une_installation') });
@@ -231,6 +258,7 @@ test('lancement : état, logs envoyés par paquets, partie unique, échec', asyn
 
   session.emit('progress', { step: 2, done: 10, total: 40 });
   assert.deepEqual(ipc.win.messages('launch:progress').at(-1), { ...run, step: 2, done: 10, total: 40 });
+  assert.deepEqual((await ipc.invoke('tasks:list'))[0].progress, { label: prepare.label, done: 10, total: 40, step: 2 });
   assert.deepEqual(wire(await ipc.invoke('launch:state')), { run: { ...run, step: 2, done: 10, total: 40 }, logs: [line(1), line(2), line(3)] });
 
   // Échec : les derniers logs partent avant le changement d'état.
@@ -240,13 +268,20 @@ test('lancement : état, logs envoyés par paquets, partie unique, échec', asyn
   assert.deepEqual(logs, ['launch:logs', [line(4)]]);
   assert.deepEqual(wire(failed), ['launch:status', { run: null, error: 'boom', instanceId: instance.id }]);
   assert.equal((await ipc.invoke('launch:state')).run, null);
+  assert.deepEqual(await ipc.invoke('tasks:list'), []);
 
-  // Annulation : pas de message d'erreur.
+  // Annulation depuis la page Activité : la préparation s'arrête, pas de message d'erreur.
   await ipc.invoke('launch:start', instance.id, { skipBackup: true });
-  await ipc.invoke('launch:stop');
+  const [second] = await ipc.invoke('tasks:list');
+  assert.equal(await ipc.invoke('tasks:cancel', second.id), true);
   assert.equal(sessions[1].stopped, true);
   sessions[1].emit('failed', { message: 'annulé', cancelled: true });
   assert.deepEqual(wire(ipc.win.messages('launch:status').at(-1)), { run: null, error: null, cancelled: true, instanceId: instance.id });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual((await ipc.invoke('tasks:history')).slice(0, 2).map((task) => [task.kind, task.state, task.error]), [
+    ['launch-prepare', 'cancelled', 'annulé'],
+    ['launch-prepare', 'failed', 'boom'],
+  ]);
 });
 
 test('lancement : trop de logs d’un coup, l’interface reçoit tout le tampon', async (t) => {
