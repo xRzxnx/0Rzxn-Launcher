@@ -5,7 +5,8 @@ export const state = {
   loadError: null,
   appVersion: null,
   microsoftReady: false, // client ID Azure configuré (src/main/microsoft-config.js)
-  signingIn: false, // fenêtre de connexion Microsoft ouverte
+  // Connexion Microsoft en cours : null, ou { phase: 'starting' | 'browser' | 'checking' | 'window' | 'expired', url, expiresAt, copied }.
+  login: null,
   view: 'home', // home | mods | worlds | versions | console | activity | settings
   instances: [],
   selectedId: null,

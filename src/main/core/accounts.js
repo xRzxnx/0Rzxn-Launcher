@@ -28,8 +28,8 @@ const PLAIN_VAULT = {
 class AccountStore {
   /**
    * @param {string} configDir
-   * @param {{ vault?: { encrypt(text: string): string, decrypt(data: string): string }, renew?: ((refreshToken: string) => Promise<any>) | null }} [options]
-   *   renew : renouvelle une session Microsoft (core/microsoft.js renew, avec le client ID).
+   * @param {{ vault?: { encrypt(text: string): string, decrypt(data: string): string }, renew?: ((refreshToken: string, redirect?: string) => Promise<any>) | null }} [options]
+   *   renew : renouvelle une session Microsoft (core/microsoft.js renew, avec le client ID), selon l'adresse de retour du compte.
    */
   constructor(configDir, { vault = PLAIN_VAULT, renew = null } = {}) {
     this.file = path.join(configDir, 'accounts.json');
@@ -104,12 +104,15 @@ class AccountStore {
   addMicrosoft(session, { activate = true } = {}) {
     const id = `microsoft-${session.uuid}`;
     const index = this.data.accounts.findIndex((a) => a.id === id);
+    /** @type {any} */
     const account = {
       id,
       type: 'microsoft',
       name: session.name,
       uuid: session.uuid,
       xuid: session.xuid,
+      // Connexion faite dans le navigateur (phase 7) : le renouvellement utilise la même adresse de retour.
+      ...(session.redirect === 'loopback' ? { redirect: 'loopback' } : {}),
       secrets: this.vault.encrypt(
         JSON.stringify({ refreshToken: session.refreshToken, accessToken: session.accessToken, expiresAt: session.expiresAt }),
       ),
@@ -158,7 +161,7 @@ class AccountStore {
       if (!this.renew) throw new Error(t('accounts.la_connexion_microsoft_est_pas'));
       try {
         log(t('accounts.renouvellement_de_la_session_microsoft'));
-        const session = await this.renew(secrets.refreshToken);
+        const session = await this.renew(secrets.refreshToken, account.redirect ?? 'native');
         this.addMicrosoft(session, { activate: false }); // remplace l'entrée (et efface needsLogin)
         secrets = { refreshToken: session.refreshToken, accessToken: session.accessToken, expiresAt: session.expiresAt };
       } catch (error) {

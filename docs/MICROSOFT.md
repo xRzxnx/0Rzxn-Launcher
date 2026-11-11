@@ -99,6 +99,22 @@ Fenêtre de connexion Microsoft (tenant « consumers », scopes XboxLive.signin 
 
 ---
 
+## Étape F : connexion dans le navigateur (depuis la 0.6.0)
+
+Depuis la 0.6.0, la page de Microsoft s'ouvre dans le **navigateur habituel** (gestionnaire de mots de passe, clés d'accès, double authentification déjà en place). À la fin, Microsoft renvoie le navigateur vers une petite adresse locale ouverte par le launcher (`http://localhost:<port>`), qui récupère le code et affiche « Connexion réussie ». La fenêtre intégrée reste disponible en secours (« Utiliser la fenêtre intégrée »).
+
+Cette adresse doit être inscrite dans l'application Azure :
+
+1. **Manage** → **Authentication**, dans la plateforme **Mobile and desktop applications** déjà créée à l'étape C.
+2. **Add URI** → saisis exactement `http://localhost` (en `http`, sans port ni `/` final), puis **Save**.
+3. Garde l'URI `nativeclient` : il sert à la fenêtre intégrée et aux comptes connectés avant la 0.6.0.
+
+Microsoft ignore le port pour les adresses `localhost` : cette seule entrée couvre le port choisi au hasard à chaque connexion. Sans elle, la page de Microsoft affiche l'erreur **AADSTS50011** (adresse de retour non inscrite) ; le launcher ne peut pas la voir, d'où le bouton « Utiliser la fenêtre intégrée » toujours visible pendant l'attente.
+
+Côté sécurité : l'adresse locale n'écoute que sur la machine (127.0.0.1 et ::1), n'accepte qu'une seule réponse portant le bon `state` (PKCE en plus), et se ferme dès la fin de la connexion, à l'annulation ou au bout de 10 minutes.
+
+---
+
 ## Ce que tu ne dois jamais partager
 
 - ton mot de passe Microsoft ;
@@ -108,6 +124,8 @@ Fenêtre de connexion Microsoft (tenant « consumers », scopes XboxLive.signin 
 ## Sources
 
 - [Microsoft Learn : enregistrer une application dans Microsoft Entra ID](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app) (prérequis : compte Azure avec abonnement actif, option « Personal accounts only »)
-- [Microsoft Learn : ajouter un URI de redirection](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-redirect-uri) (plateforme « Mobile and desktop applications », URI `nativeclient`)
+- [Microsoft Learn : ajouter un URI de redirection](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-redirect-uri) (plateforme « Mobile and desktop applications », URI `nativeclient` et `http://localhost`)
+- [Microsoft Learn : restrictions des URI de redirection](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url) (port ignoré pour `localhost`, `http` autorisé seulement en local)
+- [RFC 8252 : OAuth 2.0 pour les applications natives](https://www.rfc-editor.org/rfc/rfc8252) (retour par adresse locale, navigateur externe)
 - [Minecraft Wiki : Microsoft authentication](https://minecraft.wiki/w/Microsoft_authentication) (formulaire de Mojang, tenant `consumers`, scope `XboxLive.signin`)
 - [Guide lighty-auth](https://docs.rs/crate/lighty-auth/26.9.2/source/docs/application-id-microsoft.md) (champs du formulaire, examen hebdomadaire)

@@ -275,8 +275,31 @@ export async function addOfflineAccount(name) {
   toast({ kind: 'success', title: t('actions.bienvenue', { name: name.trim() }), text: t('actions.compte_hors_ligne_ajoute_et') });
 }
 
-/** Ouvre la page de connexion Microsoft ; sert aussi à reconnecter un compte expiré. */
-export async function addMicrosoftAccount() {
+// ---------- Connexion Microsoft (dans le navigateur par défaut, phase 7) ----------
+
+let loginWatched = false;
+let loginTicker = null;
+
+/** Suit l'état envoyé par le processus principal ; redessine chaque demi-minute le temps restant. */
+function watchLogin() {
+  if (loginWatched) return;
+  loginWatched = true;
+  api.on.loginState((next) => {
+    update((s) => {
+      if (next.phase === 'idle') {
+        if (s.login?.phase !== 'expired') s.login = null;
+      } else s.login = { phase: next.phase, url: next.url ?? null, expiresAt: next.expiresAt ?? null, copied: false };
+    });
+    clearInterval(loginTicker);
+    loginTicker = next.phase === 'browser' ? setInterval(() => update(() => {}), 30_000) : null;
+  });
+}
+
+/**
+ * Ouvre la connexion Microsoft ; sert aussi à reconnecter un compte expiré.
+ * `mode` : 'window' pour la fenêtre intégrée, sinon le navigateur habituel.
+ */
+export async function addMicrosoftAccount(mode) {
   if (!state.microsoftReady) {
     toast({
       title: t('actions.connexion_microsoft_bientot_disponible'),
@@ -285,20 +308,61 @@ export async function addMicrosoftAccount() {
     });
     return;
   }
-  if (state.signingIn) return;
-  update((s) => { s.signingIn = true; });
+  if (state.login && state.login.phase !== 'expired') return;
+  const inWindow = mode === 'window';
+  watchLogin();
+  update((s) => { s.login = { phase: inWindow ? 'window' : 'starting', url: null, expiresAt: null, copied: false }; });
   try {
-    const data = await api.addMicrosoftAccount();
+    const data = await api.addMicrosoftAccount(inWindow ? 'window' : 'browser');
+    // Annulé, ou 10 minutes sans réponse du navigateur (bloc « Connexion annulée » avec Réessayer).
+    if (data.ended) {
+      update((s) => { s.login = data.ended === 'TIMEOUT' ? { phase: 'expired', url: null, expiresAt: null, copied: false } : null; });
+      return;
+    }
+    update((s) => { s.login = null; });
     await refreshAccounts(data);
-    update((s) => {
-      if (s.modal?.type === 'accounts') s.modal = null;
-    });
     toast({ kind: 'success', title: t('actions.connecte', { name: data.name }), text: t('actions.compte_microsoft_ajoute_et_selectionne') });
   } catch (error) {
-    if (error.message !== t('actions.connexion_annulee')) toastError(t('actions.connexion_microsoft_impossible'), error);
-  } finally {
-    update((s) => { s.signingIn = false; });
+    update((s) => { s.login = null; });
+    toastError(t('actions.connexion_microsoft_impossible'), error);
   }
+}
+
+/** Bloc d'attente : rouvre la page de Microsoft dans le navigateur. */
+export function reopenLogin() {
+  api.loginReopen().catch(() => {});
+}
+
+/** Bloc d'attente : copie l'adresse de la page de connexion (à coller dans un autre navigateur). */
+export async function copyLoginLink() {
+  const url = state.login?.url;
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    toast({ kind: 'error', title: t('common.le_presse_papiers_est_pas') });
+    return;
+  }
+  update((s) => { if (s.login) s.login.copied = true; });
+  setTimeout(() => update((s) => { if (s.login?.url === url) s.login.copied = false; }), 4000);
+}
+
+/** Passe à la fenêtre intégrée (la page affiche une erreur, ou le navigateur ne s'ouvre pas). */
+export function useLoginWindow() {
+  if (state.login?.phase === 'expired') {
+    update((s) => { s.login = null; });
+    addMicrosoftAccount('window');
+    return;
+  }
+  api.loginWindow().catch(() => {});
+}
+
+export function cancelLogin() {
+  if (state.login?.phase === 'expired') {
+    update((s) => { s.login = null; });
+    return;
+  }
+  api.loginCancel().catch(() => {});
 }
 
 export function removeAccount(id) {

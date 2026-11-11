@@ -32,7 +32,8 @@ test('contrat : les canaux enregistrés sont exactement ceux exposés par preloa
   // 103 + tasks:list (gestionnaire de tâches, phase 3) + tasks:history, tasks:cancel, tasks:clearHistory (page Activité, phase 5)
   // + java:probe (Java personnalisé 32 bits, phase 6)
   // + optimizations:list, optimizations:revert (historique des optimisations, phase 6)
-  assert.equal(registered.length, 110);
+  // + accounts:loginReopen, accounts:loginWindow, accounts:loginCancel (connexion dans le navigateur, phase 7)
+  assert.equal(registered.length, 113);
 });
 
 test('contrat : protocoles fond: et skin:', (t) => {
@@ -46,7 +47,8 @@ test('contrat : les événements envoyés sont ceux écoutés par preload.js', (
   assert.deepEqual([...sent].sort(), listened);
   // « tasks:changed » ajouté par le gestionnaire de tâches (phase 3), pour la page Activité.
   // « launch:metrics » : mémoire et processeur du jeu (phase 6).
-  assert.deepEqual(listened, ['app:launchRequest', 'launch:logs', 'launch:metrics', 'launch:progress', 'launch:reset', 'launch:status', 'task:progress', 'tasks:changed', 'update:status']);
+  // « accounts:loginState » : connexion Microsoft dans le navigateur (phase 7).
+  assert.deepEqual(listened, ['accounts:loginState', 'app:launchRequest', 'launch:logs', 'launch:metrics', 'launch:progress', 'launch:reset', 'launch:status', 'task:progress', 'tasks:changed', 'update:status']);
 });
 
 test('contrat : le fichier de types suit preload.js (canaux et événements)', () => {

@@ -5,7 +5,7 @@ import { importInstance, openImport, pickImportFolder } from '../import-actions.
 import { exportInstance } from '../mods-actions.js';
 import { shareCrash } from '../crash-actions.js';
 import { cleanDialog, removeRuntimeDialog, shortcutsDialog, stopGameDialog } from './launcher-settings.js';
-import { addMicrosoftAccount, addOfflineAccount, createInstance, deleteInstance, disableLowRamWarning, editInstance, fixAllAndLaunch, fixModProblem, launchAnyway, loaderOptions, removeAccount, setActiveAccount, startLaunch, versionDetails } from '../actions.js';
+import { addMicrosoftAccount, addOfflineAccount, cancelLogin, copyLoginLink, reopenLogin, useLoginWindow, createInstance, deleteInstance, disableLowRamWarning, editInstance, fixAllAndLaunch, fixModProblem, launchAnyway, loaderOptions, removeAccount, setActiveAccount, startLaunch, versionDetails } from '../actions.js';
 import { bannerUrl } from '../banner.js';
 import { LOADER_NAMES, LOADERS, loaderLabel, VERSION_TYPES } from '../data.js';
 import { blockIcon, formatGo, formatPlaytime, h, icon, slugify } from '../dom.js';
@@ -305,12 +305,73 @@ function deleteDialog(modal) {
   });
 }
 
+/** Connexion Microsoft dans le navigateur : attente du retour, puis vérification du compte. */
+function loginWaiting(login) {
+  const checking = login.phase === 'checking';
+  const minutes = Math.max(1, Math.ceil(((login.expiresAt ?? Date.now()) - Date.now()) / 60_000));
+  return h(
+    'div',
+    { class: 'login-wait', role: 'status', 'aria-live': 'polite' },
+    h(
+      'div',
+      { class: 'login-wait__top' },
+      h('span', { class: 'login-wait__icon' }, h('span', { class: 'login-wait__spin', 'aria-hidden': 'true' }), icon('browser', 22)),
+      h(
+        'span',
+        { class: 'login-wait__body' },
+        h('b', null, checking ? t('modals.verification_du_compte') : t('modals.termine_la_connexion_dans_ton')),
+        h('span', { class: 'login-wait__text' }, checking ? t('modals.microsoft_a_repondu_le_launcher') : t('modals.la_page_de_microsoft_est')),
+        !checking && h('span', { class: 'login-wait__timer' }, icon('clock', 13), t('modals.en_attente_annulee_dans', { minutes })),
+      ),
+    ),
+    !checking &&
+      h(
+        'div',
+        { class: 'login-wait__row' },
+        h('button', { class: 'btn btn--sm', onClick: reopenLogin }, t('modals.rouvrir_la_page')),
+        h('button', { class: `btn btn--sm${login.copied ? ' btn--done' : ''}`, onClick: copyLoginLink }, login.copied ? t('modals.lien_copie') : t('modals.copier_le_lien')),
+        h('button', { class: 'btn btn--sm', onClick: cancelLogin }, t('common.annuler')),
+      ),
+    !checking &&
+      h(
+        'div',
+        { class: 'login-wait__alt' },
+        t('modals.la_page_affiche_une_erreur'),
+        h('button', { class: 'btn btn--sm btn--link', onClick: useLoginWindow }, t('modals.utiliser_la_fenetre_integree')),
+      ),
+  );
+}
+
+/** Dix minutes sans retour du navigateur : la connexion est annulée. */
+function loginExpired() {
+  return h(
+    'div',
+    { class: 'login-wait login-wait--ko', role: 'alert' },
+    h(
+      'div',
+      { class: 'login-wait__top' },
+      h('span', { class: 'login-wait__icon' }, icon('clock', 22)),
+      h('span', { class: 'login-wait__body' }, h('b', null, t('modals.connexion_annulee')), h('span', { class: 'login-wait__text' }, t('modals.aucune_reponse_du_navigateur_depuis'))),
+    ),
+    h(
+      'div',
+      { class: 'login-wait__row' },
+      h('button', { class: 'btn btn--sm btn--primary', onClick: () => addMicrosoftAccount() }, t('modals.reessayer')),
+      h('button', { class: 'btn btn--sm', onClick: useLoginWindow }, t('modals.utiliser_la_fenetre_integree')),
+      h('button', { class: 'btn btn--sm btn--ghost', onClick: cancelLogin }, t('common.fermer')),
+    ),
+  );
+}
+
 function microsoftButton(style) {
+  const login = state.login;
+  if (login?.phase === 'browser' || login?.phase === 'checking') return loginWaiting(login);
+  if (login?.phase === 'expired') return loginExpired();
   return h(
     'button',
-    { class: 'btn btn--microsoft', style, disabled: state.signingIn, onClick: addMicrosoftAccount },
+    { class: 'btn btn--microsoft', style, disabled: Boolean(login), onClick: () => addMicrosoftAccount() },
     icon('microsoft', 18),
-    state.signingIn ? t('modals.connexion_en_cours') : t('modals.se_connecter_avec_microsoft'),
+    login ? t('modals.connexion_en_cours') : t('modals.se_connecter_avec_microsoft'),
   );
 }
 
@@ -377,7 +438,7 @@ function accountsDialog() {
                 ),
               ),
               a.needsLogin
-                ? h('button', { class: 'btn', disabled: state.signingIn, onClick: addMicrosoftAccount }, t('modals.se_reconnecter'))
+                ? h('button', { class: 'btn', disabled: Boolean(state.login), onClick: () => addMicrosoftAccount() }, t('modals.se_reconnecter'))
                 : active
                   ? h('span', { class: 'tag tag--ok' }, t('modals.actif'))
                   : h('button', { class: 'btn', disabled: Boolean(state.run), onClick: () => setActiveAccount(a.id) }, t('modals.utiliser')),

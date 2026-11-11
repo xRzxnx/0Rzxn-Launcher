@@ -8,7 +8,7 @@ const path = require('node:path');
 const microsoft = require('../core/microsoft');
 const { SkinStore, Wardrobe } = require('../core/skins');
 const { clientId: MICROSOFT_CLIENT_ID } = require('../microsoft-config');
-const { promptMicrosoftLogin } = require('../microsoft-login');
+const { signInMicrosoft, loginControls } = require('../microsoft-login');
 const { text } = require('./handle');
 
 function register({ handle, getWindow, dirs, accounts }) {
@@ -17,14 +17,28 @@ function register({ handle, getWindow, dirs, accounts }) {
 
   handle('accounts:list', () => accounts.list());
   handle('accounts:addOffline', (name) => accounts.addOffline(text(name)));
-  handle('accounts:addMicrosoft', async () => {
+  // Connexion dans le navigateur (par défaut) ou dans la fenêtre intégrée (mode 'window').
+  // Annulation et délai dépassé ne sont pas des erreurs : { ended: 'CANCELLED' | 'TIMEOUT' }.
+  const send = (channel, payload) => {
+    const win = getWindow();
+    if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+  };
+  handle('accounts:addMicrosoft', async (mode) => {
     if (!MICROSOFT_CLIENT_ID) {
       throw new Error(t('ipc.la_connexion_microsoft_est_pas'));
     }
-    const { code, verifier } = await promptMicrosoftLogin(getWindow(), MICROSOFT_CLIENT_ID);
-    const session = await microsoft.signIn(MICROSOFT_CLIENT_ID, code, verifier);
+    let session;
+    try {
+      session = await signInMicrosoft({ clientId: MICROSOFT_CLIENT_ID, getWindow, send, mode: text(mode) === 'window' ? 'window' : 'browser' });
+    } catch (error) {
+      if (error instanceof microsoft.MicrosoftAuthError && (error.code === 'CANCELLED' || error.code === 'TIMEOUT')) return { ended: error.code };
+      throw error;
+    }
     return { ...accounts.addMicrosoft(session), name: session.name };
   });
+  handle('accounts:loginReopen', () => loginControls.reopen());
+  handle('accounts:loginWindow', () => loginControls.useWindow());
+  handle('accounts:loginCancel', () => loginControls.cancel());
   handle('accounts:remove', (id) => accounts.remove(text(id)));
   handle('accounts:setActive', (id) => accounts.setActive(text(id)));
   handle('accounts:refreshLooks', () => wardrobe.refresh());
