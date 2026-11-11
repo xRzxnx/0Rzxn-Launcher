@@ -1,4 +1,5 @@
 // Actions de la fenêtre « Importer » : instances d'autres launchers.
+import { activityAction } from './activity-actions.js';
 import { t } from './i18n.js';
 import { refreshInstances } from './actions.js';
 import { api } from './api.js';
@@ -44,8 +45,9 @@ export async function importInstance(item) {
       title: t('import.importee', { name: instance.name }),
       text: [t('import.files_copied', { files, version: [instance.version, instance.loader !== 'vanilla' && LOADER_NAMES[instance.loader]].filter(Boolean).join(' · ') }), ...warnings].join(' '),
       timeout: warnings.length ? 12000 : 6000,
+      actions: [activityAction()],
     });
   } catch (error) {
-    toastError(t('common.import_impossible'), error);
+    toastError(t('common.import_impossible'), error, [activityAction()]);
   }
 }

@@ -43,9 +43,9 @@ function registerIpc(getWindow) {
   };
   applyLanguage();
 
-  const launches = new LaunchManager(services, getWindow);
-  const tasks = new TaskManager({ getWindow, history: services.db });
-  // Tâches longues d'aujourd'hui : une à la fois, « Patiente… » sinon (la file s'ouvrira avec la page Activité).
+  // File des tâches longues (page Activité) : deux à la fois, une par instance, rien sur une instance en cours de partie.
+  const tasks = new TaskManager({ getWindow, history: services.db, inGame: (id) => launches.run?.instanceId === id });
+  const launches = new LaunchManager(services, getWindow, tasks);
   const runTask = (label, work, options) => tasks.runLong(label, work, options);
   const trash = (file) => shell.trashItem(file);
 

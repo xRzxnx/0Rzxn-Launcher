@@ -1,7 +1,7 @@
 // Mises à jour du launcher : l'interface suit l'état tenu par le processus principal.
 import { api } from './api.js';
 import { t } from './i18n.js';
-import { state, toastError, update } from './state.js';
+import { state, tasksBusy, toastError, update } from './state.js';
 
 export async function loadUpdate() {
   const status = await api.updateState();
@@ -28,7 +28,7 @@ export async function installUpdate() {
 /** Ce qui empêche de redémarrer le launcher : 'game', 'install', sinon une chaîne vide. */
 export function updateBlocker() {
   if (state.run) return 'game';
-  return state.task ? 'install' : '';
+  return tasksBusy() ? 'install' : '';
 }
 
 /** Phrase affichée pendant que la nouvelle version attend. */

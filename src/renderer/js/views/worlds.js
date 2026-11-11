@@ -3,6 +3,8 @@ import { compareText, formatDateTime, t } from '../i18n.js';
 import { LOADER_NAMES, formatLastPlayed } from '../data.js';
 import { blockIcon, formatSize, h, icon } from '../dom.js';
 import { selectedInstance, state, update } from '../state.js';
+import { instanceTask } from '../activity-actions.js';
+import { taskPercent } from '../task-labels.js';
 import { close, dialog } from './modals.js';
 import {
   askDeleteWorld,
@@ -61,15 +63,16 @@ function sorted(list) {
   return list.filter((w) => !filter || `${w.name} ${w.folder}`.toLowerCase().includes(filter)).sort(by);
 }
 
-function progressLine(label) {
-  const task = state.task;
-  const percent = task?.total ? Math.round((task.done / task.total) * 100) : 0;
+/** Sauvegarde ou restauration de ce monde : sa tâche dans la file (en attente, ou en cours avec sa progression). */
+function progressLine(label, instance, folder, kind) {
+  const task = instanceTask(instance.id, (other) => (kind === 'restore' ? other.kind === 'world-restore' : other.kind === 'world-backup' && other.params?.folder === folder));
+  const percent = (task?.state === 'running' && taskPercent(task)) || 0;
   return h(
     'div',
     { class: 'world-progress' },
     h('div', { class: 'progress', role: 'progressbar', 'aria-valuenow': percent, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': label }, h('div', { class: 'progress__fill', style: `width:${percent}%` })),
-    h('span', null, `${label} ${percent} %`),
-    h('button', { class: 'btn btn--sm', onClick: cancelWorldTask }, t('common.annuler')),
+    h('span', null, task?.state === 'queued' ? `${label} · ${t('activity.en_attente')}` : `${label} ${percent} %`),
+    h('button', { class: 'btn btn--sm', disabled: !task, onClick: () => cancelWorldTask(task) }, t('common.annuler')),
   );
 }
 
@@ -106,15 +109,16 @@ function backupRow(instance, world, backup, locked) {
       h('span', null, `${formatSize(backup.size)} · ${REASONS()[backup.reason] ?? REASONS().manual}`),
     ),
     h('span', { class: `tag ${backup.kind === 'auto' ? 'tag--release' : ''}` }, backup.kind === 'auto' ? t('worlds.auto') : t('worlds.manuelle')),
-    h('button', { class: 'btn btn--sm', disabled: locked || Boolean(state.task), onClick: () => askRestore(instance, world, backup) }, t('worlds.restaurer')),
-    h('button', { class: 'dialog__close', 'aria-label': t('worlds.supprimer_sauvegarde'), disabled: Boolean(state.task), onClick: () => deleteBackup(instance, backup) }, icon('trash')),
+    h('button', { class: 'btn btn--sm', disabled: locked, onClick: () => askRestore(instance, world, backup) }, t('worlds.restaurer')),
+    h('button', { class: 'dialog__close', 'aria-label': t('worlds.supprimer_sauvegarde'), disabled: Boolean(instanceTask(instance.id)), onClick: () => deleteBackup(instance, backup) }, icon('trash')),
   );
 }
 
 function detailPanel(instance, world, backups, locked) {
   const mine = backups.filter((b) => b.folder === world.folder);
   const busy = state.worlds.busy[busyKey(instance, world.folder)];
-  const otherTask = Boolean(state.task) && !busy;
+  // Une tâche (sauvegarde, restauration, mise à jour…) touche l'instance : le monde ne part pas à la corbeille pendant ce temps.
+  const otherTask = Boolean(instanceTask(instance.id)) && !busy;
   const played = world.lastPlayed ? formatDateTime(new Date(world.lastPlayed), WHEN) : '—';
   const fact = (label, value) => h('div', { class: 'world-fact' }, h('span', null, label), h('b', null, value));
   return h(
@@ -132,12 +136,12 @@ function detailPanel(instance, world, backups, locked) {
     world.newer && h('p', { class: 'notice notice--warn' }, icon('alert'), t('worlds.version_plus_recente_detail', { world: world.version, instance: instance.version })),
     locked && h('p', { class: 'notice' }, icon('lock'), t('worlds.jeu_ouvert')),
     busy
-      ? progressLine(busy === 'restore' ? t('worlds.restauration') : t('worlds.sauvegarde'))
+      ? progressLine(busy === 'restore' ? t('worlds.restauration') : t('worlds.sauvegarde'), instance, world.folder, busy)
       : h(
           'div',
           { class: 'world-actions' },
           h('button', { class: 'btn btn--primary', disabled: Boolean(state.run) || !instance.quickPlay, title: instance.quickPlay ? null : t('worlds.quick_play_indisponible'), onClick: () => playWorld(instance, world) }, icon('play'), t('worlds.jouer_dans_ce_monde')),
-          h('button', { class: 'btn', disabled: locked || otherTask, onClick: () => backupWorld(instance, world) }, icon('archive'), t('worlds.sauvegarder')),
+          h('button', { class: 'btn', disabled: locked, onClick: () => backupWorld(instance, world) }, icon('archive'), t('worlds.sauvegarder')),
           h('button', { class: 'btn', onClick: () => openWorldsFolder(instance, world.folder) }, icon('folder'), t('worlds.ouvrir_le_dossier')),
           h('button', { class: 'btn btn--danger', disabled: locked || otherTask, onClick: () => askDeleteWorld(instance, world) }, icon('trash'), t('worlds.supprimer')),
         ),

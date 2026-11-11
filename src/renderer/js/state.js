@@ -6,7 +6,7 @@ export const state = {
   appVersion: null,
   microsoftReady: false, // client ID Azure configuré (src/main/microsoft-config.js)
   signingIn: false, // fenêtre de connexion Microsoft ouverte
-  view: 'home', // home | mods | worlds | versions | console | settings
+  view: 'home', // home | mods | worlds | versions | console | activity | settings
   instances: [],
   selectedId: null,
   accounts: [],
@@ -81,7 +81,12 @@ export const state = {
   },
   logs: [],
   run: null, // { instanceId, phase: 'preparing' | 'running', step, done, total, prepareOnly }
-  task: null, // tâche longue en cours (modpack) : { label, done, total }
+  tasks: [], // tâches en cours et en attente (« tasks:changed »), dans l'ordre où elles passeront
+  activity: {
+    history: null, // 50 dernières tâches finies (launcher.db), null avant le premier chargement
+    filter: 'all', // all | failed
+    open: null, // tâche en échec dont le message est déplié
+  },
   modpackUpdates: {}, // instance → { checking } | { none } | { versionId, number }
   modal: null, // { type: 'new-instance' | 'accounts' | 'low-ram', ... }
   toasts: [],
@@ -133,6 +138,9 @@ export function runPercent(run) {
   return Math.min(100, Math.round(((run.step + inStep) / STEP_COUNT) * 100));
 }
 
+/** Une tâche longue visible est en cours ou en attente (page Activité). */
+export const tasksBusy = () => state.tasks.some((task) => !task.hidden);
+
 export function instanceStatus(instance) {
   const run = state.run;
   if (run && run.instanceId === instance.id) {
@@ -162,6 +170,7 @@ export function dismissToast(id) {
   });
 }
 
-export function toastError(title, error) {
-  toast({ kind: 'error', title, text: error?.message ?? String(error), timeout: 9000 });
+/** actions : comme toast() (par exemple « Voir l'activité » après une tâche longue). */
+export function toastError(title, error, actions = []) {
+  toast({ kind: 'error', title, text: error?.message ?? String(error), actions, timeout: 9000 });
 }

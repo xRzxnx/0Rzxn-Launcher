@@ -34,7 +34,7 @@ function register({ handle, getWindow, services, instances, runTask }) {
     if (!launcher) throw new Error(t('ipc.instance_inconnue_relance_la_recherche'));
     return runTask(t('ipc.import_de_2', { source: path.basename(source) }), (onProgress) =>
       importer.importInstance({ instances, dir: source, defaults: services.settings.defaults(), launcher, onProgress }),
-    { kind: 'instance-import', params: { launcher } });
+    { kind: 'instance-import', params: { launcher, source: path.basename(source) } });
   });
 }
 

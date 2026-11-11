@@ -1,4 +1,5 @@
 // Actions de l'onglet Mondes : liste, sauvegardes .zip, restauration, mise à la corbeille.
+import { activityAction } from './activity-actions.js';
 import { api } from './api.js';
 import { requestLaunch } from './actions.js';
 import { formatSize } from './dom.js';
@@ -39,9 +40,11 @@ export function setWorldsView(patch) {
   update((s) => { Object.assign(s.worlds, patch); });
 }
 
-export function cancelWorldTask() {
+/** Annule la tâche de ce monde (en attente : retirée de la file ; en cours : arrêtée). */
+export function cancelWorldTask(task) {
+  if (!task) return;
   cancelRequested = true;
-  api.cancelTask().catch(() => {});
+  api.cancelTask(task.id).catch(() => {});
 }
 
 async function guarded(key, kind, work, failTitle) {
@@ -51,7 +54,7 @@ async function guarded(key, kind, work, failTitle) {
     return await work();
   } catch (error) {
     if (cancelRequested) toast({ title: t('worlds.annule'), text: t('worlds.rien_a_change') });
-    else toastError(failTitle, error);
+    else toastError(failTitle, error, [activityAction()]);
     return null;
   } finally {
     cancelRequested = false;
@@ -66,6 +69,7 @@ export async function backupWorld(instance, world) {
       kind: 'success',
       title: t('worlds.sauvegarde_de', { name: world.name }),
       text: t('worlds.taille_fichiers', { size: formatSize(result.size), files: num(result.files) }),
+      actions: [activityAction()],
     });
   }
   await refreshWorlds(instance);
@@ -85,6 +89,7 @@ export async function runRestore(modal) {
       kind: 'success',
       title: t('worlds.restaure', { name: result.name }),
       text: result.replaced ? t('worlds.ancien_monde_corbeille') : t('worlds.restaure_dans', { folder: result.folder }),
+      actions: [activityAction()],
     });
     update((s) => { s.worlds.selected[instance.id] = result.folder; });
   }

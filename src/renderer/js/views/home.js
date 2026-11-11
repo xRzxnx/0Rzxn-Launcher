@@ -107,7 +107,7 @@ function modpackCard(instance, busy) {
   let action;
   if (!pack.projectId) action = h('span', { class: 'hint' }, t('home.importe_depuis_un_fichier'));
   else if (check?.versionId) {
-    action = h('button', { class: 'btn btn--primary', disabled: busy || Boolean(state.task), onClick: () => updateModpack(instance, check.versionId) }, icon('download'), t('common.mettre_jour_vers', { number: check.number }));
+    action = h('button', { class: 'btn btn--primary', disabled: busy, onClick: () => updateModpack(instance, check.versionId) }, icon('download'), t('common.mettre_jour_vers', { number: check.number }));
   } else {
     action = h('button', { class: 'btn btn--ghost', disabled: check?.checking, onClick: () => checkModpackUpdate(instance) }, check?.checking ? t('home.verification') : check?.none ? t('home.verifier_nouveau') : t('home.verifier_les_mises_jour'));
   }

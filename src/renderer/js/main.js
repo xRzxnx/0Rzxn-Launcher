@@ -5,6 +5,7 @@ import { renderModal, renderWelcome } from './views/modals.js';
 import { renderToasts } from './views/toasts.js';
 import { renderSidebar, renderTabs, renderTitlebarUpdate, renderTopbarRight } from './views/chrome.js';
 import { renderConsole } from './views/console.js';
+import { renderActivity } from './views/activity.js';
 import { renderHome } from './views/home.js';
 import { renderSettings } from './views/settings.js';
 import { renderMods } from './views/mods.js';
@@ -28,10 +29,11 @@ const VIEWS = {
   worlds: renderWorlds,
   versions: renderVersions,
   console: renderConsole,
+  activity: renderActivity,
   settings: renderSettings,
 };
 const FLUSH_VIEWS = new Set(['versions', 'console', 'mods', 'worlds']);
-const PREACT_VIEWS = new Set(['console', 'home', 'mods']);
+const PREACT_VIEWS = new Set(['console', 'home', 'mods', 'activity']);
 
 let lastView = null;
 

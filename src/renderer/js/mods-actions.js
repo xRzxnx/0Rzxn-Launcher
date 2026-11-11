@@ -1,4 +1,5 @@
 // Actions de l'onglet Mods : contenu installé, recherche Modrinth, installation, mises à jour.
+import { activityAction } from './activity-actions.js';
 import { t } from './i18n.js';
 import { askBackupFailed, installMissingDeps, refreshInstances } from './actions.js';
 import { forgetWorlds } from './worlds-actions.js';
@@ -230,6 +231,7 @@ async function afterModpack(promise, verb) {
     kind: 'success',
     title: `${instance.name} ${verb}`,
     text: t('mods.new_instance_text', { version: [instance.version, instance.loader !== 'vanilla' && instance.loader].filter(Boolean).join(' · ') }),
+    actions: [activityAction()],
   });
 }
 
@@ -238,7 +240,7 @@ export async function installModpack(hit, versionId = null) {
   try {
     await afterModpack(api.installModpack(hit.id, versionId, { title: hit.title, icon: hit.icon }), t('mods.installe_2'));
   } catch (error) {
-    toastError(t('mods.installation_du_modpack_impossible'), error);
+    toastError(t('mods.installation_du_modpack_impossible'), error, [activityAction()]);
   } finally {
     setBusy(hit.id, false);
   }
@@ -248,7 +250,7 @@ export async function importModpack() {
   try {
     await afterModpack(api.importModpack(), t('mods.importe'));
   } catch (error) {
-    toastError(t('common.import_impossible'), error);
+    toastError(t('common.import_impossible'), error, [activityAction()]);
   }
 }
 
@@ -281,9 +283,10 @@ export async function updateModpack(instance, versionId, options = {}) {
       kind: 'success',
       title: t('mods.mis_jour', { name: result.instance.modpack.name }),
       text: t(result.removed ? 'mods.pack_updated_removed' : 'mods.pack_updated', { version: result.instance.modpack.version, files: result.files, removed: result.removed }),
+      actions: [activityAction()],
     });
   } catch (error) {
-    toastError(t('mods.mise_jour_du_modpack_impossible'), error);
+    toastError(t('mods.mise_jour_du_modpack_impossible'), error, [activityAction()]);
   }
 }
 

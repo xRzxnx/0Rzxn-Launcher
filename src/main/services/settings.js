@@ -7,7 +7,7 @@ const { readJson, writeJson } = require('../core/store');
 
 // Réglages du launcher lui-même (Paramètres › Launcher).
 // lightMode : le launcher se met en veille pendant une partie ; gpuHighPerformance : accord donné pour la carte dédiée.
-// downloads : téléchargements simultanés au total et par serveur (sans écran avant la page Activité).
+// downloads : téléchargements simultanés au total et par serveur (Paramètres › Launcher › Téléchargements).
 const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, downloads: { concurrency: 16, perHost: 8 } };
 const ACCENTS = new Set(['violet', 'bleu', 'cyan', 'vert', 'ambre', 'rouge', 'rose']);
 

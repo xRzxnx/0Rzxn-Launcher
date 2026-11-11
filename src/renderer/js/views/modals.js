@@ -623,7 +623,7 @@ function importInstancesTab(modal) {
             ),
             h(
               'button',
-              { class: item.imported ? 'btn' : 'btn btn--primary', disabled: !item.supported || Boolean(state.task), onClick: () => importInstance(item) },
+              { class: item.imported ? 'btn' : 'btn btn--primary', disabled: !item.supported, onClick: () => importInstance(item) },
               icon('download'),
               item.imported ? t('modals.reimporter') : t('modals.importer'),
             ),

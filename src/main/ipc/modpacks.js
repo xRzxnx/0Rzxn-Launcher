@@ -10,8 +10,9 @@ const modrinth = require('../core/modrinth');
 const { text } = require('./handle');
 
 function register({ handle, getWindow, services, dirs, instances, runTask, backups, trash, notRunning }) {
-  const installFromBuffer = (label, buffer, source, kind) =>
-    runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }), { kind, params: source });
+  // `params` : de quoi refaire le libellé dans la page Activité, dans la langue du moment.
+  const installFromBuffer = (label, buffer, source, kind, params = source) =>
+    runTask(label, (onProgress) => modpacks.installPack({ instances, buffer, defaults: services.settings.defaults(), source, onProgress }), { kind, params });
 
   handle('modpacks:install', async (projectId, versionId, meta) => {
     const id = text(projectId);
@@ -33,7 +34,8 @@ function register({ handle, getWindow, services, dirs, instances, runTask, backu
     });
     if (result.canceled) return null;
     const buffer = await fs.promises.readFile(result.filePaths[0]);
-    return installFromBuffer(t('ipc.import_de', { filePaths: path.basename(result.filePaths[0]) }), buffer, null, 'modpack-import');
+    const file = path.basename(result.filePaths[0]);
+    return installFromBuffer(t('ipc.import_de', { filePaths: file }), buffer, null, 'modpack-import', { file });
   });
   handle('modpacks:checkUpdate', (id) => modpacks.checkUpdate(instances.get(text(id))));
   handle('modpacks:update', async (id, versionId, options) => {
@@ -46,7 +48,7 @@ function register({ handle, getWindow, services, dirs, instances, runTask, backu
     const { buffer } = await modpacks.downloadPack(dirs, text(versionId));
     return runTask(t('ipc.mise_jour_de', { name: instance.name }), (onProgress) =>
       modpacks.updatePack({ instances, instanceId: instance.id, buffer, source: { versionId: text(versionId) }, trash, onProgress }),
-    { kind: 'modpack-update', instanceId: instance.id, params: { versionId: text(versionId) } });
+    { kind: 'modpack-update', instanceId: instance.id, params: { versionId: text(versionId), name: instance.name } });
   });
 
   handle('instances:export', async (id, options) => {

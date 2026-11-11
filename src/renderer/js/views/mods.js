@@ -213,7 +213,7 @@ function discoverView(instance, running) {
             'button',
             {
               class: 'btn btn--primary',
-              disabled: running || state.mods.busy[hit.id] || Boolean(state.task),
+              disabled: running || state.mods.busy[hit.id],
               onClick: (e) => {
                 e.stopPropagation();
                 install(hit);
@@ -252,7 +252,7 @@ function discoverView(instance, running) {
         { id: 'mods-sort', class: 'select', style: 'width:220px;height:44px', onChange: (e) => setModsView({ sort: e.target.value }) },
         SORTS().map(([value, label]) => h('option', { value, selected: state.mods.sort === value }, label)),
       ),
-      modpacks && h('button', { class: 'btn btn--lg', disabled: Boolean(state.task), onClick: importModpack }, icon('upload'), t('mods.importer_un_mrpack')),
+      modpacks && h('button', { class: 'btn btn--lg', onClick: importModpack }, icon('upload'), t('mods.importer_un_mrpack')),
     ),
     h('p', { class: 'page__meta', style: 'margin:12px 0 0' }, search.loading && !search.hits.length ? t('common.recherche') : t('mods.resultats_modrinth', { total: compactNum(search.total) })),
     h(
@@ -316,7 +316,7 @@ function detailPanel(instance, running) {
       'button',
       {
         class: 'btn btn--primary btn--lg',
-        disabled: running || !versions?.length || state.mods.busy[hit.id] || Boolean(state.task),
+        disabled: running || !versions?.length || state.mods.busy[hit.id],
         onClick: () => {
           const versionId = document.getElementById(selectId)?.value ?? null;
           if (modpacks) installModpack(hit, versionId);

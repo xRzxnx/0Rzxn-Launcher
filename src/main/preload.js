@@ -128,7 +128,13 @@ contextBridge.exposeInMainWorld('launcher', {
   storage: { usage: invoke('storage:usage'), plan: invoke('storage:plan'), clean: invoke('storage:clean') },
   update: { state: invoke('update:state'), check: invoke('update:check'), install: invoke('update:install'), onStatus: listen('update:status') },
   // Tâches longues (page Activité, phase 5).
-  tasks: { list: invoke('tasks:list'), onChanged: listen('tasks:changed') },
+  tasks: {
+    list: invoke('tasks:list'),
+    history: invoke('tasks:history'),
+    cancel: invoke('tasks:cancel'),
+    clearHistory: invoke('tasks:clearHistory'),
+    onChanged: listen('tasks:changed'),
+  },
   launch: {
     start: invoke('launch:start'),
     stop: invoke('launch:stop'),
