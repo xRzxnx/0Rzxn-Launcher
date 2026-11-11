@@ -30,7 +30,9 @@ test('contrat : les canaux enregistrés sont exactement ceux exposés par preloa
   assert.equal(new Set(exposed).size, exposed.length, 'canal exposé deux fois dans preload.js');
   assert.deepEqual(registered, exposed);
   // 103 + tasks:list (gestionnaire de tâches, phase 3) + tasks:history, tasks:cancel, tasks:clearHistory (page Activité, phase 5)
-  assert.equal(registered.length, 107);
+  // + java:probe (Java personnalisé 32 bits, phase 6)
+  // + optimizations:list, optimizations:revert (historique des optimisations, phase 6)
+  assert.equal(registered.length, 110);
 });
 
 test('contrat : protocoles fond: et skin:', (t) => {
@@ -43,7 +45,8 @@ test('contrat : les événements envoyés sont ceux écoutés par preload.js', (
   const sent = new Set(mainSources().flatMap((file) => names(fs.readFileSync(file, 'utf8'), /\bsend\(\s*'([\w:]+)'/g)));
   assert.deepEqual([...sent].sort(), listened);
   // « tasks:changed » ajouté par le gestionnaire de tâches (phase 3), pour la page Activité.
-  assert.deepEqual(listened, ['app:launchRequest', 'launch:logs', 'launch:progress', 'launch:reset', 'launch:status', 'task:progress', 'tasks:changed', 'update:status']);
+  // « launch:metrics » : mémoire et processeur du jeu (phase 6).
+  assert.deepEqual(listened, ['app:launchRequest', 'launch:logs', 'launch:metrics', 'launch:progress', 'launch:reset', 'launch:status', 'task:progress', 'tasks:changed', 'update:status']);
 });
 
 test('contrat : le fichier de types suit preload.js (canaux et événements)', () => {

@@ -1,7 +1,8 @@
 // Performances : sections des paramètres (instance, global, launcher) et fenêtre « Pack Performances ».
 import { num, t } from '../i18n.js';
 import { formatGo, h, icon } from '../dom.js';
-import { chosenPackMods, installPack, loadGpu, openPack, perfPreview, setGpu, togglePackMod, watchMetrics } from '../perf-actions.js';
+import { askRevertOptimization, chosenPackMods, installPack, instanceOptimizations, loadGpu, openPack, perfPreview, revertOptimization, setGpu, togglePackMod, watchMetrics } from '../perf-actions.js';
+import { formatWhen } from '../task-labels.js';
 import { setLauncherPref } from '../launcher-actions.js';
 import { state, update } from '../state.js';
 import { close, dialog } from './modals.js';
@@ -124,6 +125,78 @@ function packCard(instance, preview) {
   );
 }
 
+const PRESET_NAMES = () => ({ auto: t('common.automatique'), g1: t('performance.g1_regle'), zgc: t('performance.zgc_generationnel'), none: t('performance.java_par_defaut') });
+const PRIORITY_NAMES = () => ({ normal: t('performance.normale'), above: t('performance.au_dessus_de_la_normale') });
+
+/** Une ligne par réglage changé : « Mémoire : 6 Go → 9 Go ». */
+function changeText(change) {
+  if (change.key === 'ram') return t('performance.opt_memoire', { from: formatGo(change.from), to: formatGo(change.to) });
+  if (change.key === 'jvmPreset') return t('performance.opt_prereglage', { from: PRESET_NAMES()[change.from] ?? change.from, to: PRESET_NAMES()[change.to] ?? change.to });
+  if (change.key === 'priority') return t('performance.opt_priorite', { from: PRIORITY_NAMES()[change.from] ?? change.from, to: PRIORITY_NAMES()[change.to] ?? change.to });
+  return t('performance.opt_arguments');
+}
+
+/** Titre d'une optimisation de l'historique. */
+export function optimizationTitle(o) {
+  if (o.kind === 'perf-pack') return o.summary?.converted ? t('performance.opt_pack_fabric') : t('performance.opt_pack');
+  if (o.kind === 'profile-mods') return t('performance.opt_profil');
+  return (o.summary?.changes ?? []).map(changeText).join(' · ') || t('performance.opt_reglages');
+}
+
+const OPT_ICONS = { 'perf-pack': 'bolt', 'profile-mods': 'mods', settings: 'settings' };
+
+/** Historique des optimisations de l'instance, avec « Revenir avant ». */
+function optimizationsSection(instance) {
+  const list = instanceOptimizations(instance.id);
+  const busy = state.run?.instanceId === instance.id;
+  return h(
+    'section',
+    { class: 'settings__section', 'aria-labelledby': 'opt-title' },
+    h('div', { class: 'settings__title-row' }, h('h2', { class: 'settings__title', id: 'opt-title' }, t('performance.historique_optimisations')), h('span', { class: 'hint' }, t('performance.dix_gardees'))),
+    Array.isArray(list) && list.length > 0
+      ? h(
+          'div',
+          { class: 'opt-list' },
+          list.map((o, i) =>
+            h(
+              'div',
+              { class: 'opt-row' },
+              h('span', { class: 'opt-row__icon' }, icon(OPT_ICONS[o.kind] ?? 'settings', 15)),
+              h(
+                'span',
+                { class: 'opt-row__body' },
+                h('b', null, optimizationTitle(o)),
+                h('small', null, [o.added.length > 0 && t('performance.mods_ajoutes', { count: o.added.length }), formatWhen(o.createdAt)].filter(Boolean).join(' · ')),
+              ),
+              h('button', { class: 'btn btn--sm btn--ghost', disabled: busy, onClick: () => askRevertOptimization(instance, o, list.slice(0, i)) }, icon('restore', 15), t('performance.revenir_avant')),
+            ),
+          ),
+        )
+      : h('p', { class: 'hint' }, Array.isArray(list) ? t('performance.aucune_optimisation') : t('common.chargement')),
+    h('p', { class: 'hint' }, t('performance.copie_avant_changement')),
+  );
+}
+
+/** Confirmation du retour en arrière : ce qui sera remis, annulé et mis à la corbeille. */
+export function revertOptimizationDialog(modal) {
+  const o = modal.optimization;
+  const added = [o, ...modal.newer].reduce((n, x) => n + x.added.length, 0);
+  return dialog({
+    title: t('performance.revenir_avant_titre', { title: optimizationTitle(o) }),
+    labelId: 'revert-opt-title',
+    size: 'dialog--small',
+    body: h(
+      'ul',
+      { class: 'opt-consequences' },
+      h('li', null, t('performance.reglages_remis', { when: formatWhen(o.createdAt) })),
+      modal.newer.length > 0 && h('li', null, t('performance.plus_recents_annules', { count: modal.newer.length })),
+      added > 0 && h('li', null, t('performance.mods_corbeille', { count: added })),
+      h('li', null, t('performance.mondes_intacts')),
+    ),
+    foot: [h('button', { class: 'btn btn--lg', onClick: close }, t('common.annuler')), h('button', { class: 'btn btn--primary btn--lg', onClick: () => revertOptimization(modal) }, t('performance.revenir_avant_ce_changement'))],
+  });
+}
+
 /** Sections « Performances » des paramètres d'une instance (ou des réglages globaux, sans `instance`). */
 export function performanceSections(ctx, instance) {
   const preview = perfPreview(instance?.id ?? null, ctx.settings);
@@ -132,6 +205,7 @@ export function performanceSections(ctx, instance) {
     ram: instance ? ramAdviceSection(ctx, preview) : null,
     priority: prioritySection(ctx),
     pack: instance ? packCard(instance, preview) : null,
+    optimizations: instance ? optimizationsSection(instance) : null,
   };
 }
 

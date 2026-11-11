@@ -3,10 +3,12 @@
 // Diagnostic des mods avant le lancement : lit les métadonnées locales des jars (sans réseau)
 // et repère les dépendances absentes, les conflits déclarés et les doublons.
 const { currentLanguage, t } = require('../i18n');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
 const path = require('node:path');
 const zip = require('./zip');
+const hashCache = require('./hash-cache');
 
 const DISABLED = '.disabled';
 const IGNORED = new Set(['java', 'fabricloader', 'fabric-loader', 'quilt_loader', 'quilt-loader', 'forge', 'neoforge', 'minecraft']);
@@ -295,13 +297,24 @@ const resultCache = new Map(); // dossier des mods → { key, problems, count }
 async function readJar(file, stat, loader) {
   const hit = fileCache.get(file);
   if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size && hit.loader === loader) return hit.info;
+  // Déjà lu lors d'une ouverture précédente du launcher, pour ce loader (launcher.db).
+  const part = `check:${loader}`;
+  const kept = hashCache.recall(file, stat, part);
+  if (kept) {
+    fileCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, loader, info: kept.value });
+    return kept.value;
+  }
   let info;
+  let sha1 = null;
   try {
-    info = parseJar(await fsp.readFile(file), loader);
+    const buffer = await fsp.readFile(file);
+    sha1 = crypto.createHash('sha1').update(buffer).digest('hex');
+    info = parseJar(buffer, loader);
   } catch {
     info = empty(); // archive illisible : aucun avis
   }
   fileCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, loader, info });
+  if (sha1) hashCache.remember(file, stat, sha1, part, info);
   return info;
 }
 

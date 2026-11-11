@@ -121,3 +121,43 @@ test('raccourci bureau : version installée, remplacement d’un raccourci exist
   });
   assert.throws(() => createShortcut(instance), { message: tr('ipc.windows_pas_pu_creer_le') });
 });
+
+test('mesures du jeu (Windows) : lignes de PowerShell lues, identifiant de processus contrôlé', async () => {
+  const { parseSample, watchProcess, peakMemory, watchScript } = require('../src/main/platform/windows/process-metrics');
+  assert.deepEqual(parseSample('5583457280 6576193536 123456\r'), { memory: 5583457280, peak: 6576193536, cpuMs: 123456 });
+  assert.equal(parseSample('Get-Process : impossible de trouver un processus'), null);
+  assert.equal(parseSample('1 2'), null);
+  assert.match(watchScript('42', 2000), /Get-Process -Id 42 .*Start-Sleep -Milliseconds 2000/);
+
+  const { EventEmitter } = require('node:events');
+  const spawned = [];
+  const spawnFn = (exe, args) => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.exitCode = null;
+    child.killed = false;
+    child.kill = () => { child.killed = true; };
+    spawned.push({ exe, args, child });
+    return child;
+  };
+  const samples = [];
+  const watch = watchProcess(42, { intervalMs: 2000, onSample: (s) => samples.push(s), spawnFn });
+  assert.equal(spawned[0].exe, 'powershell.exe');
+  spawned[0].child.stdout.emit('data', '100 200 30');
+  spawned[0].child.stdout.emit('data', '0\r\n110 210 40');
+  assert.deepEqual(samples, [{ memory: 100, peak: 200, cpuMs: 300 }]);
+  spawned[0].child.stdout.emit('data', '0\n');
+  assert.equal(samples.length, 2);
+  watch.stop();
+  assert.equal(spawned[0].child.killed, true);
+
+  // Jamais de commande avec un identifiant douteux.
+  watchProcess('42; Remove-Item x', { onSample() {}, spawnFn }).stop();
+  assert.equal(await peakMemory(-1, { spawnFn }), null);
+  assert.equal(spawned.length, 1);
+
+  const peak = peakMemory(42, { spawnFn });
+  spawned[1].child.stdout.emit('data', '6576193536\r\n');
+  spawned[1].child.emit('close');
+  assert.equal(await peak, 6576193536);
+});

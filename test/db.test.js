@@ -26,8 +26,10 @@ function peek(file, sql) {
 }
 const userVersion = (file) => peek(file, 'PRAGMA user_version')[0].user_version;
 const tables = (file) => peek(file, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").map((r) => r.name);
+const N = MIGRATIONS.length; // version de la base de ce launcher
+const TABLES = ['file_hashes', 'game_sessions', 'optimizations', 'tasks'];
 
-test('base neuve : schéma v1, mode WAL, pas de copie', (t) => {
+test('base neuve : dernier schéma, mode WAL, pas de copie', (t) => {
   const file = dbFile(t);
   const db = openDatabase({ file });
   assert.equal(db.available, true);
@@ -35,8 +37,8 @@ test('base neuve : schéma v1, mode WAL, pas de copie', (t) => {
   assert.equal(db.problem, null);
   db.close();
   db.close(); // deux fois : sans effet
-  assert.equal(userVersion(file), 1);
-  assert.deepEqual(tables(file), ['game_sessions', 'tasks']);
+  assert.equal(userVersion(file), N);
+  assert.deepEqual(tables(file), TABLES);
   assert.equal(peek(file, 'PRAGMA journal_mode')[0].journal_mode, 'wal');
   assert.deepEqual(fs.readdirSync(path.dirname(file)).filter((f) => f.includes('.avant-')), []);
 });
@@ -47,23 +49,23 @@ test('migration : copie de la base avant, données gardées, deux copies au plus
   first.recordTask({ id: 't1', kind: 'backup', state: 'done', createdAt: Date.now() });
   first.close();
 
-  const v2 = [...MIGRATIONS, 'CREATE TABLE extra2 (a TEXT)'];
-  const second = openDatabase({ file, migrations: v2 });
-  assert.equal(second.version, 2);
+  const next = [...MIGRATIONS, 'CREATE TABLE extra1 (a TEXT)'];
+  const second = openDatabase({ file, migrations: next });
+  assert.equal(second.version, N + 1);
   assert.equal(second.recentTasks().length, 1);
   second.close();
-  const copy = `${file}.avant-v2`;
+  const copy = `${file}.avant-v${N + 1}`;
   assert.ok(fs.existsSync(copy));
-  assert.equal(userVersion(copy), 1);
+  assert.equal(userVersion(copy), N);
   assert.equal(peek(copy, 'SELECT id FROM tasks')[0].id, 't1');
 
-  for (const n of [3, 4]) {
-    const migrations = [...v2, ...Array.from({ length: n - 2 }, (_, i) => `CREATE TABLE extra${i + 3} (a TEXT)`)];
+  for (const n of [2, 3]) {
+    const migrations = [...next, ...Array.from({ length: n - 1 }, (_, i) => `CREATE TABLE extra${i + 2} (a TEXT)`)];
     openDatabase({ file, migrations }).close();
   }
   const copies = fs.readdirSync(path.dirname(file)).filter((f) => f.includes('.avant-v')).sort();
-  assert.deepEqual(copies, ['launcher.db.avant-v3', 'launcher.db.avant-v4']);
-  assert.equal(userVersion(file), 4);
+  assert.deepEqual(copies, [`launcher.db.avant-v${N + 2}`, `launcher.db.avant-v${N + 3}`]);
+  assert.equal(userVersion(file), N + 3);
 });
 
 test('migration en échec : rien n’est changé, le launcher continue sans base', (t) => {
@@ -77,8 +79,8 @@ test('migration en échec : rien n’est changé, le launcher continue sans base
   assert.equal(broken.recordTask({ id: 't2', kind: 'x', state: 'done' }), null);
   assert.deepEqual(broken.recentTasks(), []);
   broken.close();
-  assert.equal(userVersion(file), 1);
-  assert.deepEqual(tables(file), ['game_sessions', 'tasks']);
+  assert.equal(userVersion(file), N);
+  assert.deepEqual(tables(file), TABLES);
   assert.equal(peek(file, 'SELECT count(*) AS n FROM tasks')[0].n, 1);
 });
 
@@ -88,11 +90,11 @@ test('base illisible : mise de côté, une base neuve la remplace', (t) => {
   fs.writeFileSync(file, garbage);
   const db = openDatabase({ file, now: () => new Date(2026, 10, 9, 21, 5, 7).getTime() });
   assert.equal(db.available, true);
-  assert.equal(db.version, 1);
+  assert.equal(db.version, N);
   db.close();
   const aside = `${file}.abimee-2026-11-09_21-05-07`;
   assert.equal(fs.readFileSync(aside, 'utf8'), garbage);
-  assert.equal(userVersion(file), 1);
+  assert.equal(userVersion(file), N);
 });
 
 test('base d’une version plus récente du launcher : laissée telle quelle', (t) => {
@@ -104,7 +106,7 @@ test('base d’une version plus récente du launcher : laissée telle quelle', (
   assert.equal(db.problem, 'newer');
   assert.equal(db.startSession({ instanceId: 'survie' }), null);
   db.close();
-  assert.equal(userVersion(file), 2);
+  assert.equal(userVersion(file), N + 1);
   assert.deepEqual(fs.readFileSync(file), before);
 });
 
@@ -164,8 +166,8 @@ test('sessions de jeu : début, jeu prêt, fin', (t) => {
   assert.deepEqual(
     sessions.map((s) => ({ ...s })),
     [
-      { id: other, instance_id: 'survie', version: null, loader: null, started_at: 80_000, ready_at: null, ended_at: 81_000, outcome: 'cancelled', exit_code: null, prepare_ms: null },
-      { id, instance_id: 'survie', version: '1.21.1', loader: 'fabric', started_at: 10_000, ready_at: 14_500, ended_at: 70_000, outcome: 'crashed', exit_code: 1, prepare_ms: 4500 },
+      { id: other, instance_id: 'survie', version: null, loader: null, started_at: 80_000, ready_at: null, ended_at: 81_000, outcome: 'cancelled', exit_code: null, prepare_ms: null, menu_ms: null, peak_memory: null },
+      { id, instance_id: 'survie', version: '1.21.1', loader: 'fabric', started_at: 10_000, ready_at: 14_500, ended_at: 70_000, outcome: 'crashed', exit_code: 1, prepare_ms: 4500, menu_ms: null, peak_memory: null },
     ],
   );
   db.close();
@@ -183,5 +185,51 @@ test('tâches : progression finale et travail de fond rangés dans params sans c
   assert.deepEqual([c.params, c.progress, c.hidden], [null, null, false]);
   db.clearTasks();
   assert.deepEqual(db.recentTasks().map((r) => r.id), ['c']); // une tâche pas finie n'est pas effacée
+  db.close();
+});
+
+test('migration 2 depuis une base de la 0.5 : données gardées, colonnes et tables ajoutées', (t) => {
+  const file = dbFile(t);
+  const old = openDatabase({ file, migrations: MIGRATIONS.slice(0, 1) });
+  const id = old.startSession({ instanceId: 'survie', startedAt: 1000 });
+  old.sessionReady(id, 2500);
+  old.close();
+  const db = openDatabase({ file });
+  assert.equal(db.version, N);
+  assert.ok(fs.existsSync(`${file}.avant-v${N}`));
+  db.sessionMenu(id, 12_300);
+  db.sessionPeak(id, 5_000_000_000);
+  db.sessionPeak(id, 4_000_000_000); // plus bas : le pic reste
+  assert.deepEqual(db.lastLaunch('survie'), { startedAt: 1000, prepareMs: 1500, menuMs: 9800, peakMemory: 5_000_000_000 });
+  db.sessionMenu(id, 99_000); // déjà noté : inchangé
+  assert.equal(db.lastLaunch('survie').menuMs, 9800);
+  assert.equal(db.lastLaunch('creatif'), null);
+  db.close();
+});
+
+test('empreintes des fichiers : reprises tant que la taille et la date ne changent pas', (t) => {
+  const file = dbFile(t);
+  const db = openDatabase({ file });
+  assert.equal(db.fileHash('C:/mods/a.jar', 10, 5.5), null);
+  db.saveFileHash('C:/mods/a.jar', { size: 10, mtimeMs: 5.5, sha1: 'abc', meta: { name: 'A', modId: 'a' } });
+  assert.deepEqual(db.fileHash('C:/mods/a.jar', 10, 5.5), { sha1: 'abc', meta: { name: 'A', modId: 'a' } });
+  assert.equal(db.fileHash('C:/mods/a.jar', 11, 5.5), null);
+  assert.equal(db.fileHash('C:/mods/a.jar', 10, 6), null);
+  db.close();
+});
+
+test('optimisations : notées, listées de la plus récente à la plus ancienne, retirées', (t) => {
+  const file = dbFile(t);
+  const db = openDatabase({ file });
+  const a = db.addOptimization({ instanceId: 'survie', kind: 'ram', summary: { from: 6, to: 9 }, snapshot: 'dir-a', createdAt: 1 });
+  const b = db.addOptimization({ instanceId: 'survie', kind: 'perf-pack', snapshot: 'dir-b', createdAt: 2 });
+  db.setOptimizationAdded(b, ['sodium.jar']);
+  db.addOptimization({ instanceId: 'creatif', kind: 'ram', snapshot: 'dir-c', createdAt: 3 });
+  assert.deepEqual(db.optimizations('survie').map((o) => [o.id, o.kind, o.summary, o.snapshot, o.added]), [
+    [b, 'perf-pack', null, 'dir-b', ['sodium.jar']],
+    [a, 'ram', { from: 6, to: 9 }, 'dir-a', []],
+  ]);
+  db.removeOptimizations([a, b]);
+  assert.deepEqual(db.optimizations('survie'), []);
   db.close();
 });

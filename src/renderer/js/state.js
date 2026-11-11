@@ -38,6 +38,7 @@ export const state = {
     selected: null,
   },
   versionDetails: {}, // id → { java, ... } | { loading } | { error }
+  javaProbes: {}, // chemin d'un Java personnalisé → { major, bits } | { loading } | null (introuvable)
   loaders: {}, // version de Minecraft → { fabric: { versions, recommended }, … } | { loading } | { error }
   console: { filter: 'all', autoscroll: true, tab: 'logs' }, // tab : logs | crashes
   sidebar: { query: '', collapsed: [] }, // recherche et groupes repliés de la barre des instances
@@ -72,6 +73,7 @@ export const state = {
     filter: '',
     busy: {}, // « instance:dossier » → 'backup' | 'restore'
   },
+  optimizations: {}, // instance → historique des optimisations (du plus récent au plus ancien) | { loading }
   perf: {
     guides: {}, // « instance|préréglage » → conseil de mémoire | { loading } | { error }
     previews: {}, // « instance|préréglage|ram|arguments » → aperçu des arguments Java | { loading } | { error }
@@ -81,6 +83,7 @@ export const state = {
   },
   logs: [],
   run: null, // { instanceId, phase: 'preparing' | 'running', step, done, total, prepareOnly }
+  gameMetrics: null, // mémoire et processeur du jeu en cours : { instanceId, memory, peak, cpu, allocated } (octets, % du PC)
   tasks: [], // tâches en cours et en attente (« tasks:changed »), dans l'ordre où elles passeront
   activity: {
     history: null, // 50 dernières tâches finies (launcher.db), null avant le premier chargement

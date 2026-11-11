@@ -2179,3 +2179,27 @@ button.spec-tile:hover { background: var(--panel-3); }
 .stepper__btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
 .stepper__btn:disabled { opacity: 0.4; }
 .stepper__value { min-width: 44px; text-align: center; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Accueil pendant la partie : mémoire et processeur du jeu, temps de lancement (phase 6) */
+.live-card { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 22px; padding: 16px 18px; border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--line); }
+.live-card__cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.live-card__label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.live-card__value { font-size: 26px; font-weight: 700; line-height: 30px; font-variant-numeric: tabular-nums; }
+.live-card__value small { margin-left: 6px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.live-card__meter { position: relative; display: block; height: 10px; margin-top: 4px; border-radius: 5px; background: rgba(10, 7, 24, 0.4); }
+.live-card__meter > i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--accent), var(--accent-3)); transition: width 0.3s linear; }
+.live-card__peak { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fde08a; }
+.live-card__note { font-size: 12.5px; line-height: 18px; color: var(--muted); }
+.stat-tiles--launch { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.log__line--mark { margin: 2px 0; padding: 2px 8px; border-radius: 6px; background: rgba(61, 220, 132, 0.14); }
+.log__line--mark .log__tag, .log__line--mark .log__msg { color: #8df0b6; }
+.notice__actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* Historique des optimisations (Paramètres › Instance, phase 6) */
+.opt-list { display: flex; flex-direction: column; gap: 6px; }
+.opt-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px 12px; border-radius: 12px; background: rgba(10, 7, 24, 0.22); border: 1px solid var(--line); }
+.opt-row__icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--accent-bg); }
+.opt-row__body { min-width: 0; }
+.opt-row__body b { display: block; font-size: 14px; line-height: 18px; overflow-wrap: anywhere; }
+.opt-row__body small { display: block; font-size: 12px; color: var(--muted); }
+.opt-consequences { margin: 0; padding-left: 18px; font-size: 14px; line-height: 22px; color: var(--text-2); }

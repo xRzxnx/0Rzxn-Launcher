@@ -1,7 +1,7 @@
 // Console : logs du launcher et du jeu, filtrables, et rapports de crash expliqués.
 // Écran Preact (ui.js) : à chaque paquet de logs, seules les nouvelles lignes sont ajoutées.
 import { num, t } from '../i18n.js';
-import { h, icon } from '../ui.js';
+import { formatMemory, h, icon } from '../ui.js';
 import { stopGame } from '../actions.js';
 import { openCrashes } from '../crash-actions.js';
 import { state, toast, update } from '../state.js';
@@ -59,6 +59,15 @@ function copyLogs() {
   );
 }
 
+/** « 5,2 Go sur 9 Go », « 18 % CPU » : mesures du jeu, quand elles sont connues. */
+function gameFacts(metrics) {
+  if (!metrics) return [];
+  return [
+    metrics.memory != null && t('console.memoire_sur', { used: formatMemory(metrics.memory), allocated: formatMemory(metrics.allocated) }),
+    metrics.cpu != null && t('console.cpu', { cpu: metrics.cpu }),
+  ].filter(Boolean);
+}
+
 export function renderConsole() {
   if (state.console.tab === 'crashes') {
     return h(
@@ -81,7 +90,10 @@ export function renderConsole() {
   const hidden = matching.length - lines.length;
 
   let pill;
-  if (run?.phase === 'running') pill = { kind: 'running', text: t('console.en_jeu', { name: instance?.name ?? '', version: instance?.version ?? '' }) };
+  if (run?.phase === 'running') {
+    const facts = gameFacts(state.gameMetrics);
+    pill = { kind: 'running', text: [t('console.en_jeu', { name: instance?.name ?? '', version: instance?.version ?? '' }), ...facts].join(' · ') };
+  }
   else if (run) pill = { kind: 'busy', text: t('console.preparation', { name: instance?.name ?? '' }) };
   else pill = { kind: 'idle', text: t('console.aucune_partie_en_cours') };
 
@@ -129,7 +141,7 @@ export function renderConsole() {
         : lines.map((l) =>
             h(
               'div',
-              { key: keyOf(l), class: `log__line log__line--${levelOf(l)}` },
+              { key: keyOf(l), class: `log__line log__line--${levelOf(l)}${l.mark ? ' log__line--mark' : ''}` },
               h('span', { class: 'log__time' }, l.time),
               h('span', { class: 'log__tag' }, `[${l.tag}]`),
               h('span', { class: 'log__msg' }, l.msg),

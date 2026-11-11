@@ -5,7 +5,7 @@ import { checkModpackUpdate, installedContent, pendingModUpdates, updateItems, u
 import { openRecap } from '../recap-actions.js';
 import { ramGuide,refreshFreeRam } from '../perf-actions.js';
 import { FILES_STEP, JAVA_STEP, LAUNCH_STEPS, LOADER_NAMES, LOADER_STEP, MEMORY_STEP, formatLastPlayed, loaderLabel, ramRange, ramVerdict, ramZones } from '../data.js';
-import { formatGo, formatPlaytime, formatShortTime, h, icon } from '../ui.js';
+import { formatGo, formatMemory, formatPlaytime, formatShortTime, h, icon } from '../ui.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceAccount, instanceStatus, runPercent, selectedInstance, state, update } from '../state.js';
 import { go, openNewInstance } from './chrome.js';
@@ -176,6 +176,74 @@ function statsTiles(instance) {
   );
 }
 
+/** « 1,4 s ». */
+const seconds = (ms) => t('home.secondes', { value: num(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
+
+/** Partie en cours : mémoire et processeur du jeu (toutes les 2 s), temps de lancement. */
+function liveCard(instance) {
+  const metrics = state.gameMetrics?.instanceId === instance.id ? state.gameMetrics : null;
+  const run = state.run;
+  // Barre à l'échelle du plus grand : Java utilise un peu plus que la mémoire réglée (pile, code, bibliothèques natives).
+  const scale = Math.max(metrics?.allocated ?? 1, metrics?.memory ?? 0, metrics?.peak ?? 0);
+  const used = metrics?.memory != null ? (metrics.memory / scale) * 100 : 0;
+  const peak = metrics?.peak != null ? (metrics.peak / scale) * 100 : null;
+  const total = run?.prepareMs != null && run?.menuMs != null ? run.prepareMs + run.menuMs : null;
+  return h(
+    'section',
+    { class: 'live-card', 'aria-label': t('home.partie_en_cours') },
+    h(
+      'div',
+      { class: 'live-card__cell' },
+      h('span', { class: 'live-card__label' }, t('home.memoire_du_jeu')),
+      h('span', { class: 'live-card__value' }, metrics?.memory != null ? formatMemory(metrics.memory) : '…', metrics && h('small', null, t('home.sur_alloues', { allocated: formatMemory(metrics.allocated) }))),
+      h(
+        'span',
+        { class: 'live-card__meter', role: 'progressbar', 'aria-valuenow': Math.round(used), 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-label': t('home.memoire_du_jeu') },
+        h('i', { style: `width:${used}%` }),
+        peak != null && h('b', { class: 'live-card__peak', style: `left:${peak}%` }),
+      ),
+      metrics?.peak != null && h('span', { class: 'live-card__note' }, t('home.pic_de_cette_partie', { peak: formatMemory(metrics.peak) })),
+    ),
+    h(
+      'div',
+      { class: 'live-card__cell' },
+      h('span', { class: 'live-card__label' }, t('home.processeur')),
+      h('span', { class: 'live-card__value' }, metrics?.cpu != null ? t('home.pourcent', { value: metrics.cpu }) : '…', h('small', null, t('home.du_pc'))),
+    ),
+    h(
+      'div',
+      { class: 'live-card__cell' },
+      h('span', { class: 'live-card__label' }, t('home.lancement')),
+      h('span', { class: 'live-card__value' }, total != null ? seconds(total) : run?.prepareMs != null ? seconds(run.prepareMs) : '…'),
+      h(
+        'span',
+        { class: 'live-card__note' },
+        run?.prepareMs != null && t('home.de_preparation', { time: seconds(run.prepareMs) }),
+        run?.menuMs != null ? [' · ', t('home.jusqu_au_menu', { time: seconds(run.menuMs) })] : run?.prepareMs != null && [' · ', t('home.menu_en_attente')],
+      ),
+    ),
+  );
+}
+
+/** Après une partie : temps du dernier lancement et mémoire utilisée au plus. */
+function lastLaunchTiles(instance) {
+  const last = instance.lastLaunch;
+  if (!last || (last.prepareMs == null && last.peakMemory == null)) return null;
+  const note = (text) => h('span', { class: 'stat-tile__foot' }, text);
+  const total = last.prepareMs != null && last.menuMs != null ? last.prepareMs + last.menuMs : last.prepareMs;
+  return h(
+    'section',
+    { class: 'stat-tiles stat-tiles--launch', 'aria-label': t('home.dernier_lancement') },
+    total != null &&
+      statTile(
+        t('home.dernier_lancement'),
+        seconds(total),
+        note(last.menuMs != null ? t('home.preparation_plus_jeu', { prepare: seconds(last.prepareMs), game: seconds(last.menuMs) }) : t('home.de_preparation', { time: seconds(last.prepareMs) })),
+      ),
+    last.peakMemory != null && statTile(t('home.memoire_derniere_partie'), formatMemory(last.peakMemory), note(t('home.au_plus_sur_alloues', { allocated: formatGo(instance.settings.ram) }))),
+  );
+}
+
 const CUBE_FACES = ['front', 'back', 'left', 'right', 'top', 'bottom'];
 const SPIN_MS = 950;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -295,6 +363,8 @@ function ramTile(instance, guide, busy) {
       onChange: () => saveSettings('instance', instance.id),
     }),
     advice,
+    // Pic de mémoire de la dernière partie (mesuré) : aide à juger le réglage.
+    instance.lastLaunch?.peakMemory != null && h('p', { class: 'ram-pc' }, t('home.derniere_partie_pic', { peak: formatMemory(instance.lastLaunch.peakMemory) })),
     guide && h('p', { class: 'ram-pc', title: guide.pc.detail }, guide.pc.summary),
   );
 }
@@ -374,7 +444,9 @@ function infoCards(instance, status, details) {
           t('home.seules_les_instances_deja_installees'),
         ),
       ),
+    status.kind === 'running' && liveCard(instance),
     instanceBlock(instance, status, details),
+    status.kind !== 'running' && lastLaunchTiles(instance),
     instance.playtime > 0 && statsTiles(instance),
     instance.modpack && modpackCard(instance, busy),
   ];

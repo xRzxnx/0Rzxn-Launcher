@@ -10,6 +10,7 @@ const { TaskManager } = require('../services/tasks');
 const { createBackups } = require('../services/backups');
 const { createContentService } = require('../services/content');
 const { createShell } = require('../services/shell');
+const { createOptimizations } = require('../services/optimizations');
 const { createHandle, launchArgument } = require('./handle');
 const { journal } = require('../core/journal');
 const { cleanTemporaryFiles } = require('../core/temp-files');
@@ -30,7 +31,8 @@ const DOMAINS = [
   require('./tasks'),
 ];
 
-function registerIpc(getWindow) {
+/** `windowControl` : { open, close } de main.js (fenêtre fermée pendant une partie, puis recréée). */
+function registerIpc(getWindow, windowControl = null) {
   const services = createServices();
   const { dirs, accounts, instances } = services;
 
@@ -45,7 +47,9 @@ function registerIpc(getWindow) {
 
   // File des tâches longues (page Activité) : deux à la fois, une par instance, rien sur une instance en cours de partie.
   const tasks = new TaskManager({ getWindow, history: services.db, inGame: (id) => launches.run?.instanceId === id });
-  const launches = new LaunchManager(services, getWindow, tasks);
+  const launches = new LaunchManager(services, getWindow, tasks, windowControl);
+  // « Masquer » ne ferme l'interface que si l'icône près de l'horloge permet de la rouvrir.
+  launches.canCloseWindow = () => Boolean(ctx.appShell?.tray.enabled);
   const runTask = (label, work, options) => tasks.runLong(label, work, options);
   const trash = (file) => shell.trashItem(file);
 
@@ -63,6 +67,7 @@ function registerIpc(getWindow) {
     trash,
     backups: createBackups({ dirs, instances, runTask, trash }),
     contents: createContentService({ instances, trash }),
+    optimizations: createOptimizations({ db: services.db, instances, trash }),
     /** Rien ne touche une instance pendant sa partie. */
     notRunning(id, action) {
       if (launches.run?.instanceId === id) throw new Error(t('ipc.impossible_de_pendant_que_instance', { action }));
@@ -74,7 +79,7 @@ function registerIpc(getWindow) {
       if (task) throw new Error(t('ipc.patiente_est_en_cours', { task }));
     },
     // Zone de notification, Discord et mises à jour : suivent la partie en cours.
-    appShell: createShell({ getWindow, services, launches, isTaskBusy: () => tasks.busy() }),
+    appShell: createShell({ getWindow, services, launches, isTaskBusy: () => tasks.busy(), openWindow: windowControl?.open }),
   };
   for (const domain of DOMAINS) domain.register(ctx);
 
@@ -100,6 +105,12 @@ function registerIpc(getWindow) {
       if (id && win && !win.isDestroyed()) win.webContents.send('app:launchRequest', id);
     },
     hideOnClose: () => ctx.appShell.hideOnClose(),
+    /** Fenêtre recréée (après sa fermeture pendant une partie). */
+    windowCreated() {
+      launches.windowCreated();
+    },
+    /** Fenêtre fermée exprès pendant une partie : le launcher ne quitte pas. */
+    keepsRunning: () => launches.windowClosed,
     beforeQuit() {
       clearTimeout(cleanup);
       ctx.appShell.beforeQuit();

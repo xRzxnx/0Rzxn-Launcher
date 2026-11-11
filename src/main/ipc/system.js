@@ -2,7 +2,9 @@
 
 // Java, performances, profils prêts à jouer, carte graphique et espace disque.
 const { t } = require('../i18n');
+const fs = require('node:fs');
 const storage = require('../core/storage');
+const { probeJavaCached } = require('../core/java');
 const { createSystemService } = require('../services/system');
 const { openDir, text } = require('./handle');
 
@@ -13,6 +15,17 @@ function register(ctx) {
   // ---------- Java ----------
   handle('java:runtimes', () => storage.runtimesWithUsage(dirs, instances.list()));
   handle('java:system', (refresh) => system.systemJavas(refresh));
+  // Java personnalisé : version et 32 ou 64 bits (résultat gardé tant que le fichier ne change pas).
+  handle('java:probe', async (file) => {
+    const exe = text(file).trim();
+    if (!exe || !fs.existsSync(exe)) return null;
+    try {
+      const { major, bits } = await probeJavaCached(exe);
+      return { major, bits };
+    } catch {
+      return null;
+    }
+  });
   handle('java:removeRuntime', (component) => {
     notBusy(t('ipc.supprimer_un_java'));
     return system.removeRuntime(component);

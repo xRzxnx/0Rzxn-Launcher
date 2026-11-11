@@ -6,6 +6,7 @@ import { listenToTasks } from './activity-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
 import { loadUpdate } from './update-actions.js';
 import { autoTitleMenu } from './title-menu-actions.js';
+import { forgetOptimizations } from './perf-actions.js';
 import { forgetWorlds } from './worlds-actions.js';
 import { askVersionChange } from './version-actions.js';
 import { activeAccount, dismissToast, forgetRamGuide, selectedInstance, state, subscribe, toast, toastError, update } from './state.js';
@@ -54,8 +55,9 @@ async function loadVersions() {
 
 export async function init() {
   let ui;
+  let launchState;
   try {
-    let info, settings, launchState;
+    let info, settings;
     [info, settings, launchState, ui] = await Promise.all([api.info(), api.settings(), api.launchState(), api.ui(), refreshAccounts(), refreshInstances(), refreshMemory(), loadLauncherPrefs(), loadUpdate()]);
     update((s) => {
       s.appVersion = info.version;
@@ -64,10 +66,13 @@ export async function init() {
       s.globalSettings = settings;
       s.run = launchState.run;
       s.logs = launchState.logs;
+      s.gameMetrics = launchState.metrics ?? null;
       if (s.instances.some((i) => i.id === ui.selectedId)) s.selectedId = ui.selectedId;
       s.sidebar.collapsed = ui.collapsedGroups ?? [];
       // Premier démarrage avec les rapports de crash : les anciens rapports ne comptent pas comme nouveaux.
       s.crashes.seenAt = ui.crashesSeenAt ?? Date.now();
+      // Fenêtre recréée pendant ou après une partie (réglage « Masquer ») : même écran qu'avant sa fermeture.
+      if (REOPEN_VIEWS.has(ui.reopenView)) s.view = ui.reopenView;
       s.ready = true;
     });
     api.refreshLooks().then(refreshAccounts, () => {}); // têtes de skin : en arrière-plan, hors connexion la dernière reste
@@ -79,12 +84,27 @@ export async function init() {
   }
   listenToLaunches();
   listenToTasks();
+  // Fin de partie arrivée pendant que la fenêtre était fermée : montrée comme si elle venait d'arriver.
+  if (launchState.ended) handleLaunchStatus({ run: state.run, ...launchState.ended });
   rememberSelection(ui.selectedId);
+  rememberView();
   api.on.launchRequest(launchFromShortcut);
   if (ui.pendingLaunch) launchFromShortcut(ui.pendingLaunch);
   if (ui.crashesSeenAt == null) api.saveUi({ crashesSeenAt: state.crashes.seenAt }).catch(() => {});
   loadVersions();
   loadCrashes();
+}
+
+const REOPEN_VIEWS = new Set(['home', 'mods', 'worlds', 'versions', 'console', 'activity', 'settings']);
+
+/** L'écran affiché est tenu à jour dans le moteur (en mémoire seulement), pour rouvrir la fenêtre au même endroit. */
+function rememberView() {
+  let last = null;
+  subscribe(() => {
+    if (state.view === last) return;
+    last = state.view;
+    api.saveUi({ view: last }).catch(() => {});
+  });
 }
 
 /** L'instance choisie est retenue pour la prochaine ouverture du launcher. */
@@ -209,6 +229,7 @@ const saveTimers = new Map();
 
 /** Les réglages sont enregistrés automatiquement, 400 ms après la dernière modification. */
 export function saveSettings(scope, instanceId) {
+  if (scope !== 'global') forgetOptimizations(instanceId); // l'historique des optimisations a pu changer
   const key = scope === 'global' ? 'global' : instanceId;
   clearTimeout(saveTimers.get(key));
   saveTimers.set(
@@ -434,40 +455,63 @@ function listenToLaunches() {
     else add(state);
   });
   api.on.progress((run) => update((s) => { s.run = run; }));
-  api.on.status(async (status) => {
-    update((s) => { s.run = status.run; });
-    const instance = state.instances.find((i) => i.id === (status.instanceId ?? status.run?.instanceId));
-    const name = instance?.name ?? "L'instance";
-
-    if (status.error) {
-      refreshAccounts().catch(() => {}); // une session Microsoft expirée est signalée dans la liste des comptes
-      toast({
-        kind: 'error',
-        title: t('actions.le_lancement_echoue'),
-        text: status.error,
-        timeout: 12000,
-        actions: [{ label: t('actions.voir_la_console'), run: () => update((s) => { s.view = 'console'; }) }],
-      });
-    }
-    if (status.prepared) toast({ kind: 'success', title: t('actions.est_prete', { name }), text: t('actions.tous_les_fichiers_ont_ete') });
-    if (status.crashed) {
-      const report = status.crash && { instanceId: status.instanceId, ...status.crash };
-      toast({
-        kind: 'error',
-        title: t('actions.le_jeu_plante'),
-        text: t(report ? 'actions.crash_report_read' : 'actions.crash_report_console', { name, code: status.code }),
-        timeout: 0,
-        actions: report
-          ? [{ label: t('actions.voir_explication'), run: () => openCrashes(report) }]
-          : [{ label: t('actions.voir_la_console'), run: () => update((s) => { s.view = 'console'; s.console.tab = 'logs'; }) }],
-      });
-    }
-    if (status.exited) {
-      loadCrashes(); // le jeu a pu laisser un rapport de crash
-    }
-    if (status.run?.phase === 'running' && instance && !instance.installed) {
-      toast({ kind: 'success', title: t('actions.est_prete', { name }), text: t('actions.minecraft_installe', { version: instance.version }) });
-    }
-    if (status.exited || status.prepared || status.run?.phase === 'running') await refreshInstances();
+  // Mesures du jeu : seuls l'accueil et la console les montrent, ailleurs rien n'est redessiné.
+  api.on.metrics((metrics) => {
+    if (state.view === 'home' || state.view === 'console') update((s) => { s.gameMetrics = metrics; });
+    else state.gameMetrics = metrics;
   });
+  api.on.status(handleLaunchStatus);
+}
+
+/** Changement d'état de la partie (launch:status), ou fin de partie remise à une fenêtre recréée. */
+async function handleLaunchStatus(status) {
+  update((s) => {
+    s.run = status.run;
+    if (!status.run) s.gameMetrics = null;
+  });
+  const instance = state.instances.find((i) => i.id === (status.instanceId ?? status.run?.instanceId));
+  const name = instance?.name ?? "L'instance";
+
+  if (status.error && status.errorCode === 'JAVA_32_BIT' && instance) {
+    // Java personnalisé 32 bits avec trop de mémoire : la solution en un clic.
+    toast({
+      kind: 'error',
+      title: t('actions.lancement_arrete_java_32'),
+      text: status.error,
+      timeout: 0,
+      actions: [
+        { label: t('actions.repasser_java_automatique'), run: () => { instance.settings.java = 'auto'; saveSettings('instance', instance.id); } },
+        { label: t('common.parametres'), run: () => update((s) => { s.view = 'settings'; s.settingsScope = 'instance'; s.selectedId = instance.id; }) },
+      ],
+    });
+  } else if (status.error) {
+    refreshAccounts().catch(() => {}); // une session Microsoft expirée est signalée dans la liste des comptes
+    toast({
+      kind: 'error',
+      title: t('actions.le_lancement_echoue'),
+      text: status.error,
+      timeout: 12000,
+      actions: [{ label: t('actions.voir_la_console'), run: () => update((s) => { s.view = 'console'; }) }],
+    });
+  }
+  if (status.prepared) toast({ kind: 'success', title: t('actions.est_prete', { name }), text: t('actions.tous_les_fichiers_ont_ete') });
+  if (status.crashed) {
+    const report = status.crash && { instanceId: status.instanceId, ...status.crash };
+    toast({
+      kind: 'error',
+      title: t('actions.le_jeu_plante'),
+      text: t(report ? 'actions.crash_report_read' : 'actions.crash_report_console', { name, code: status.code }),
+      timeout: 0,
+      actions: report
+        ? [{ label: t('actions.voir_explication'), run: () => openCrashes(report) }]
+        : [{ label: t('actions.voir_la_console'), run: () => update((s) => { s.view = 'console'; s.console.tab = 'logs'; }) }],
+    });
+  }
+  if (status.exited) {
+    loadCrashes(); // le jeu a pu laisser un rapport de crash
+  }
+  if (status.run?.phase === 'running' && instance && !instance.installed) {
+    toast({ kind: 'success', title: t('actions.est_prete', { name }), text: t('actions.minecraft_installe', { version: instance.version }) });
+  }
+  if (status.exited || status.prepared || status.run?.phase === 'running') await refreshInstances();
 }

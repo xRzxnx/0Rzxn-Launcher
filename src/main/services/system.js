@@ -19,7 +19,7 @@ const { findSystemJavas } = require('../core/java');
 
 const text = (value) => (typeof value === 'string' ? value : '');
 
-function createSystemService({ services, dirs, instances, launches, runTask, trash }) {
+function createSystemService({ services, dirs, instances, launches, runTask, trash, optimizations }) {
   // ---------- Java ----------
   let systemJavas = null;
   const runtimeDir = (component) => {
@@ -106,15 +106,20 @@ function createSystemService({ services, dirs, instances, launches, runTask, tra
       let instance = instances.get(text(id));
       const list = Array.isArray(slugs) ? slugs.map(text) : [];
       // Instance vanilla : passage en Fabric (mondes et réglages gardés), comme « Modifier › Loader ».
+      let fabricVersion = null;
       if (instance.loader === 'vanilla') {
         if (options?.convert !== true) throw new Error(t('ipc.cette_instance_est_vanilla_il'));
         const fabric = (await availableLoaders(instance.version)).fabric;
         if (!fabric?.recommended) throw new Error(t('ipc.fabric_existe_pas_pour_minecraft', { version: instance.version }));
-        instance = instances.update(instance.id, { loader: 'fabric', loaderVersion: fabric.recommended });
+        fabricVersion = fabric.recommended;
       }
+      // Historique des optimisations : copie d'avant le pack (et d'avant le passage en Fabric).
+      const noted = optimizations?.record(instance, 'perf-pack', { count: list.length, converted: Boolean(fabricVersion) }) ?? null;
+      if (fabricVersion) instance = instances.update(instance.id, { loader: 'fabric', loaderVersion: fabricVersion });
       const result = await runTask(t('ipc.pack_performances'), (onProgress) =>
         performance.installPack({ gameDir: instances.gameDir(instance.id), instance, slugs: list, trash, onProgress }),
       { kind: 'perf-pack', instanceId: instance.id, params: { slugs: list, name: instance.name } });
+      optimizations?.added(noted, result.installed.map((m) => `mods/${m.file}`));
       return { ...result, instance };
     },
 
@@ -141,9 +146,13 @@ function createSystemService({ services, dirs, instances, launches, runTask, tra
     profileInstallMods(id, profileId) {
       const instance = instances.get(text(id));
       const p = profiles.profile(text(profileId));
+      const noted = optimizations?.record(instance, 'profile-mods', { profileId: p.id }) ?? null;
       return runTask(t('ipc.mods_du_profil', { title: p.title }), (onProgress) =>
         profiles.installMods({ profileId: p.id, gameDir: instances.gameDir(instance.id), instance, trash, onProgress }),
-      { kind: 'profile-mods', instanceId: instance.id, params: { profileId: p.id, name: instance.name } });
+      { kind: 'profile-mods', instanceId: instance.id, params: { profileId: p.id, name: instance.name } }).then((result) => {
+        optimizations?.added(noted, result.installed.map((m) => `mods/${m.file}`));
+        return result;
+      });
     },
 
     metrics() {

@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { t: tr } = require('../src/main/i18n');
-const { startIpc, sessions, makeWorld, waitFor, wire, electron } = require('./helpers/ipc');
+const { startIpc, sessions, makeWorld, waitFor, wire, electron, gameMetrics } = require('./helpers/ipc');
 
 // downloads ajouté en phase 4 (limites de téléchargement).
 const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, downloads: { concurrency: 16, perHost: 8 } };
@@ -47,7 +47,7 @@ test('langue : changée sans redémarrer, les messages suivent', async (t) => {
 
 test('préférences d’interface : ui:get et ui:set filtrent ce qu’ils gardent', async (t) => {
   const ipc = startIpc(t);
-  assert.deepEqual(await ipc.invoke('ui:get'), { selectedId: null, pendingLaunch: null });
+  assert.deepEqual(await ipc.invoke('ui:get'), { selectedId: null, pendingLaunch: null, reopenView: null });
   const groups = [...Array.from({ length: 120 }, (_, i) => `g${i}`), 42, null];
   const ui = await ipc.invoke('ui:set', { selectedId: 'survie', collapsedGroups: groups, crashesSeenAt: 1234, autre: true });
   assert.deepEqual(ui, { selectedId: 'survie', collapsedGroups: groups.slice(0, 100), crashesSeenAt: 1234 });
@@ -437,4 +437,246 @@ test('limites de téléchargement : bornées, enregistrées et appliquées tout 
   assert.deepEqual((await ipc.invoke('launcher:set', { downloads: { concurrency: 'beaucoup', perHost: 4 } })).downloads, { concurrency: 64, perHost: 4 });
   assert.deepEqual((await ipc.invoke('launcher:set', { accent: 'bleu' })).downloads, { concurrency: 64, perHost: 4 });
   assert.deepEqual(net.limits(), { concurrency: 64, perHost: 4 });
+});
+
+// ---------- Phase 6 : interface fermée pendant la partie ----------
+
+test('« Masquer » ferme l’interface pendant la partie ; l’icône la rouvre ; la fin de partie la rouvre et lui est remise', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, afterLaunch: 'hide' } });
+  await ipc.invoke('ui:set', { view: 'console' }); // en mémoire seulement
+  assert.equal((await ipc.invoke('ui:get')).view, undefined); // pas dans les réglages enregistrés
+
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+  session.emit('running', { pid: 1234 });
+  assert.equal(ipc.win, null);
+  assert.equal(ipc.hooks.keepsRunning(), true);
+
+  // Logs pendant que la fenêtre est fermée : gardés dans le moteur.
+  const line = (n) => ({ time: '12:00:00', tag: 'LAUNCHER', msg: `ligne ${n}` });
+  session.emit('log', line(1));
+  t.mock.timers.tick(200);
+
+  // Clic sur l'icône : nouvelle fenêtre, sur l'écran noté, avec tous les logs par launch:state.
+  const [tray] = electron.calls.trays;
+  tray.click();
+  assert.equal(ipc.windows.length, 2);
+  assert.equal(ipc.hooks.keepsRunning(), false);
+  assert.equal((await ipc.invoke('ui:get')).reopenView, 'console');
+  assert.equal((await ipc.invoke('ui:get')).reopenView, null);
+  assert.deepEqual((await ipc.invoke('launch:state')).logs, [line(1)]);
+  t.mock.timers.tick(200);
+  assert.equal(ipc.win.messages('launch:logs').length, 0); // pas de doublon
+
+  // Fin de partie avec la fenêtre rouverte : rien de gardé pour plus tard.
+  session.emit('exit', { code: 0, crashed: false, minutes: 3 });
+  await new Promise((resolve) => setImmediate(resolve));
+  const state = await ipc.invoke('launch:state');
+  assert.equal(state.ended, undefined); // fenêtre ouverte : la fin est partie par launch:status
+  assert.deepEqual(wire(ipc.win.messages('launch:status').at(-1)), { run: null, exited: true, code: 0, crashed: false, crash: null, instanceId: instance.id });
+});
+
+test('fin de partie pendant que l’interface est fermée : fenêtre recréée, fin remise une fois par launch:state', async (t) => {
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, afterLaunch: 'hide' } });
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+  session.emit('running', { pid: 1234 });
+  assert.equal(ipc.win, null);
+  session.emit('exit', { code: 0, crashed: false, minutes: 3 });
+  await waitFor(() => ipc.win && ipc.windows.length === 2);
+  await waitFor(() => !ipc.hooks.keepsRunning());
+  const first = await ipc.invoke('launch:state');
+  assert.deepEqual(wire(first.ended), { exited: true, code: 0, crashed: false, crash: null, instanceId: instance.id });
+  assert.equal((await ipc.invoke('launch:state')).ended, undefined);
+});
+
+test('« Masquer » sans icône près de l’horloge ou sans mode léger : la fenêtre reste (réduite ou cachée)', async (t) => {
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, afterLaunch: 'hide' } });
+  await ipc.invoke('launcher:set', { tray: false });
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  sessions[0].emit('running', { pid: 1 });
+  assert.equal(ipc.win.minimized, true);
+  assert.equal(ipc.hooks.keepsRunning(), false);
+  sessions[0].emit('exit', { code: 0, crashed: false, minutes: 0 });
+  await waitFor(() => ipc.win.messages('launch:status').at(-1)?.exited);
+
+  await ipc.invoke('launcher:set', { tray: true, lightMode: false });
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  sessions[1].emit('running', { pid: 2 });
+  assert.equal(ipc.win.visible, false);
+  assert.equal(ipc.windows.length, 1);
+});
+
+// ---------- Phase 6 : mesures du jeu et temps de lancement ----------
+
+test('mesures du jeu : mémoire et processeur fenêtre ouverte, pic et menu notés avec la partie', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 1_000_000 });
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  // Fenêtre gardée ouverte : une fenêtre réduite (mode léger) ne reçoit pas les mesures.
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, afterLaunch: 'keep' } });
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+  t.mock.timers.tick(1500); // préparation
+  session.emit('running', { pid: 4242 });
+  const [watch] = gameMetrics.watches;
+  assert.equal(watch.pid, 4242);
+
+  const GB = 1024 ** 3;
+  watch.onSample({ memory: 2 * GB, peak: 2 * GB, cpuMs: 1000 });
+  t.mock.timers.tick(2000);
+  const cpus = require('node:os').cpus().length;
+  watch.onSample({ memory: 3 * GB, peak: 3.5 * GB, cpuMs: 1000 + 2000 * cpus * 0.25 }); // un quart du PC pendant 2 s
+  const metrics = ipc.win.messages('launch:metrics');
+  assert.equal(metrics.length, 2);
+  assert.deepEqual(metrics[1], { instanceId: instance.id, memory: 3 * GB, peak: 3.5 * GB, cpu: 25, allocated: instance.settings.ram * GB });
+  assert.deepEqual((await ipc.invoke('launch:state')).metrics, metrics[1]);
+
+  // Menu du jeu : ligne repérée 9,8 s après le démarrage de Java, ligne du launcher ajoutée à la console.
+  t.mock.timers.tick(7800);
+  session.emit('log', { time: '21:13:12', tag: 'Render thread/INFO', msg: 'Sound engine started' });
+  const logs = (await ipc.invoke('launch:state')).logs;
+  assert.equal(logs.at(-1).mark, true);
+  assert.equal(logs.at(-1).msg, tr('launch.menu_atteint', { game: (9.8).toLocaleString('fr', { minimumFractionDigits: 1 }), total: (11.3).toLocaleString('fr', { minimumFractionDigits: 1 }) }));
+  session.emit('log', { time: '21:13:20', tag: 'Render thread/INFO', msg: 'Sound engine started' }); // une seule fois
+  assert.equal((await ipc.invoke('launch:state')).logs.filter((l) => l.mark).length, 1);
+
+  // Fin de partie : mesures arrêtées, pic gardé avec la partie.
+  session.emit('exit', { code: 0, crashed: false, minutes: 1 });
+  await waitFor(() => ipc.win.messages('launch:status').at(-1)?.exited);
+  assert.equal(watch.stopped, true);
+
+  const [listed] = await ipc.invoke('instances:list');
+  assert.deepEqual(listed.lastLaunch, { startedAt: 1_000_000, prepareMs: 1500, menuMs: 9800, peakMemory: 3.5 * GB });
+});
+
+test('mesures du jeu, fenêtre fermée : seul le pic est relu, chaque minute, puis gardé avec la partie', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, afterLaunch: 'hide' } });
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  const [session] = sessions;
+  session.emit('running', { pid: 7 });
+  assert.equal(ipc.win, null);
+  const [first] = gameMetrics.watches;
+  assert.equal(first.stopped, true); // fenêtre fermée tout de suite : pas de mesures fines
+  gameMetrics.peaks.set(7, 5 * 1024 ** 3);
+  t.mock.timers.tick(60_000);
+  await waitFor(() => gameMetrics.peakCalls === 1);
+  assert.equal(ipc.win, null);
+  assert.equal(ipc.windows[0].messages('launch:metrics').length, 0);
+
+  // Réouverture : mesures fines de nouveau.
+  electron.calls.trays[0].click();
+  assert.equal(gameMetrics.watches.length, 2);
+  assert.equal(gameMetrics.watches[1].stopped, false);
+  session.emit('exit', { code: 0, crashed: false, minutes: 1 });
+  await waitFor(() => ipc.win.messages('launch:status').at(-1)?.exited);
+  assert.equal(gameMetrics.watches[1].stopped, true);
+  const [listed] = await ipc.invoke('instances:list');
+  assert.equal(listed.lastLaunch.peakMemory, 5 * 1024 ** 3);
+});
+
+test('lancement refusé par un Java 32 bits : le code de l’erreur arrive à l’interface', async (t) => {
+  const ipc = startIpc(t, { account: true });
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  sessions[0].emit('failed', { message: tr('launch.java_32_bits', { ram: '9 Go' }), cancelled: false, code: 'JAVA_32_BIT' });
+  assert.deepEqual(wire(ipc.win.messages('launch:status').at(-1)), { run: null, error: tr('launch.java_32_bits', { ram: '9 Go' }), cancelled: false, errorCode: 'JAVA_32_BIT', instanceId: instance.id });
+  assert.equal(await ipc.invoke('java:probe', path.join(ipc.root, 'absent.exe')), null);
+});
+
+// ---------- Phase 6 : historique des optimisations ----------
+
+test('optimisations : changements de performances notés avec une copie, regroupés, retour en arrière', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 10, 11, 21, 0, 0).getTime() });
+  const ipc = startIpc(t, { account: true });
+  const { instance, gameDir } = await newInstance(ipc);
+  const options = path.join(gameDir, 'options.txt');
+  fs.mkdirSync(gameDir, { recursive: true });
+  fs.writeFileSync(options, 'renderDistance:12\n');
+
+  // Un réglage sans rapport avec les performances : rien n'est noté.
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, width: 1600 } });
+  assert.deepEqual(await ipc.invoke('optimizations:list', instance.id), []);
+
+  // Mémoire 4 → 6 puis 6 → 9 dans la minute : un seul changement, 4 → 9.
+  let current = await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, width: 1600, ram: 6 } });
+  t.mock.timers.tick(10_000);
+  current = await ipc.invoke('instances:update', instance.id, { settings: { ...current.settings, ram: 9 } });
+  let list = await ipc.invoke('optimizations:list', instance.id);
+  assert.deepEqual(list.map((o) => [o.kind, o.summary]), [['settings', { changes: [{ key: 'ram', from: 4, to: 9 }] }]]);
+
+  // Plus tard : préréglage Java, puis un « pack » qui a ajouté un mod (noté par le service, comme le pack Performances).
+  t.mock.timers.tick(120_000);
+  fs.writeFileSync(options, 'renderDistance:8\n');
+  await ipc.invoke('instances:update', instance.id, { settings: { ...current.settings, jvmPreset: 'zgc' } });
+  t.mock.timers.tick(120_000);
+  fs.mkdirSync(path.join(gameDir, 'mods'), { recursive: true });
+  fs.writeFileSync(path.join(gameDir, 'mods', 'sodium.jar'), 'jar');
+  list = await ipc.invoke('optimizations:list', instance.id);
+  assert.equal(list.length, 2);
+
+  // Revenir avant la mémoire : tout ce qui a suivi est annulé aussi.
+  const result = await ipc.invoke('optimizations:revert', instance.id, list.at(-1).id);
+  assert.equal(result.undone, 2);
+  assert.equal(result.instance.settings.ram, 4);
+  assert.equal(result.instance.settings.jvmPreset, 'auto');
+  assert.equal(result.instance.settings.width, 1600); // réglage d'avant cette copie : gardé
+  assert.equal(fs.readFileSync(options, 'utf8'), 'renderDistance:12\n');
+  assert.deepEqual(await ipc.invoke('optimizations:list', instance.id), []);
+  assert.deepEqual(fs.readdirSync(path.join(ipc.root, 'appdata', '.0rzxn', 'instances', instance.id, '.optimisations')), []);
+  await assert.rejects(ipc.invoke('optimizations:revert', instance.id, 12345), { message: tr('ipc.optimisation_introuvable') });
+});
+
+test('optimisations : revenir au réglage de départ dans la minute efface le changement ; 10 gardées au plus', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  const ipc = startIpc(t);
+  const { instance } = await newInstance(ipc);
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, priority: 'above' } });
+  await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, priority: 'normal' } });
+  assert.deepEqual(await ipc.invoke('optimizations:list', instance.id), []);
+  for (let ram = 5; ram <= 16; ram++) {
+    t.mock.timers.tick(61_000);
+    await ipc.invoke('instances:update', instance.id, { settings: { ...instance.settings, ram } });
+  }
+  const list = await ipc.invoke('optimizations:list', instance.id);
+  assert.equal(list.length, 10);
+  assert.deepEqual(list[0].summary.changes, [{ key: 'ram', from: 15, to: 16 }]);
+});
+
+test('optimisations : fichiers ajoutés mis à la corbeille au retour en arrière, refusé pendant une partie', async (t) => {
+  const ipc = startIpc(t, { account: true });
+  const { instance, gameDir } = await newInstance(ipc);
+  const { createOptimizations } = require('../src/main/services/optimizations');
+  const { openDatabase } = require('../src/main/services/db');
+  const { InstanceStore } = require('../src/main/core/instances');
+  const { gameDirs } = require('../src/main/core/store');
+  // Un second service sur les mêmes instances, appelé comme le pack Performances le fait (record, added, revert).
+  const trashed = [];
+  const db = openDatabase({ file: path.join(ipc.root, 'config', 'autre.db') });
+  const store = new InstanceStore(gameDirs(path.join(ipc.root, 'appdata', '.0rzxn')));
+  const service = createOptimizations({ db, instances: store, trash: async (file) => { trashed.push(path.basename(file)); fs.rmSync(file); } });
+  const id = service.record(store.get(instance.id), 'perf-pack', { count: 1 });
+  fs.mkdirSync(path.join(gameDir, 'mods'), { recursive: true });
+  fs.writeFileSync(path.join(gameDir, 'mods', 'sodium.jar'), 'jar');
+  fs.writeFileSync(path.join(gameDir, 'mods', 'garde.jar'), 'jar');
+  service.added(id, ['mods/sodium.jar', '../../dehors.jar']);
+  const result = await service.revert(instance.id, id);
+  assert.equal(result.trashed, 1);
+  assert.deepEqual(trashed, ['sodium.jar']);
+  assert.ok(fs.existsSync(path.join(gameDir, 'mods', 'garde.jar')));
+  db.close(); // avant l'effacement du dossier temporaire (Windows)
+
+  // Pendant une partie : refusé (canal).
+  await ipc.invoke('launch:start', instance.id, { skipBackup: true });
+  await assert.rejects(ipc.invoke('optimizations:revert', instance.id, 1), { message: tr('ipc.impossible_de_pendant_que_instance', { action: tr('ipc.revenir_avant_optimisation') }) });
 });

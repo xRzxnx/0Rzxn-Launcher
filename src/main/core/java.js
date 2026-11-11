@@ -76,7 +76,18 @@ async function ensureRuntime(dirs, component, { signal, onProgress } = {}) {
   return exe;
 }
 
-/** Lance `java -version` et renvoie la version majeure (8, 17, 21, 25…). */
+/**
+ * 64 ou 32 bits d'après `java -version` : les Java 64 bits l'écrivent (« 64-Bit Server VM », « amd64-64-Bit »), les
+ * 32 bits non (« Client VM », « Server VM » seuls). null si la sortie ne permet pas de le dire.
+ * @param {string} output
+ */
+function javaBits(output) {
+  if (/64-Bit/i.test(output)) return 64;
+  if (/(Client|Server) VM/.test(output)) return 32;
+  return null;
+}
+
+/** Lance `java -version` et renvoie la version majeure (8, 17, 21, 25…) et 32 ou 64 bits. */
 function probeJava(exe) {
   return new Promise((resolve, reject) => {
     let output = '';
@@ -99,10 +110,32 @@ function probeJava(exe) {
       const match = output.match(/version "(\d+)(?:\.(\d+))?/);
       if (!match) return reject(new Error(t('java.version_de_java_illisible', { exe })));
       const first = Number(match[1]);
-      resolve({ major: first === 1 ? Number(match[2]) : first, description: output.split(/\r?\n/)[0].trim() });
+      resolve({ major: first === 1 ? Number(match[2]) : first, description: output.split(/\r?\n/)[0].trim(), bits: javaBits(output) });
     });
   });
 }
+
+// Résultats de `java -version` gardés par chemin, tant que le fichier ne change pas (taille, date).
+const probed = new Map();
+
+/** Comme probeJava, sans relancer Java si ce fichier a déjà été vérifié. @param {string} exe */
+async function probeJavaCached(exe) {
+  let stat = null;
+  try {
+    stat = fs.statSync(exe);
+  } catch {
+    // fichier absent : probeJava donnera le bon message
+  }
+  const key = stat ? `${stat.size}:${stat.mtimeMs}` : null;
+  const hit = probed.get(exe);
+  if (key && hit?.key === key) return hit.info;
+  const info = await probeJava(exe);
+  if (key) probed.set(exe, { key, info });
+  return info;
+}
+
+/** Mémoire au plus d'un Java 32 bits, en Go (l'espace d'adresses limite le tas à environ 1,5 Go sous Windows). */
+const JAVA_32_MAX_GB = 1.5;
 
 /** « 1.8.0_51 » → 8, « 21.0.7 » → 21. */
 function majorOf(version) {
@@ -175,17 +208,17 @@ async function findSystemJavas(dirs) {
     seen.add(key);
     paths.push(file);
   }
-  const probed = await Promise.all(paths.map((file) => probeJava(file).then((info) => ({ path: file, ...info }), () => null)));
+  const found = await Promise.all(paths.map((file) => probeJavaCached(file).then((info) => ({ path: file, ...info }), () => null)));
   const versions = new Set();
-  return probed.filter((java) => {
+  return found.filter((java) => {
     if (!java || versions.has(java.description)) return false;
     versions.add(java.description);
     return true;
   }).map((java) => {
     const dir = path.dirname(java.path);
     const folder = path.basename(dir).toLowerCase() === 'bin' ? path.basename(path.dirname(dir)) : path.basename(dir);
-    return { path: java.path, major: java.major, description: java.description, name: !folder || /^java\d*path/i.test(folder) ? `Java ${java.major}` : folder };
+    return { path: java.path, major: java.major, bits: java.bits, description: java.description, name: !folder || /^java\d*path/i.test(folder) ? `Java ${java.major}` : folder };
   });
 }
 
-module.exports = { ensureRuntime, probeJava, runtimeExecutable, listRuntimes, findSystemJavas, majorOf };
+module.exports = { ensureRuntime, probeJava, probeJavaCached, javaBits, JAVA_32_MAX_GB, runtimeExecutable, listRuntimes, findSystemJavas, majorOf };

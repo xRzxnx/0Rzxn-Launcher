@@ -26,7 +26,8 @@ function updateLog(file) {
 }
 
 /** `isTaskBusy()` : une tâche longue est en cours (services/tasks.js). */
-function createShell({ getWindow, services, launches, isTaskBusy }) {
+/** `openWindow()` : ouvre la fenêtre, ou la recrée si elle a été fermée pendant une partie. */
+function createShell({ getWindow, services, launches, isTaskBusy, openWindow = null }) {
   const { accounts, instances } = services;
   let quitting = false;
   let balloonShown = false;
@@ -53,7 +54,7 @@ function createShell({ getWindow, services, launches, isTaskBusy }) {
     quitting = true;
     app.quit();
   };
-  const tray = new LauncherTray({ getWindow, instances, launches, canPlay: () => Boolean(accounts.list().activeId), onLaunch: requestLaunch, onQuit: quit });
+  const tray = new LauncherTray({ getWindow, openWindow, instances, launches, canPlay: () => Boolean(accounts.list().activeId), onLaunch: requestLaunch, onQuit: quit });
 
   // Discord : rien n'est envoyé tant que l'option est désactivée ; le statut suit la partie en cours.
   const presence = new DiscordPresence({ clientId: discordConfig.clientId, pipe: discordConfig.pipe });

@@ -79,6 +79,45 @@ export function chosenPackMods(modal) {
   return (modal.data?.mods ?? []).filter((m) => m.state === 'available' && modal.picked[m.slug]);
 }
 
+/** Historique des optimisations d'une instance (chargé à la demande). */
+export function instanceOptimizations(instanceId) {
+  if (!state.optimizations[instanceId]) {
+    state.optimizations[instanceId] = { loading: true };
+    api.optimizations(instanceId).then(
+      (list) => update((s) => { s.optimizations[instanceId] = list; }),
+      () => update((s) => { s.optimizations[instanceId] = []; }),
+    );
+  }
+  return state.optimizations[instanceId];
+}
+
+/** Un réglage de performances a changé : la liste sera relue. */
+export function forgetOptimizations(instanceId) {
+  delete state.optimizations[instanceId];
+}
+
+export function askRevertOptimization(instance, optimization, newer) {
+  update((s) => { s.modal = { type: 'revert-optimization', instanceId: instance.id, optimization, newer }; });
+}
+
+export async function revertOptimization(modal) {
+  update((s) => { s.modal = null; });
+  try {
+    const result = await api.revertOptimization(modal.instanceId, modal.optimization.id);
+    forgetOptimizations(modal.instanceId);
+    forgetPreviews(modal.instanceId);
+    forgetRamGuide(modal.instanceId);
+    await refreshInstances();
+    toast({
+      kind: 'success',
+      title: t('perf.optimisation_annulee'),
+      text: [t('perf.changes_undone', { count: result.undone }), result.trashed > 0 && t('perf.mods_trashed', { count: result.trashed })].filter(Boolean).join(' '),
+    });
+  } catch (error) {
+    toastError(t('perf.retour_impossible'), error);
+  }
+}
+
 export async function installPack(modal) {
   const instance = state.instances.find((i) => i.id === modal.instanceId);
   const slugs = chosenPackMods(modal).map((m) => m.slug);
@@ -103,6 +142,7 @@ export async function installPack(modal) {
       timeout: 9000,
     });
     refreshInstalled(state.instances.find((i) => i.id === instance.id) ?? instance, 'mods');
+    forgetOptimizations(instance.id);
   } catch (error) {
     toastError(t('perf.pack_performances_non_installe'), error, [activityAction()]);
   }

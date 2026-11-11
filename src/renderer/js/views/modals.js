@@ -12,7 +12,7 @@ import { blockIcon, formatGo, formatPlaytime, h, icon, slugify } from '../dom.js
 import { openSkins } from '../skins-actions.js';
 import { skinHead } from '../skin-view.js';
 import { state, update } from '../state.js';
-import { gpuConfirmDialog, packDialog } from './performance.js';
+import { gpuConfirmDialog, packDialog, revertOptimizationDialog } from './performance.js';
 import { skinsDialog } from './skins.js';
 import { openBackground } from '../background-actions.js';
 import { backgroundDialog } from './background.js';
@@ -489,6 +489,7 @@ export function renderModal() {
   if (modal.type === 'clean-storage') return cleanDialog(modal);
   if (modal.type === 'perf-pack') return packDialog(modal);
   if (modal.type === 'gpu-confirm') return gpuConfirmDialog(modal);
+  if (modal.type === 'revert-optimization') return revertOptimizationDialog(modal);
   if (['restore-world', 'delete-world', 'backup-failed'].includes(modal.type)) return worldsDialog(modal);
   if (modal.type === 'version-change') return versionChangeDialog(modal);
   return null;
