@@ -85,7 +85,10 @@ export const api = {
   saveUi: wrap((patch) => bridge.ui.set(patch)),
   accounts: wrap(() => bridge.accounts.list()),
   addOfflineAccount: wrap((name) => bridge.accounts.addOffline(name)),
-  addMicrosoftAccount: wrap(() => bridge.accounts.addMicrosoft()),
+  addMicrosoftAccount: wrap((mode) => bridge.accounts.addMicrosoft(mode)),
+  loginReopen: wrap(() => bridge.accounts.loginReopen()),
+  loginWindow: wrap(() => bridge.accounts.loginWindow()),
+  loginCancel: wrap(() => bridge.accounts.loginCancel()),
   removeAccount: wrap((id) => bridge.accounts.remove(id)),
   setActiveAccount: wrap((id) => bridge.accounts.setActive(id)),
   refreshLooks: wrap(() => bridge.accounts.refreshLooks()),
@@ -137,5 +140,6 @@ export const api = {
     reset: (cb) => bridge?.launch.onReset(cb),
     launchRequest: (cb) => bridge?.ui.onLaunchRequest(cb),
     tasks: (cb) => bridge?.tasks.onChanged(cb),
+    loginState: (cb) => bridge?.accounts.onLoginState(cb),
   },
 };

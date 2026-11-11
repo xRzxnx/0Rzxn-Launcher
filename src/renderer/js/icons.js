@@ -36,6 +36,7 @@ export const ICONS = {
   edit: svg('<path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/>', 'stroke-linejoin="round"'),
   link: svg('<path d="M10 14l-2 2a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0M14 10l2-2a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0"/>', 'stroke-linecap="round"'),
   shield: svg('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>', 'stroke-linejoin="round"'),
+  browser: svg('<rect x="3" y="4" width="18" height="16"/><path d="M3 9h18M6 6.5h1M9 6.5h1"/>'),
   offline: svg('<path d="M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 5-2.7M19 12.5a10 10 0 0 0-2.2-1.6M12 20h.01"/>'),
   microsoft:
     '<svg viewBox="0 0 18 18"><rect x="0" y="0" width="8.5" height="8.5" fill="#f25022"/><rect x="9.5" y="0" width="8.5" height="8.5" fill="#7fba00"/><rect x="0" y="9.5" width="8.5" height="8.5" fill="#00a4ef"/><rect x="9.5" y="9.5" width="8.5" height="8.5" fill="#ffb900"/></svg>',

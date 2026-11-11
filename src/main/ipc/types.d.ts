@@ -6,6 +6,9 @@ export type InvokeChannel =
   | 'accounts:addMicrosoft'
   | 'accounts:addOffline'
   | 'accounts:list'
+  | 'accounts:loginCancel'
+  | 'accounts:loginReopen'
+  | 'accounts:loginWindow'
   | 'accounts:refreshLooks'
   | 'accounts:remove'
   | 'accounts:setActive'
@@ -199,8 +202,16 @@ export interface GameMetrics {
   allocated: number;
 }
 
+/** État de la connexion Microsoft (« accounts:loginState », phase 7). */
+export interface LoginState {
+  phase: 'browser' | 'checking' | 'window' | 'idle';
+  url?: string;
+  expiresAt?: number;
+}
+
 /** Messages envoyés à l'interface (webContents.send) et leur contenu. */
 export interface Events {
+  'accounts:loginState': LoginState;
   'app:launchRequest': string;
   'launch:logs': LogLine[];
   'launch:metrics': GameMetrics;

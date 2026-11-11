@@ -93,6 +93,11 @@ contextBridge.exposeInMainWorld('launcher', {
     list: invoke('accounts:list'),
     addOffline: invoke('accounts:addOffline'),
     addMicrosoft: invoke('accounts:addMicrosoft'),
+    // Connexion dans le navigateur (phase 7) : boutons du bloc d'attente et état de la connexion.
+    loginReopen: invoke('accounts:loginReopen'),
+    loginWindow: invoke('accounts:loginWindow'),
+    loginCancel: invoke('accounts:loginCancel'),
+    onLoginState: listen('accounts:loginState'),
     remove: invoke('accounts:remove'),
     setActive: invoke('accounts:setActive'),
     refreshLooks: invoke('accounts:refreshLooks'),

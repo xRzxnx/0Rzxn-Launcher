@@ -7,6 +7,10 @@ const crypto = require('node:crypto');
 
 const OAUTH = 'https://login.microsoftonline.com/consumers/oauth2/v2.0';
 const REDIRECT_URI = 'https://login.microsoftonline.com/common/oauth2/nativeclient';
+// Connexion dans le navigateur (phase 7) : adresse locale, dont Microsoft ignore le port (inscrite « http://localhost » dans Azure).
+const LOOPBACK_URI = 'http://localhost';
+/** Adresse de retour à utiliser pour un compte : « loopback » (navigateur) ou, par défaut, la fenêtre intégrée. */
+const redirectFor = (redirect) => (redirect === 'loopback' ? LOOPBACK_URI : REDIRECT_URI);
 const SCOPE = 'XboxLive.signin offline_access';
 const XBL_URL = 'https://user.auth.xboxlive.com/user/authenticate';
 const XSTS_URL = 'https://xsts.auth.xboxlive.com/xsts/authorize';
@@ -65,16 +69,23 @@ function base64url(buffer) {
   return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** Prépare l'adresse de la page de connexion Microsoft. */
-function createAuthorization(clientId) {
+/** Valeur « state » d'une connexion : relie la réponse de Microsoft à la connexion lancée. */
+const newState = () => base64url(crypto.randomBytes(16));
+
+/**
+ * Prépare l'adresse de la page de connexion Microsoft.
+ * @param {string} clientId
+ * @param {{ redirectUri?: string, state?: string }} [options] adresse de retour : fenêtre intégrée (par défaut) ou
+ *   http://localhost:<port> ; `state` déjà choisi (l'adresse locale l'attend avant que la page soit prête).
+ */
+function createAuthorization(clientId, { redirectUri = REDIRECT_URI, state = newState() } = {}) {
   const verifier = base64url(crypto.randomBytes(48));
   const challenge = base64url(crypto.createHash('sha256').update(verifier).digest());
-  const state = base64url(crypto.randomBytes(16));
   const url = new URL(`${OAUTH}/authorize`);
   url.search = new URLSearchParams({
     client_id: clientId,
     response_type: 'code',
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: redirectUri,
     response_mode: 'query',
     scope: SCOPE,
     state,
@@ -91,7 +102,16 @@ function createAuthorization(clientId) {
  */
 function parseRedirect(rawUrl, expectedState) {
   if (!rawUrl.startsWith(REDIRECT_URI)) return null;
-  const params = new URL(rawUrl).searchParams;
+  return parseParams(new URL(rawUrl).searchParams, expectedState);
+}
+
+/**
+ * Paramètres de retour (fenêtre intégrée ou adresse locale) : { code }, ou une erreur
+ * DENIED (refus), STATE (autre connexion), NO_CODE, ou le code d'erreur de Microsoft.
+ * @param {URLSearchParams} params
+ * @param {string} expectedState
+ */
+function parseParams(params, expectedState) {
   if (params.get('error')) {
     const description = params.get('error_description') ?? params.get('error');
     if (params.get('error') === 'access_denied') throw new MicrosoftAuthError(t('microsoft.connexion_refusee'), 'DENIED');
@@ -112,19 +132,19 @@ function tokenError(res) {
   return new MicrosoftAuthError(t('microsoft.microsoft_refuse_le_jeton', { error_description: res.body?.error_description ?? res.status }), error ?? 'TOKEN');
 }
 
-async function redeemCode(clientId, code, verifier) {
+async function redeemCode(clientId, code, verifier, redirectUri = REDIRECT_URI) {
   const res = await call(`${OAUTH}/token`, {
     method: 'POST',
-    form: { client_id: clientId, grant_type: 'authorization_code', code, redirect_uri: REDIRECT_URI, code_verifier: verifier, scope: SCOPE },
+    form: { client_id: clientId, grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier, scope: SCOPE },
   });
   if (!res.ok || !res.body?.access_token) throw tokenError(res);
   return { accessToken: res.body.access_token, refreshToken: res.body.refresh_token };
 }
 
-async function refreshMicrosoft(clientId, refreshToken) {
+async function refreshMicrosoft(clientId, refreshToken, redirectUri = REDIRECT_URI) {
   const res = await call(`${OAUTH}/token`, {
     method: 'POST',
-    form: { client_id: clientId, grant_type: 'refresh_token', refresh_token: refreshToken, redirect_uri: REDIRECT_URI, scope: SCOPE },
+    form: { client_id: clientId, grant_type: 'refresh_token', refresh_token: refreshToken, redirect_uri: redirectUri, scope: SCOPE },
   });
   if (!res.ok || !res.body?.access_token) throw tokenError(res);
   return { accessToken: res.body.access_token, refreshToken: res.body.refresh_token ?? refreshToken };
@@ -221,8 +241,8 @@ const resetSkin = (token) => profileCall('/minecraft/profile/skins/active', t('m
 const showCape = (token, capeId) => profileCall('/minecraft/profile/capes/active', t('microsoft.changer_la_cape'), { method: 'PUT', json: { capeId }, token });
 const hideCape = (token) => profileCall('/minecraft/profile/capes/active', t('microsoft.masquer_la_cape'), { method: 'DELETE', token });
 
-/** De jetons Microsoft jusqu'au profil Minecraft. */
-async function minecraftFromMicrosoft(ms) {
+/** De jetons Microsoft jusqu'au profil Minecraft. `redirect` est gardé avec le compte pour les renouvellements. */
+async function minecraftFromMicrosoft(ms, redirect) {
   const xbl = await xboxLive(ms.accessToken);
   const authz = await xsts(xbl.token);
   const mc = await minecraftLogin(authz.userHash ?? xbl.userHash, authz.token);
@@ -233,24 +253,33 @@ async function minecraftFromMicrosoft(ms) {
     refreshToken: ms.refreshToken,
     accessToken: mc.accessToken,
     expiresAt: mc.expiresAt,
+    redirect,
   };
 }
 
-/** Première connexion, après la page Microsoft. */
-async function signIn(clientId, code, verifier) {
-  return minecraftFromMicrosoft(await redeemCode(clientId, code, verifier));
+/**
+ * Première connexion, après la page Microsoft. `redirectUri` : l'adresse de retour utilisée pour cette connexion.
+ * La session renvoyée porte `redirect` : 'loopback' (navigateur) ou 'native' (fenêtre intégrée).
+ */
+async function signIn(clientId, code, verifier, redirectUri = REDIRECT_URI) {
+  const redirect = redirectUri === LOOPBACK_URI || redirectUri.startsWith(`${LOOPBACK_URI}:`) ? 'loopback' : 'native';
+  return minecraftFromMicrosoft(await redeemCode(clientId, code, verifier, redirectUri), redirect);
 }
 
-/** Renouvellement silencieux (avant un lancement), à partir du jeton de rafraîchissement. */
-async function renew(clientId, refreshToken) {
-  return minecraftFromMicrosoft(await refreshMicrosoft(clientId, refreshToken));
+/** Renouvellement silencieux (avant un lancement), avec la même sorte d'adresse de retour que la connexion du compte. */
+async function renew(clientId, refreshToken, redirect = 'native') {
+  const kind = redirect === 'loopback' ? 'loopback' : 'native';
+  return minecraftFromMicrosoft(await refreshMicrosoft(clientId, refreshToken, redirectFor(kind)), kind);
 }
 
 module.exports = {
   MicrosoftAuthError,
   REDIRECT_URI,
+  LOOPBACK_URI,
+  newState,
   createAuthorization,
   parseRedirect,
+  parseParams,
   signIn,
   renew,
   fullProfile,

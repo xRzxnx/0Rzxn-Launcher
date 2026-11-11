@@ -29,7 +29,7 @@ function createServices() {
     dirs,
     accounts: new AccountStore(configDir, {
       vault,
-      renew: MICROSOFT_CLIENT_ID ? (refreshToken) => microsoft.renew(MICROSOFT_CLIENT_ID, refreshToken) : null,
+      renew: MICROSOFT_CLIENT_ID ? (refreshToken, redirect) => microsoft.renew(MICROSOFT_CLIENT_ID, refreshToken, redirect) : null,
     }),
     instances: new InstanceStore(dirs),
     settings,
