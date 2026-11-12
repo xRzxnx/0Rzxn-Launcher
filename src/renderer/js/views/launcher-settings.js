@@ -140,9 +140,12 @@ function checkedAgo(time) {
   return t('update.checked_hours', { hours: Math.floor(minutes / 60) });
 }
 
+/** Version installée bêta (0.6.0-beta.1) : affichée comme telle, et on y reste jusqu'à la stable suivante. */
+const onBeta = () => /^\d+\.\d+\.\d+-/.test(state.appVersion ?? '');
+
 /** Ce que la section dit de la mise à jour en cours. */
 function updateStatus(u) {
-  const version = t('chrome.version', { appVersion: state.appVersion ?? '' });
+  const version = t(onBeta() ? 'update.beta_version' : 'chrome.version', { appVersion: state.appVersion ?? '' });
   const line = (text, cls = 'hint') => h('p', { class: cls, role: 'status' }, text);
   if (!u?.supported) return line(t('update.installed_only', { version }));
   switch (u.status) {
@@ -178,17 +181,21 @@ function updateStatus(u) {
 function updateSection(prefs) {
   const u = state.launcherUpdate;
   const busy = u?.status === 'checking' || u?.status === 'downloading';
+  const beta = prefs.updateChannel === 'beta';
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'update-title' },
     h(
       'div',
       { class: 'settings__title-row' },
-      h('h2', { class: 'settings__title', id: 'update-title' }, t('update.title')),
+      h('h2', { class: 'settings__title', id: 'update-title' }, t('update.title'), onBeta() && h('span', { class: 'tag tag--release' }, t('update.beta_tag'))),
       h('button', { class: 'btn btn--ghost', disabled: !u?.supported || busy, onClick: checkUpdate }, icon('search'), t('update.check')),
     ),
     updateStatus(u),
     toggleRow('update-label', t('update.auto'), prefs.autoUpdate, () => setLauncherPref({ autoUpdate: !prefs.autoUpdate })),
+    toggleRow('beta-label', t('update.beta'), beta, () => setLauncherPref({ updateChannel: beta ? 'stable' : 'beta' })),
+    beta && h('p', { class: 'hint' }, t('update.beta_hint')),
+    !beta && onBeta() && h('p', { class: 'hint hint--warn' }, t('update.beta_stay', { appVersion: state.appVersion })),
     h(
       'p',
       { class: 'hint' },

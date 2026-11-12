@@ -1,0 +1,208 @@
+name: Release
+
+# Builds the Windows installer from main and publishes the GitHub release that installed launchers read.
+# Started by `npm run publier` (workflow_dispatch on main). Pull requests that touch the release pipeline
+# run it as a dry run: everything except signing, VirusTotal and the release itself.
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Build only, publish nothing
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/metadonnees-maj.js
+      - scripts/virustotal.js
+      - build/signpath/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write # create the tag and the release (only this job)
+      actions: read # SignPath reads the uploaded artifacts
+    env:
+      DRY_RUN: ${{ github.event_name == 'pull_request' || inputs.dry-run }}
+      # Signing starts once the SignPath secret exists; until then the release is unsigned, as before.
+      SIGN: ${{ secrets.SIGNPATH_API_TOKEN != '' && github.event_name != 'pull_request' && !inputs.dry-run }}
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Only main is released
+        if: env.DRY_RUN != 'true' && github.ref != 'refs/heads/main'
+        run: |
+          echo "Releases are built from main only (got ${{ github.ref }})."
+          exit 1
+
+      - name: Version
+        id: version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then echo "Version $version must look like 1.2.3 or 1.2.3-beta.4."; exit 1; fi
+          if [ "$DRY_RUN" != "true" ] && git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then echo "Tag v$version already exists."; exit 1; fi
+          prerelease=false
+          [[ "$version" == *-* ]] && prerelease=true
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "prerelease=$prerelease"
+            echo "installer=0Rzxn_-Launcher-Setup-$version.exe"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Checks
+        run: |
+          npm test
+          npm run check:types
+          npm run lint
+          npm run check:i18n
+
+      # A full build (not --dir): only an installer target writes resources/app-update.yml into win-unpacked,
+      # and installed launchers need that file to find their updates.
+      - name: Build
+        run: npx electron-builder --win nsis --publish never
+
+      # ---- Signing the app executable (SignPath Foundation) ----
+      - name: Upload the unsigned app
+        id: unsigned-app
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-unsigned
+          path: dist/win-unpacked
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the app
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: programme
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/win-unpacked-signed
+
+      - name: Use the signed app
+        if: env.SIGN == 'true'
+        run: |
+          rm -rf dist/win-unpacked
+          mv dist/win-unpacked-signed dist/win-unpacked
+
+      - name: Rebuild the installer around the signed app
+        if: env.SIGN == 'true'
+        # The first (unsigned) installer is removed first: an antivirus scan can keep it locked and make NSIS fail.
+        run: |
+          rm -f "dist/${{ steps.version.outputs.installer }}" "dist/${{ steps.version.outputs.installer }}.blockmap"
+          npx electron-builder --win nsis --prepackaged dist/win-unpacked --publish never
+
+      # ---- Signing the installer ----
+      - name: Upload the unsigned installer
+        id: unsigned-installer
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          path: dist/${{ steps.version.outputs.installer }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the installer
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          artifact-configuration-slug: installateur
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          skip-decompress: true
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/signed
+
+      - name: Use the signed installer
+        if: env.SIGN == 'true'
+        run: mv -f "dist/signed/${{ steps.version.outputs.installer }}" "dist/${{ steps.version.outputs.installer }}"
+
+      # Signing changes the installer bytes: latest.yml and the blockmap must describe the final file.
+      - name: Update metadata
+        run: node scripts/metadonnees-maj.js "dist/${{ steps.version.outputs.installer }}"
+
+      - name: Keep the installer (7 days)
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-installer
+          path: |
+            dist/${{ steps.version.outputs.installer }}
+            dist/${{ steps.version.outputs.installer }}.blockmap
+            dist/latest.yml
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: VirusTotal
+        id: virustotal
+        if: env.DRY_RUN != 'true'
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: |
+          set +e
+          node scripts/virustotal.js "dist/${{ steps.version.outputs.installer }}" --json virustotal.json
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Release
+        if: env.DRY_RUN != 'true'
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tag="${{ steps.version.outputs.tag }}"
+          installer="dist/${{ steps.version.outputs.installer }}"
+          notes_file="docs/release-notes-$version.md"
+          if [ -f "$notes_file" ]; then cp "$notes_file" notes.md
+          else
+            previous=$(git describe --tags --abbrev=0 2>/dev/null)
+            git log ${previous:+$previous..}HEAD --no-merges --format='- %s' > notes.md
+          fi
+          code="${{ steps.virustotal.outputs.code }}"
+          line=$(node -e "try { const r = require('./virustotal.json'); console.log(r.notes ?? '') } catch { }")
+          printf '\n---\n\n' >> notes.md
+          if [ -n "$line" ]; then printf '%s\n\n' "$line" >> notes.md; fi
+          printf '[Code signing policy](https://github.com/${{ github.repository }}/blob/main/CODE_SIGNING_POLICY.md)\n' >> notes.md
+          kind=--latest
+          [ "${{ steps.version.outputs.prerelease }}" = "true" ] && kind=--prerelease
+          gh release create "$tag" "$installer" "$installer.blockmap" dist/latest.yml \
+            --draft --title "$tag" --notes-file notes.md --target "$GITHUB_SHA" $kind
+          if [ "$code" = "2" ]; then
+            echo "::error::VirusTotal: too many detections. The release $tag stays a draft; check the report before publishing it by hand."
+            exit 1
+          fi
+          [ "$code" = "0" ] || echo "::warning::VirusTotal analysis unavailable (exit $code); the release is published without it."
+          gh release edit "$tag" --draft=false $kind
+          echo "Published $tag: https://github.com/${{ github.repository }}/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"

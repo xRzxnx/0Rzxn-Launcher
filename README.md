@@ -49,7 +49,7 @@
 **Comfort**
 - Available in **English**, **French** and **Spanish**: follows the Windows language, and changes instantly in Settings › Launcher.
 - Accent color themes, system tray menu, keyboard shortcuts (AZERTY-friendly).
-- Automatic updates: new versions download in the background, never during a game, and install on restart.
+- Automatic updates: new versions download in the background, never during a game, and install on restart. An opt-in beta channel is in Settings › Launcher.
 - Java and disk storage management.
 - Skin preview in 3D, saved skins, capes.
 
@@ -86,7 +86,7 @@ npm start
 npm run dist
 ```
 
-The installer is written to `dist/`. It installs for the current Windows user, without administrator rights. It is not code-signed yet, so Windows SmartScreen may ask for confirmation (**More info → Run anyway**).
+The installer is written to `dist/`. It installs for the current Windows user, without administrator rights. Local builds are not signed, so Windows SmartScreen may ask for confirmation (**More info → Run anyway**). Released installers are built by GitHub Actions; see the [code signing policy](#code-signing-policy).
 
 ### Publish a version
 
@@ -96,7 +96,9 @@ Change the version in `package.json`, commit, push `main`, then run:
 npm run publier
 ```
 
-The script builds the installer and creates the GitHub release that installed launchers read. It needs the GitHub CLI (`gh`) signed in.
+The script checks the repository, then starts the [Release workflow](.github/workflows/release.yml): GitHub Actions builds the installer from `main`, signs it (once SignPath has accepted the project), checks it on VirusTotal and publishes the release that installed launchers read. It needs the GitHub CLI (`gh`) signed in. `npm run publier -- --essai` only builds, on the current branch.
+
+A version like `1.2.3-beta.1` is published as a GitHub pre-release: only launchers with **Settings › Launcher › Updates › Get beta versions** turned on receive it.
 
 ## Where data is stored
 
@@ -121,6 +123,10 @@ src/
 └─ renderer/        interface (HTML, CSS, vanilla JavaScript, no framework)
                     its texts are in js/locales/ (fr, en, es); npm run check:i18n checks them
 ```
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). The application is pending: until it is accepted, releases are not signed. Team roles, how releases are built and the privacy policy: [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md).
 
 ## Credits
 

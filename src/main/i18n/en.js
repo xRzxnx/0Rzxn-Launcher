@@ -445,6 +445,7 @@ module.exports = {
   'update.err_failed': "The check failed. Try again later.",
   'update.err_incomplete': "The downloaded file is incomplete. Try again.",
   'update.err_network': "GitHub isn't responding. Check your connection and try again.",
+  'update.err_signature': "Version {version} isn't signed by the expected publisher, so it wasn't installed. Your current version keeps working.",
   'update.none_ready': "No update is ready.",
   'versions.impossible_de_recuperer_la_liste': "Could not fetch the version list ({message}).",
   'versions.impossible_de_telecharger_la_version': "Could not download version {id} ({message}).",

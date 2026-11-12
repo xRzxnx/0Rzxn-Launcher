@@ -7,8 +7,9 @@ const { readJson, writeJson } = require('../core/store');
 
 // Réglages du launcher lui-même (Paramètres › Launcher).
 // lightMode : le launcher se met en veille pendant une partie ; gpuHighPerformance : accord donné pour la carte dédiée.
+// updateChannel : 'beta' reçoit aussi les pré-versions GitHub (Paramètres › Launcher › Mises à jour).
 // downloads : téléchargements simultanés au total et par serveur (Paramètres › Launcher › Téléchargements).
-const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, downloads: { concurrency: 16, perHost: 8 } };
+const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, updateChannel: 'stable', downloads: { concurrency: 16, perHost: 8 } };
 const ACCENTS = new Set(['violet', 'bleu', 'cyan', 'vert', 'ambre', 'rouge', 'rose']);
 
 /** @param {any} value @param {number} min @param {number} max @param {number} fallback */
@@ -21,6 +22,7 @@ function sanitizeLauncher(input, base = LAUNCHER_DEFAULTS) {
   // Couleur d'accent : un thème prédéfini ou une couleur perso « #rrggbb ».
   if (ACCENTS.has(input.accent) || /^#[0-9a-f]{6}$/i.test(input.accent ?? '')) s.accent = input.accent.toLowerCase();
   for (const key of ['discord', 'discordShowName', 'tray', 'closeToTray', 'lightMode', 'gpuHighPerformance', 'autoUpdate']) if (typeof input[key] === 'boolean') s[key] = input[key];
+  if (input.updateChannel === 'stable' || input.updateChannel === 'beta') s.updateChannel = input.updateChannel;
   if (input.downloads && typeof input.downloads === 'object') {
     s.downloads = {
       concurrency: bounded(input.downloads.concurrency, 1, 64, s.downloads.concurrency),

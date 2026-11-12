@@ -20,7 +20,7 @@ npm run dist
 ```
 
 Résultat : `dist\0Rzxn_-Launcher-Setup-<version>.exe` (installation pour ton compte Windows, sans droits administrateur, avec raccourcis Bureau et menu Démarrer).
-L'installateur n'est pas signé : Windows SmartScreen affiche « Windows a protégé votre ordinateur » → **Informations complémentaires** → **Exécuter quand même**.
+Une construction locale n'est pas signée : Windows SmartScreen affiche « Windows a protégé votre ordinateur » → **Informations complémentaires** → **Exécuter quand même**.
 La désinstallation garde tes mondes et tes réglages (`%APPDATA%\.0rzxn` et `%APPDATA%\0Rzxn_ Launcher`).
 
 Les icônes sont générées depuis `src/renderer/assets/logo-mark.svg` par `npm run icon` (→ `build/icon.ico`, `build/icon.png` et `src/main/assets/tray*.png`).
@@ -38,7 +38,7 @@ Les icônes sont générées depuis `src/renderer/assets/logo-mark.svg` par `npm
 - Console en direct (logs XML de Minecraft convertis, jeton masqué), arrêt du jeu, détection des crashs.
 - **Langues** : français, anglais et espagnol, selon la langue de Windows, et changement immédiat dans Paramètres › Launcher.
 - **Confort** : couleur d'accent au choix, statut Discord pendant une partie (désactivé par défaut, voir [docs/DISCORD.md](docs/DISCORD.md)), icône dans la zone de notification, raccourcis clavier (Ctrl+/ pour l'aide), gestion des Java et nettoyage de l'espace disque (Paramètres › Java et stockage).
-- **Mises à jour** : les nouvelles versions se téléchargent en arrière-plan, jamais pendant une partie, et s'installent au redémarrage.
+- **Mises à jour** : les nouvelles versions se téléchargent en arrière-plan, jamais pendant une partie, et s'installent au redémarrage. Canal bêta au choix dans Paramètres › Launcher.
 
 Testé en vrai : 1.8.9 (Java 8), 1.12.2 (Java 8), 1.21.11 (Java 21) et 26.3 (Java 25).
 
@@ -50,7 +50,13 @@ Change la version dans `package.json`, commite, pousse `main`, puis lance :
 npm run publier
 ```
 
-Le script construit l'installateur et crée la release GitHub que lisent les launchers installés. Il lui faut la CLI GitHub (`gh`) connectée.
+Le script vérifie le dépôt puis lance le [workflow Release](.github/workflows/release.yml) : GitHub Actions construit l'installateur depuis `main`, le signe (une fois le projet accepté par SignPath), le contrôle sur VirusTotal et publie la release que lisent les launchers installés. Il lui faut la CLI GitHub (`gh`) connectée. `npm run publier -- --essai` construit seulement, sur la branche actuelle.
+
+Une version comme `1.2.3-beta.1` est publiée en pré-version GitHub : seuls les launchers où **Paramètres › Launcher › Mises à jour › Recevoir les versions bêta** est activé la reçoivent.
+
+## Politique de signature (Code signing policy)
+
+Signature gratuite fournie par [SignPath.io](https://about.signpath.io), certificat de la [SignPath Foundation](https://signpath.org). La demande est en cours : tant qu'elle n'est pas acceptée, les releases ne sont pas signées. Rôles de l'équipe, construction des releases et politique de confidentialité : [CODE_SIGNING_POLICY.md](CODE_SIGNING_POLICY.md) (en anglais).
 
 ## Où sont les données
 

@@ -89,7 +89,9 @@ function register({ handle, getWindow, services, dirs, appShell, applyLanguage, 
     return next;
   });
   handle('launcher:set', (patch) => {
+    const channel = services.settings.launcher().updateChannel;
     const prefs = services.settings.setLauncher(patch ?? {});
+    if (prefs.updateChannel !== channel) updates.channelChanged();
     net.configure(prefs.downloads);
     tray.setEnabled(prefs.tray);
     appShell.queueDiscord();

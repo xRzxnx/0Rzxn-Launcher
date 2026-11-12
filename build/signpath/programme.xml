@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration: the unpacked app (dist/win-unpacked, zipped by actions/upload-artifact).
+     Only the launcher executable is signed; Electron's own DLLs are upstream files and stay as they are. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="0Rzxn_ Launcher.exe" product-name="0Rzxn_ Launcher">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>
