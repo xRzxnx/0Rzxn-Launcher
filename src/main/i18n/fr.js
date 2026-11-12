@@ -445,6 +445,7 @@ module.exports = {
   'update.err_failed': "La recherche a échoué. Réessaie plus tard.",
   'update.err_incomplete': "Le fichier téléchargé est incomplet. Réessaie.",
   'update.err_network': "GitHub ne répond pas. Vérifie ta connexion et réessaie.",
+  'update.err_signature': "La {version} n'est pas signée par l'éditeur attendu : elle n'a pas été installée. Ta version actuelle continue de marcher.",
   'update.none_ready': "Aucune mise à jour prête.",
   'versions.impossible_de_recuperer_la_liste': "Impossible de récupérer la liste des versions ({message}).",
   'versions.impossible_de_telecharger_la_version': "Impossible de télécharger la version {id} ({message}).",

@@ -98,6 +98,7 @@ function createShell({ getWindow, services, launches, isTaskBusy, openWindow = n
     loadUpdater: () => require('electron-updater').autoUpdater,
     isBusy: () => Boolean(launches.session || isTaskBusy()),
     isAutomatic: () => services.settings.launcher().autoUpdate,
+    channel: () => services.settings.launcher().updateChannel,
     onState: (status) => {
       const win = getWindow();
       if (win && !win.isDestroyed()) win.webContents.send('update:status', status);

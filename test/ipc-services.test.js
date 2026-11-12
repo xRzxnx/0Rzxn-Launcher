@@ -10,7 +10,7 @@ const { t: tr } = require('../src/main/i18n');
 const { startIpc, sessions, makeWorld, waitFor, wire, electron, gameMetrics } = require('./helpers/ipc');
 
 // downloads ajouté en phase 4 (limites de téléchargement).
-const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, downloads: { concurrency: 16, perHost: 8 } };
+const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, updateChannel: 'stable', downloads: { concurrency: 16, perHost: 8 } };
 
 async function newInstance(ipc, name = 'Survie', extra = {}) {
   const instance = await ipc.invoke('instances:create', { name, version: '1.21.1', loader: 'vanilla', ...extra });
@@ -32,6 +32,8 @@ test('réglages du launcher : valeurs par défaut, filtrage et enregistrement', 
   const file = JSON.parse(fs.readFileSync(path.join(ipc.root, 'config', 'settings.json'), 'utf8'));
   assert.equal(file.launcher.accent, 'bleu');
   assert.deepEqual(await ipc.invoke('launcher:set', null), file.launcher);
+  assert.equal((await ipc.invoke('launcher:set', { updateChannel: 'nightly' })).updateChannel, 'stable');
+  assert.equal((await ipc.invoke('launcher:set', { updateChannel: 'beta' })).updateChannel, 'beta');
 });
 
 test('langue : changée sans redémarrer, les messages suivent', async (t) => {
