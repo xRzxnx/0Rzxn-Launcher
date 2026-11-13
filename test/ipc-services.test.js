@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { t: tr } = require('../src/main/i18n');
 const { startIpc, sessions, makeWorld, waitFor, wire, electron, gameMetrics } = require('./helpers/ipc');
+const { gameRoot } = require('../src/main/platform/chemins');
 
 // downloads ajouté en phase 4 (limites de téléchargement).
 const LAUNCHER_DEFAULTS = { language: 'auto', accent: 'violet', discord: false, discordShowName: true, tray: true, closeToTray: false, lightMode: true, gpuHighPerformance: false, autoUpdate: true, updateChannel: 'stable', downloads: { concurrency: 16, perHost: 8 } };
@@ -635,7 +636,7 @@ test('optimisations : changements de performances notés avec une copie, regroup
   assert.equal(result.instance.settings.width, 1600); // réglage d'avant cette copie : gardé
   assert.equal(fs.readFileSync(options, 'utf8'), 'renderDistance:12\n');
   assert.deepEqual(await ipc.invoke('optimizations:list', instance.id), []);
-  assert.deepEqual(fs.readdirSync(path.join(ipc.root, 'appdata', '.0rzxn', 'instances', instance.id, '.optimisations')), []);
+  assert.deepEqual(fs.readdirSync(path.join(gameRoot({ appData: path.join(ipc.root, 'appdata') }), 'instances', instance.id, '.optimisations')), []);
   await assert.rejects(ipc.invoke('optimizations:revert', instance.id, 12345), { message: tr('ipc.optimisation_introuvable') });
 });
 
@@ -665,7 +666,7 @@ test('optimisations : fichiers ajoutés mis à la corbeille au retour en arrièr
   // Un second service sur les mêmes instances, appelé comme le pack Performances le fait (record, added, revert).
   const trashed = [];
   const db = openDatabase({ file: path.join(ipc.root, 'config', 'autre.db') });
-  const store = new InstanceStore(gameDirs(path.join(ipc.root, 'appdata', '.0rzxn')));
+  const store = new InstanceStore(gameDirs(gameRoot({ appData: path.join(ipc.root, 'appdata') })));
   const service = createOptimizations({ db, instances: store, trash: async (file) => { trashed.push(path.basename(file)); fs.rmSync(file); } });
   const id = service.record(store.get(instance.id), 'perf-pack', { count: 1 });
   fs.mkdirSync(path.join(gameDir, 'mods'), { recursive: true });

@@ -131,6 +131,8 @@ const electron = {
       appPath: path.join(root, 'projet'),
     });
     for (const dir of Object.values(paths)) fs.mkdirSync(dir, { recursive: true });
+    // Sous Linux le dossier du jeu suit XDG_DATA_HOME, pas appData : sans ça les tests écriraient dans ~/.local/share.
+    process.env.XDG_DATA_HOME = paths.appData;
   },
 };
 
