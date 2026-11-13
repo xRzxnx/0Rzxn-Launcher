@@ -8,6 +8,7 @@ const fsp = fs.promises;
 const path = require('node:path');
 const { downloadAll, fetchBuffer, fetchJson, sha1 } = require('./download');
 const { exists } = require('./store');
+const { javaSearchDirs } = require('../platform/chemins');
 
 const RUNTIME_INDEX_URL =
   'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
@@ -163,30 +164,48 @@ function listRuntimes(dirs) {
   });
 }
 
-const VENDOR_DIRS = ['Java', 'Eclipse Adoptium', 'Eclipse Foundation', 'AdoptOpenJDK', 'Microsoft', 'Zulu', 'BellSoft', 'Amazon Corretto', 'Semeru', 'OpenJDK'];
-
-/** Chemins où chercher un Java installé sur le PC (lecture seule). */
-function systemJavaCandidates(env = process.env) {
-  const exeName = process.platform === 'win32' ? 'java.exe' : 'java';
+/**
+ * Chemins où chercher un Java installé sur le PC (lecture seule) : dossiers connus du système (platform/chemins.js),
+ * JAVA_HOME puis PATH. `readdir` est remplaçable pour les tests.
+ * @param {{ platform?: string, env?: NodeJS.ProcessEnv, home?: string, readdir?: (dir: string) => import('node:fs').Dirent[] }} [ctx]
+ */
+function systemJavaCandidates(ctx = {}) {
+  const platform = ctx.platform ?? process.platform;
+  const env = ctx.env ?? process.env;
+  const p = platform === 'win32' ? path.win32 : path.posix;
+  const readdir = ctx.readdir ?? ((dir) => fs.readdirSync(dir, { withFileTypes: true }));
+  const exeName = platform === 'win32' ? 'java.exe' : 'java';
   const found = [];
-  const subdirs = (dir) => {
+  const subdirs = (dir, prefix = '') => {
     try {
-      return fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.join(dir, d.name));
+      return readdir(dir).filter((d) => d.isDirectory() && d.name.startsWith(prefix)).map((d) => p.join(dir, d.name));
     } catch {
       return [];
     }
   };
-  if (process.platform === 'win32') {
-    const roots = [...new Set([env.ProgramFiles, env['ProgramFiles(x86)'], env.ProgramW6432].filter(Boolean))];
-    for (const root of roots) for (const vendor of VENDOR_DIRS) for (const dir of subdirs(path.join(root, vendor))) found.push(path.join(dir, 'bin', exeName));
-  } else if (process.platform === 'darwin') {
-    for (const dir of subdirs('/Library/Java/JavaVirtualMachines')) found.push(path.join(dir, 'Contents', 'Home', 'bin', exeName));
-  } else {
-    for (const dir of subdirs('/usr/lib/jvm')) found.push(path.join(dir, 'bin', exeName));
+  for (const { parent, prefix, home } of javaSearchDirs({ platform, env, home: ctx.home })) {
+    for (const dir of subdirs(parent, prefix)) found.push(p.join(dir, ...home, 'bin', exeName));
   }
-  if (env.JAVA_HOME) found.push(path.join(env.JAVA_HOME, 'bin', exeName));
-  for (const dir of (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean)) found.push(path.join(dir, exeName));
+  if (env.JAVA_HOME) found.push(p.join(env.JAVA_HOME, 'bin', exeName));
+  const separator = platform === 'win32' ? ';' : ':';
+  for (const dir of (env.PATH ?? env.Path ?? '').split(separator).filter(Boolean)) found.push(p.join(dir, exeName));
   return found;
+}
+
+/**
+ * Nom affiché d'un Java du PC : son dossier (« jdk-21 »). Sur macOS le dossier de `bin` s'appelle « Home » :
+ * on remonte au paquet (« temurin-21.jdk » → « temurin-21 », Homebrew « openjdk@21 »).
+ * @param {string} javaPath
+ */
+function javaFolderName(javaPath) {
+  const parts = javaPath.split(/[\\/]+/).filter(Boolean);
+  parts.pop(); // java ou java.exe
+  if (parts.at(-1)?.toLowerCase() === 'bin') parts.pop();
+  if (parts.at(-1) === 'Home' && parts.at(-2) === 'Contents') {
+    parts.splice(-2);
+    if (parts.at(-1) === 'openjdk.jdk' && parts.at(-2) === 'libexec') parts.splice(-2);
+  }
+  return (parts.at(-1) ?? '').replace(/\.jdk$/, '');
 }
 
 /**
@@ -203,8 +222,10 @@ async function findSystemJavas(dirs) {
     } catch {
       continue;
     }
-    const key = real.toLowerCase();
-    if (seen.has(key) || key.startsWith(dirs.root.toLowerCase() + path.sep)) continue;
+    // Windows et macOS ignorent la casse des noms de fichiers, Linux non.
+    const fold = (/** @type {string} */ s) => (process.platform === 'linux' ? s : s.toLowerCase());
+    const key = fold(real);
+    if (seen.has(key) || key.startsWith(fold(dirs.root) + path.sep)) continue;
     seen.add(key);
     paths.push(file);
   }
@@ -215,10 +236,9 @@ async function findSystemJavas(dirs) {
     versions.add(java.description);
     return true;
   }).map((java) => {
-    const dir = path.dirname(java.path);
-    const folder = path.basename(dir).toLowerCase() === 'bin' ? path.basename(path.dirname(dir)) : path.basename(dir);
+    const folder = javaFolderName(java.path);
     return { path: java.path, major: java.major, bits: java.bits, description: java.description, name: !folder || /^java\d*path/i.test(folder) ? `Java ${java.major}` : folder };
   });
 }
 
-module.exports = { ensureRuntime, probeJava, probeJavaCached, javaBits, JAVA_32_MAX_GB, runtimeExecutable, listRuntimes, findSystemJavas, majorOf };
+module.exports = { ensureRuntime, probeJava, probeJavaCached, javaBits, JAVA_32_MAX_GB, runtimeExecutable, listRuntimes, findSystemJavas, systemJavaCandidates, javaFolderName, majorOf };

@@ -1,6 +1,6 @@
 'use strict';
 
-// macOS et Linux, en attendant la phase 9 : mêmes fonctions que platform/windows, sans effet.
+// Systèmes sans implémentation (BSD…) et base de linux.js / mac.js : mêmes fonctions que platform/windows, sans effet.
 const { t } = require('../i18n');
 
 const gpu = {
