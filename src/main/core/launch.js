@@ -283,7 +283,7 @@ class LaunchSession extends EventEmitter {
       this.log(t('launch.impossible_de_demarrer_java', { message: error.message }), 'LAUNCHER/ERROR');
       this.emit('failed', { message: t('launch.impossible_de_demarrer_java_2', { code: error.code ?? error.message }), cancelled: false });
     });
-    child.once('close', (code, signalName) => {
+    const finish = (code, signalName) => {
       if (reported) return;
       reported = true;
       stdout.flush();
@@ -292,7 +292,10 @@ class LaunchSession extends EventEmitter {
       const crashed = !this.stopped && code !== 0;
       this.log(this.stopped ? t('launch.jeu_arrete_depuis_le_launcher') : t('launch.jeu_ferme_code_de_sortie', { code: code ?? signalName }), crashed ? 'LAUNCHER/ERROR' : 'LAUNCHER');
       this.emit('exit', { code, crashed, minutes });
-    });
+    };
+    child.once('close', finish);
+    // Un programme lancé par le jeu (boîte d'erreur osascript sur Mac) peut garder ses sorties ouvertes après sa fin.
+    child.once('exit', (code, signalName) => setTimeout(() => finish(code, signalName), 2000).unref());
   }
 }
 
