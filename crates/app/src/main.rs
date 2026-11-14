@@ -22,25 +22,21 @@ fn langues_systeme() -> Vec<String> {
     sys_locale::get_locales().collect()
 }
 
-/// Tout ce que l'accueil affiche au démarrage. R0 : lecture seule.
+/// Tout ce que l'accueil affiche au démarrage.
 #[tauri::command]
 fn demarrage() -> Demarrage {
     let (racine, donnees) = (coeur::chemins::racine_jeu(), coeur::chemins::donnees());
-    let reglages = coeur::reglages::lire(&donnees);
+    let ui = coeur::reglages::Magasin::new(&donnees).interface();
     let (accounts, active_account_id) = coeur::comptes::lire(&donnees);
     Demarrage {
         app_version: env!("CARGO_PKG_VERSION").into(),
-        lang: commun::i18n::choisir_langue(
-            reglages.launcher.language.as_deref().unwrap_or("auto"),
-            langues_systeme().iter().map(String::as_str),
-        )
-        .into(),
+        lang: coeur::i18n::langue().into(),
         platform: std::env::consts::OS.into(),
         instances: coeur::instances::lister(&racine),
         accounts,
         active_account_id,
-        selected_id: reglages.ui.selected_id,
-        collapsed_groups: reglages.ui.collapsed_groups,
+        selected_id: ui.selected_id,
+        collapsed_groups: ui.collapsed_groups,
     }
 }
 
@@ -57,14 +53,26 @@ fn fenetre(window: WebviewWindow, action: &str) -> Result<(), String> {
             }
         }
         "fermer" => window.close(),
-        _ => return Err(format!("action inconnue : {action}")),
+        _ => return Err(format!("unknown window action: {action}")),
     }
     .map_err(|e| e.to_string())
 }
 
 fn main() {
+    let donnees = coeur::chemins::donnees();
+    let journal = coeur::journal::ouvrir_global(coeur::journal::Options::new(donnees.join("logs")));
+    let reglages = coeur::reglages::Magasin::new(&donnees).launcher();
+    coeur::i18n::choisir(commun::i18n::choisir_langue(&reglages.language, langues_systeme().iter().map(String::as_str)));
+    coeur::journal::info(&format!(
+        "0Rzxn_ Launcher {} starting ({} {}), language {}, log {}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        coeur::i18n::langue(),
+        journal.map(|j| j.fichier().display().to_string()).unwrap_or_default()
+    ));
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![demarrage, fenetre])
         .run(tauri::generate_context!())
-        .expect("le launcher n'a pas pu démarrer");
+        .expect("the launcher could not start");
 }

@@ -25,15 +25,47 @@ pub fn choisir_langue<'a>(pref: &str, systeme: impl IntoIterator<Item = &'a str>
     connue(base(pref)).or_else(|| systeme.into_iter().find_map(|tag| connue(base(tag)))).unwrap_or("en")
 }
 
+/// Langue connue la plus proche de `lang` (l'anglais par défaut).
+pub fn langue_connue(lang: &str) -> &'static str {
+    LANGUES.into_iter().find(|l| *l == lang).unwrap_or("en")
+}
+
 impl Dictionnaire {
+    /// Dictionnaire de l'interface.
     pub fn charger(lang: &str) -> Self {
-        let (lang, source) = match lang {
-            "fr" => ("fr", include_str!("../locales/fr.json")),
-            "es" => ("es", include_str!("../locales/es.json")),
-            _ => ("en", include_str!("../locales/en.json")),
-        };
-        let entrees = serde_json::from_str(source).expect("dictionnaire embarqué valide");
+        let lang = langue_connue(lang);
+        Self::depuis_json(
+            lang,
+            match lang {
+                "fr" => include_str!("../locales/fr.json"),
+                "es" => include_str!("../locales/es.json"),
+                _ => include_str!("../locales/en.json"),
+            },
+        )
+    }
+
+    /// Dictionnaire à partir d'un JSON embarqué (celui du moteur vit dans coeur, pour ne pas alourdir l'interface).
+    pub fn depuis_json(lang: &'static str, source: &str) -> Self {
+        let entrees = serde_json::from_str(source).expect("embedded dictionary must be valid JSON");
         Self { lang, entrees }
+    }
+
+    /// Clés du dictionnaire (contrôle des traductions).
+    pub fn cles(&self) -> impl Iterator<Item = &str> {
+        self.entrees.keys().map(String::as_str)
+    }
+
+    /// Variables {nom} de chaque forme d'une entrée, triées (contrôle des traductions).
+    pub fn variables(&self, cle: &str) -> Option<Vec<Vec<String>>> {
+        let noms = |texte: &str| {
+            let mut v: Vec<String> = texte.split('{').skip(1).filter_map(|m| m.split_once('}').map(|(n, _)| n.to_string())).collect();
+            v.sort();
+            v
+        };
+        Some(match self.entrees.get(cle)? {
+            Entree::Texte(t) => vec![noms(t)],
+            Entree::Pluriel { one, other } => vec![one.as_deref().map(noms).unwrap_or_default(), noms(other)],
+        })
     }
 
     pub fn lang(&self) -> &'static str {

@@ -1,5 +1,6 @@
 //! Instances : un dossier par instance (instance.json + dossier du jeu « minecraft »), comme core/instances.js.
 
+use crate::fichiers::lire_json;
 use commun::{Instance, LOADERS};
 use serde::Deserialize;
 use std::path::Path;
@@ -44,9 +45,12 @@ pub fn lire(racine: &Path, id: &str) -> Option<Instance> {
         return None;
     }
     let dossier = racine.join("instances").join(id);
-    let fichier = dossier.join("instance.json");
-    let mut instance: Instance = crate::lire_json(&fichier)?;
-    let sup: Supplement = crate::lire_json(&fichier)?;
+    let mut brut: serde_json::Value = lire_json(&dossier.join("instance.json"))?;
+    // Réglages vérifiés un par un (une valeur fausse ne fait pas disparaître l'instance).
+    let reglages = crate::reglages::nettoyer_instance(&brut["settings"], &commun::Reglages::default());
+    brut["settings"] = serde_json::to_value(reglages).ok()?;
+    let sup: Supplement = serde_json::from_value(brut.clone()).ok()?;
+    let mut instance: Instance = serde_json::from_value(brut).ok()?;
     if !LOADERS.contains(&instance.loader.as_str()) {
         instance.loader = "vanilla".into();
     }
@@ -62,7 +66,7 @@ pub fn lire(racine: &Path, id: &str) -> Option<Instance> {
         });
     instance.installed = version_installee(racine, &instance.version) && loader_pret;
     let v = &instance.version;
-    instance.java_major = crate::lire_json::<VersionJava>(&racine.join("versions").join(v).join(format!("{v}.json")))
+    instance.java_major = lire_json::<VersionJava>(&racine.join("versions").join(v).join(format!("{v}.json")))
         .and_then(|j| j.java_version)
         .map(|j| j.major_version);
     instance.mods_actifs = (!vanilla).then(|| compter_jars(&dossier.join("minecraft").join("mods")));
