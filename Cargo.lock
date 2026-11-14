@@ -448,6 +448,8 @@ version = "0.7.0-alpha.0"
 dependencies = [
  "chrono",
  "commun",
+ "crc32fast",
+ "flate2",
  "regex",
  "rusqlite",
  "serde",

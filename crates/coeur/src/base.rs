@@ -115,7 +115,7 @@ fn elaguer_copies(fichier: &Path) {
                 .collect()
         })
         .unwrap_or_default();
-    copies.sort_by(|a, b| b.0.cmp(&a.0));
+    copies.sort_by_key(|c| std::cmp::Reverse(c.0));
     for (_, chemin) in copies.into_iter().skip(COPIES_GARDEES) {
         let _ = std::fs::remove_file(chemin);
     }
