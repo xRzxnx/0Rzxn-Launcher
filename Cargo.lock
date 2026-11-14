@@ -523,6 +523,7 @@ dependencies = [
  "sha2 0.11.1",
  "tokio",
  "tokio-util",
+ "windows-sys 0.61.2",
  "winreg",
 ]
 

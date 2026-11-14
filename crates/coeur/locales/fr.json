@@ -6,6 +6,7 @@
  "accounts.il_faut_un_compte_microsoft": "Il faut un compte Microsoft pour cela.",
  "accounts.impossible_de_lire_la_session": "Impossible de lire la session de {name} : reconnecte ce compte.",
  "accounts.la_connexion_microsoft_est_pas": "La connexion Microsoft n'est pas configurée dans ce launcher.",
+ "accounts.microsoft_pas_encore": "La connexion Microsoft n'est pas encore disponible dans cette version d'essai : utilise un compte hors-ligne.",
  "accounts.renouvellement_de_la_session_microsoft": "Renouvellement de la session Microsoft…",
  "accounts.session_non_renouvelee_le_multijoueur": "Session non renouvelée ({message}) : le multijoueur en ligne risque de refuser la connexion.",
  "common.ajoute_un_compte_avant_de": "Ajoute un compte avant de jouer.",
