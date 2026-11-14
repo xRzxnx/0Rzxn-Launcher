@@ -1,0 +1,68 @@
+name: Essai Linux et macOS
+
+# Real check of the built launcher on Linux (AppImage) and macOS (dmg, Apple Silicon): opens it, creates
+# instances through its API, plays each one up to the title menu and keeps screenshots. Started by hand,
+# and on any push that changes the check itself.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/essai-jeu.js
+      - .github/workflows/essai.yml
+
+permissions:
+  contents: read
+
+jobs:
+  essai:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Linux packages (screen, OpenGL, FUSE, screenshots)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libfuse2t64 libgl1-mesa-dri imagemagick
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: npx electron-builder --linux AppImage --publish never
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: npx electron-builder --mac dmg --arm64 --publish never
+
+      - name: Play (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x dist/*.AppImage
+          xvfb-run -a -s "-screen 0 1280x800x24" node scripts/essai-jeu.js "$(ls dist/*.AppImage)" captures
+
+      - name: Play (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          hdiutil attach dist/*.dmg -mountpoint /tmp/dmg -nobrowse
+          cp -R /tmp/dmg/*.app /tmp/
+          hdiutil detach /tmp/dmg
+          app="$(ls -d /tmp/*.app)"
+          node scripts/essai-jeu.js "$app/Contents/MacOS/$(basename "$app" .app)" captures
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: essai-${{ runner.os }}
+          path: captures
+          retention-days: 7
