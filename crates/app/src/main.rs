@@ -1,8 +1,10 @@
 // Pas de console noire derrière la fenêtre sous Windows (sauf en debug, pour lire les erreurs).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use coeur::base::Base;
+use coeur::base::{Base, Tache};
+use coeur::net::Reseau;
 use commun::Demarrage;
+use std::sync::Arc;
 use tauri::{Manager, State, WebviewWindow};
 
 /// Langues préférées de l'utilisateur, comme app.getPreferredSystemLanguages() d'Electron.
@@ -23,9 +25,32 @@ fn langues_systeme() -> Vec<String> {
     sys_locale::get_locales().collect()
 }
 
+/// Fichiers temporaires abandonnés retirés en arrière-plan au démarrage, noté comme tâche cachée (comme Electron).
+fn nettoyer_temporaires(base: Arc<Base>) {
+    std::thread::spawn(move || {
+        let debut = coeur::base::maintenant();
+        let annule = std::sync::atomic::AtomicBool::new(false);
+        let (nombre, octets) = coeur::temporaires::nettoyer(&coeur::chemins::racine_jeu(), std::time::SystemTime::now(), &annule);
+        if nombre > 0 {
+            coeur::journal::info(&format!("Temporary files removed: {nombre} ({octets} bytes)"));
+        }
+        base.enregistrer_tache(&Tache {
+            id: format!("temp-cleanup-{debut}"),
+            kind: "temp-cleanup".into(),
+            label: Some(coeur::i18n::t("ipc.nettoyage_des_fichiers_temporaires")),
+            state: "done".into(),
+            created_at: Some(debut),
+            started_at: Some(debut),
+            ended_at: Some(coeur::base::maintenant()),
+            hidden: true,
+            ..Tache::default()
+        });
+    });
+}
+
 /// Tout ce que l'accueil affiche au démarrage.
 #[tauri::command]
-fn demarrage(base: State<Base>) -> Demarrage {
+fn demarrage(base: State<Arc<Base>>) -> Demarrage {
     let (racine, donnees) = (coeur::chemins::racine_jeu(), coeur::chemins::donnees());
     let ui = coeur::reglages::Magasin::new(&donnees).interface();
     let (accounts, active_account_id) = coeur::comptes::lire(&donnees);
@@ -75,16 +100,21 @@ fn main() {
         coeur::i18n::langue(),
         journal.map(|j| j.fichier().display().to_string()).unwrap_or_default()
     ));
-    let base = Base::ouvrir(&donnees.join("launcher.db"));
+    let base = Arc::new(Base::ouvrir(&donnees.join("launcher.db")));
+    let reseau = Arc::new(Reseau::new());
+    reseau.version(env!("CARGO_PKG_VERSION"));
+    reseau.limiter(Some(reglages.downloads.concurrency), Some(reglages.downloads.per_host));
+    nettoyer_temporaires(base.clone());
     tauri::Builder::default()
         .manage(base)
+        .manage(reseau)
         .invoke_handler(tauri::generate_handler![demarrage, fenetre])
         .build(tauri::generate_context!())
         .expect("the launcher could not start")
         .run(|app, evenement| {
             // Une fermeture propre de la base retire ses fichiers -wal et -shm.
             if let tauri::RunEvent::Exit = evenement {
-                app.state::<Base>().fermer();
+                app.state::<Arc<Base>>().fermer();
                 coeur::journal::info("Quit");
             }
         });

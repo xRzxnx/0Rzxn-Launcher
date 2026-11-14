@@ -382,6 +382,7 @@
  "modrinth.trop_de_requetes_vers_modrinth": "Demasiadas solicitudes a Modrinth: vuelve a intentarlo en un minuto.",
  "modrinth.version_introuvable_sur_modrinth": "Versión no encontrada en Modrinth.",
  "net.adresse_refusee": "Dirección rechazada (solo se acepta HTTPS): {url}",
+ "net.annule": "Cancelado.",
  "net.attendre_avant_de_reessayer": "{host} pide esperar {seconds} s: vuelve a intentarlo un poco más tarde.",
  "net.ne_repond_plus": "{host} ya no responde (nada recibido desde hace {seconds} s).",
  "net.redirection_refusee": "Redirección rechazada hacia una dirección no segura ({host}).",

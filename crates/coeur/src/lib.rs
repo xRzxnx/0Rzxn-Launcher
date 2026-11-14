@@ -3,13 +3,17 @@
 pub mod base;
 pub mod chemins;
 pub mod comptes;
+pub mod empreintes;
 pub mod erreur;
 pub mod fichiers;
 pub mod i18n;
 pub mod instances;
 pub mod journal;
 pub mod nbt;
+pub mod net;
 pub mod reglages;
+pub mod telechargement;
+pub mod temporaires;
 pub mod zip;
 
 #[cfg(test)]
@@ -37,3 +41,6 @@ pub(crate) mod essai {
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) mod essai_http;

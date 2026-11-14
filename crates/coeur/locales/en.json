@@ -382,6 +382,7 @@
  "modrinth.trop_de_requetes_vers_modrinth": "Too many requests to Modrinth: try again in a minute.",
  "modrinth.version_introuvable_sur_modrinth": "Version not found on Modrinth.",
  "net.adresse_refusee": "Address refused (only HTTPS is accepted): {url}",
+ "net.annule": "Cancelled.",
  "net.attendre_avant_de_reessayer": "{host} asks to wait {seconds} s: try again a little later.",
  "net.ne_repond_plus": "{host} stopped responding (nothing received for {seconds} s).",
  "net.redirection_refusee": "Redirect refused to an insecure address ({host}).",
