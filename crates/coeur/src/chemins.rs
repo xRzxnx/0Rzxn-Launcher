@@ -38,3 +38,56 @@ pub fn racine_jeu() -> PathBuf {
 pub fn donnees() -> PathBuf {
     env::var_os("ORZXN_DONNEES").map(PathBuf::from).unwrap_or_else(|| app_data().join(NOM_APP))
 }
+
+/// Dossiers du jeu sous la racine, comme gameDirs (core/store.js).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dossiers {
+    pub racine: PathBuf,
+    pub versions: PathBuf,
+    pub libraries: PathBuf,
+    pub assets: PathBuf,
+    pub runtime: PathBuf,
+    pub instances: PathBuf,
+    pub cache: PathBuf,
+}
+
+impl Dossiers {
+    /// La racine est créée puis résolue (liens, dossier virtualisé de Windows) : Java reçoit des chemins réels.
+    pub fn new(demandee: &std::path::Path) -> Self {
+        let _ = std::fs::create_dir_all(demandee);
+        let racine = std::fs::canonicalize(demandee).map(sans_prefixe_long).unwrap_or_else(|_| demandee.to_path_buf());
+        let d = |n: &str| racine.join(n);
+        Self {
+            versions: d("versions"),
+            libraries: d("libraries"),
+            assets: d("assets"),
+            runtime: d("runtime"),
+            instances: d("instances"),
+            cache: d("cache"),
+            racine,
+        }
+    }
+}
+
+/// « \\?\C:\… » (canonicalize sous Windows) → « C:\… », que Java et les classpaths comprennent.
+fn sans_prefixe_long(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(reste) if reste.as_bytes().get(1) == Some(&b':') => PathBuf::from(reste),
+        _ => p,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn racine_sans_prefixe_long() {
+        assert_eq!(sans_prefixe_long(PathBuf::from(r"\\?\C:\jeu")), PathBuf::from(r"C:\jeu"));
+        assert_eq!(sans_prefixe_long(PathBuf::from(r"\\?\UNC\serveur\jeu")), PathBuf::from(r"\\?\UNC\serveur\jeu"));
+        let d = Dossiers::new(&std::env::temp_dir().join("coeur-essai-racine"));
+        assert!(!d.racine.to_string_lossy().starts_with(r"\\"), "{}", d.racine.display());
+        assert!(d.racine.is_absolute());
+    }
+}

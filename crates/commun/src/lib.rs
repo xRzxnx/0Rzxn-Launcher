@@ -204,6 +204,44 @@ pub struct Compte {
     pub name: String,
 }
 
+/// Partie en cours ou en préparation (launch:status, launch:progress).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Partie {
+    pub instance_id: String,
+    /// preparing | running
+    pub phase: String,
+    pub step: usize,
+    pub done: u64,
+    pub total: u64,
+    pub prepare_only: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub done_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eta: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prepare_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub menu_ms: Option<i64>,
+}
+
+/// Mémoire et processeur du jeu, toutes les 2 s (launch:metrics).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MesuresJeu {
+    pub instance_id: String,
+    pub memory: Option<u64>,
+    pub peak: Option<u64>,
+    pub cpu: Option<u32>,
+    pub allocated: u64,
+}
+
 /// Tout ce que l'accueil charge au démarrage.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]

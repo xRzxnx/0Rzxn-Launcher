@@ -1,12 +1,13 @@
-//! Interface du launcher (Leptos, compilée en WebAssembly). R0 : accueil en lecture seule.
+//! Interface du launcher (Leptos, compilée en WebAssembly).
 
 mod accueil;
 mod banniere;
 mod chrome;
 mod icones;
+mod partie;
 mod texte;
 
-use commun::{Compte, Demarrage, Instance};
+use commun::{Compte, Demarrage, Instance, MesuresJeu, Partie};
 use leptos::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
 use texte::t;
@@ -16,6 +17,23 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], catch)]
     async fn invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "event"], catch)]
+    async fn listen(event: &str, handler: &Closure<dyn FnMut(JsValue)>) -> Result<JsValue, JsValue>;
+}
+
+/// Écoute un événement du moteur (launch:status…) pendant toute la vie de la fenêtre.
+pub fn ecouter<T: DeserializeOwned + 'static>(nom: &'static str, f: impl Fn(T) + 'static) {
+    let rappel = Closure::<dyn FnMut(JsValue)>::new(move |ev: JsValue| {
+        let charge = js_sys::Reflect::get(&ev, &JsValue::from_str("payload")).unwrap_or(JsValue::NULL);
+        match serde_wasm_bindgen::from_value::<T>(charge) {
+            Ok(v) => f(v),
+            Err(e) => web_sys::console::error_1(&format!("{nom}: {e}").into()),
+        }
+    });
+    wasm_bindgen_futures::spawn_local(async move {
+        let _ = listen(nom, &rappel).await;
+        rappel.forget();
+    });
 }
 
 /// Appelle une commande du moteur (crates/app) ; les types sont ceux de `commun`.
@@ -38,6 +56,10 @@ pub struct Etat {
     pub compte_actif: RwSignal<Option<String>>,
     pub recherche: RwSignal<String>,
     pub replies: RwSignal<Vec<String>>,
+    /// Partie en cours ou en préparation.
+    pub run: RwSignal<Option<Partie>>,
+    pub mesures: RwSignal<Option<MesuresJeu>>,
+    pub toasts: RwSignal<Vec<partie::Toast>>,
 }
 
 impl Etat {
@@ -51,13 +73,23 @@ impl Etat {
     }
 }
 
-/// État d'une instance (instanceStatus de state.js ; pas encore de partie en cours en R0).
+/// État d'une instance (instanceStatus de state.js).
 pub struct Statut {
     pub kind: &'static str,
     pub label: String,
 }
 
-pub fn statut(instance: &Instance) -> Statut {
+pub fn statut(instance: &Instance, run: Option<&Partie>) -> Statut {
+    if let Some(r) = run.filter(|r| r.instance_id == instance.id) {
+        if r.phase == "running" {
+            return Statut { kind: "running", label: t("common.en_jeu") };
+        }
+        if r.prepare_only {
+            return Statut { kind: "busy", label: t("state.verification") };
+        }
+        let quoi = if instance.installed { t("common.lancement") } else { t("state.installation") };
+        return Statut { kind: "busy", label: format!("{quoi} · {} %", partie::pourcentage(r)) };
+    }
     if instance.installed {
         Statut { kind: "ready", label: t("common.prete") }
     } else {
@@ -90,6 +122,9 @@ fn etat_initial(depart: Result<Demarrage, String>) -> Etat {
         compte_actif: RwSignal::new(d.active_account_id),
         recherche: RwSignal::new(String::new()),
         replies: RwSignal::new(d.collapsed_groups),
+        run: RwSignal::new(None),
+        mesures: RwSignal::new(None),
+        toasts: RwSignal::new(vec![]),
     }
 }
 
@@ -133,7 +168,7 @@ fn App(etat: Etat) -> impl IntoView {
         <chrome::BarreDuHaut />
         <Principal />
         <div id="modal-root"></div>
-        <div class="toasts" id="toasts" aria-live="polite"></div>
+        <div class="toasts" id="toasts" aria-live="polite"><partie::Toasts /></div>
     }
 }
 
@@ -144,6 +179,7 @@ fn main() {
         let depart = appeler::<Demarrage>("demarrage", ()).await;
         leptos::mount::mount_to_body(move || {
             let etat = etat_initial(depart);
+            partie::suivre(etat);
             view! { <App etat /> }
         });
     });
