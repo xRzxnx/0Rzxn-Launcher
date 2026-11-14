@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = ["crates/coeur", "crates/commun", "crates/app", "crates/interface"]
+# L'interface ne se compile qu'en WebAssembly (trunk) : cargo build/test à la racine ne la prend pas.
+default-members = ["crates/coeur", "crates/commun", "crates/app"]
+
+[workspace.package]
+version = "0.7.0-alpha.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+commun = { path = "crates/commun" }
+coeur = { path = "crates/coeur" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = "debuginfo"

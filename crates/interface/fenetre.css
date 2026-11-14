@@ -1,0 +1,40 @@
+/* Boutons de la fenêtre (Windows, Linux) : Electron les dessinait lui-même dans les 150 px laissés à droite de la
+   barre de titre ; Tauri n'a pas cette fonction, ils sont dessinés ici, symboles blancs sur le décor. */
+.fenetre-boutons {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  height: var(--titlebar-h);
+}
+
+.fenetre-bouton {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  cursor: default;
+}
+
+.fenetre-bouton svg {
+  width: 10px;
+  height: 10px;
+}
+
+.fenetre-bouton:hover { background: rgba(255, 255, 255, 0.1); }
+.fenetre-bouton:active { background: rgba(255, 255, 255, 0.18); }
+.fenetre-bouton--fermer:hover { background: #c42b1c; }
+.fenetre-bouton--fermer:active { background: #b22a1b; }
+
+.fenetre-bouton:focus-visible {
+  outline: 2px solid var(--accent-3);
+  outline-offset: -2px;
+}
+
+.os-macos .fenetre-boutons { display: none; }

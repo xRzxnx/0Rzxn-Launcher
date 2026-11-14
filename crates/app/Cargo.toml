@@ -1,0 +1,24 @@
+[package]
+name = "app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "0Rzxn_ Launcher"
+
+[[bin]]
+name = "0rzxn-launcher"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+commun.workspace = true
+coeur.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sys-locale = "0.3.2"
+tauri = { version = "2.12.5", features = [] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56.0"
