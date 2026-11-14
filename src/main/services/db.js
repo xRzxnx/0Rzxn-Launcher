@@ -195,7 +195,7 @@ function openDatabase({ file, migrations = MIGRATIONS, now = Date.now }) {
   // Ménage au démarrage : l'historique des tâches reste court.
   safely('purge', (d) => {
     d.prepare('DELETE FROM tasks WHERE ended_at IS NOT NULL AND ended_at < ?').run(now() - TASKS_MAX_AGE);
-    d.prepare('DELETE FROM tasks WHERE id NOT IN (SELECT id FROM tasks ORDER BY created_at DESC LIMIT ?)').run(TASKS_KEPT);
+    d.prepare('DELETE FROM tasks WHERE id NOT IN (SELECT id FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT ?)').run(TASKS_KEPT);
     if (version >= 2) d.prepare('DELETE FROM file_hashes WHERE path NOT IN (SELECT path FROM file_hashes ORDER BY used_at DESC LIMIT ?)').run(HASHES_KEPT);
   });
   const parse = (text) => {
@@ -247,7 +247,9 @@ function openDatabase({ file, migrations = MIGRATIONS, now = Date.now }) {
       return (
         safely('recentTasks', (d) =>
           d
-            .prepare('SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?')
+            // Deux tâches créées dans la même milliseconde : la dernière enregistrée d'abord (INSERT OR REPLACE donne
+            // un nouveau rowid à chaque écriture). Sans ça, l'ordre dépend de SQLite (vu sur les Mac rapides de la CI).
+            .prepare('SELECT * FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT ?')
             .all(limit)
             .map((row) => {
               const { [PROGRESS_KEY]: progress = null, [HIDDEN_KEY]: hidden = false, ...params } = row.params ? JSON.parse(String(row.params)) : {};
