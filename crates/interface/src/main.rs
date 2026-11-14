@@ -114,8 +114,8 @@ fn Principal() -> impl IntoView {
                 }
                 match etat.vue.get() {
                     "home" => view! { <accueil::Accueil /> }.into_any(),
-                    // shortcut: écrans pas encore portés, texte en dur ; retiré en R5 quand ils arrivent.
-                    _ => view! { <div class="empty"><p class="empty__text">"Écran pas encore porté en Rust (phase R5)."</p></div> }.into_any(),
+                    // shortcut: écrans pas encore portés (R5) : un message à la place.
+                    _ => view! { <div class="empty"><p class="empty__text">{t("main.ecran_pas_encore_porte")}</p></div> }.into_any(),
                 }
             }}
         </main>

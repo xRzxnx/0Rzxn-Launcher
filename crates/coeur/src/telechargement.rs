@@ -237,7 +237,7 @@ async fn telecharger(
             Err(e) => return Err(e),
         }
     }
-    unreachable!("la boucle rend toujours un résultat")
+    unreachable!("the loop always returns")
 }
 
 type EnCours = Shared<BoxFuture<'static, Resultat<bool>>>;

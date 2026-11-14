@@ -485,6 +485,7 @@
  "launcher.version_inconnue": "versión desconocida",
  "launcher.zone_de_notification": "Área de notificación",
  "launcher.zone_notification_indisponible": "No disponible: tu escritorio no muestra iconos de notificación (en GNOME hace falta la extensión AppIndicator). Cerrar la ventana cierra el launcher.",
+ "main.ecran_pas_encore_porte": "Pantalla aún no portada a Rust.",
  "main.le_launcher_pas_pu_demarrer": "El launcher no pudo iniciarse",
  "mod_sets.disparait_de_la_liste_aucun": "«{name}» desaparece de la lista. Ningún mod se elimina, activa ni desactiva: se quedan como están.",
  "mod_sets.donne_un_nom_ton_ensemble": "Ponle un nombre a tu conjunto.",
