@@ -86,3 +86,40 @@ test('zone de notification indisponible : icône retirée et jamais recréée', 
   assert.equal(tray.enabled, false);
   assert.equal(electron.calls.trays.length, 1);
 });
+
+test('mesures du jeu sous Linux : /proc status et stat lus, nom de programme avec espaces et parenthèses', () => {
+  const { parseProc } = require('../src/main/platform/process-metrics-unix');
+  const status = 'Name:\tjava\nVmHWM:\t 6291456 kB\nVmRSS:\t 4194304 kB\n';
+  // Champs après « ) » : état, ppid, … ; utime (14e) = 1500, stime (15e) = 500 battements → 20 s.
+  const stat = '4242 (java (Minecraft) x) S 1 4242 4242 0 -1 4194304 1000 0 0 0 1500 500 0 0 20 0 80 0 100 0';
+  assert.deepEqual(parseProc(status, stat), { memory: 4 * 1024 ** 3, peak: 6 * 1024 ** 3, cpuMs: 20_000 });
+  assert.equal(parseProc('Name:\tjava\n', stat), null);
+});
+
+test('mesures du jeu sous macOS : ps rss et temps processeur, pic retenu entre les mesures', async (t) => {
+  const { parsePs, createMetrics } = require('../src/main/platform/process-metrics-unix');
+  assert.deepEqual(parsePs('  3145728   1:02.50\n'), { memory: 3 * 1024 ** 3, cpuMs: 62_500 });
+  assert.deepEqual(parsePs('2048 1-02:03:04.00'), { memory: 2048 * 1024, cpuMs: (((24 + 2) * 60 + 3) * 60 + 4) * 1000 });
+  assert.equal(parsePs(''), null);
+
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const values = [{ memory: 100, cpuMs: 1 }, { memory: 300, cpuMs: 2 }, { memory: 200, cpuMs: 3 }];
+  const metrics = createMetrics(() => values.shift() ?? null);
+  const samples = [];
+  const watch = metrics.watch(42, { intervalMs: 2000, onSample: (s) => samples.push(s) });
+  await Promise.resolve();
+  for (let i = 0; i < 2; i++) {
+    t.mock.timers.tick(2000);
+    await new Promise((r) => setImmediate(r));
+  }
+  watch.stop();
+  assert.deepEqual(samples.map((s) => [s.memory, s.peak]), [[100, 100], [300, 300], [200, 300]]);
+  assert.equal(await metrics.peak(42), null); // processus terminé
+  assert.deepEqual(metrics.watch('42; rm -rf /', { onSample() {} }).stop(), undefined);
+});
+
+test('mesures du jeu : disponibles sous Linux et macOS', () => {
+  assert.equal(platformFor('linux').processMetrics.supported, true);
+  assert.equal(platformFor('darwin').processMetrics.supported, true);
+  assert.equal(platformFor('freebsd').processMetrics.supported, false);
+});

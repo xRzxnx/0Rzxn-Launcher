@@ -98,6 +98,8 @@ export async function init() {
 }
 
 const REOPEN_VIEWS = new Set(['home', 'mods', 'worlds', 'versions', 'console', 'activity', 'settings']);
+// Installation de Rosetta 2 par Apple (Terminal), pour les anciennes versions sur Mac Apple Silicon.
+const ROSETTA_COMMAND = 'softwareupdate --install-rosetta --agree-to-license';
 
 /** L'écran affiché est tenu à jour dans le moteur (en mémoire seulement), pour rouvrir la fenêtre au même endroit. */
 function rememberView() {
@@ -554,6 +556,23 @@ async function handleLaunchStatus(status) {
       actions: [
         { label: t('actions.repasser_java_automatique'), run: () => { instance.settings.java = 'auto'; saveSettings('instance', instance.id); } },
         { label: t('common.parametres'), run: () => update((s) => { s.view = 'settings'; s.settingsScope = 'instance'; s.selectedId = instance.id; }) },
+      ],
+    });
+  } else if (status.error && status.errorCode === 'ROSETTA_MISSING') {
+    // Mac Apple Silicon sans Rosetta : la commande d'installation d'Apple, prête à coller dans le Terminal.
+    toast({
+      kind: 'error',
+      title: t('actions.besoin_de_rosetta', { version: instance?.version ?? '' }),
+      text: status.error,
+      timeout: 0,
+      actions: [
+        {
+          label: t('actions.copier_la_commande'),
+          run: () => navigator.clipboard.writeText(ROSETTA_COMMAND).then(
+            () => toast({ kind: 'success', title: t('actions.commande_copiee'), text: ROSETTA_COMMAND }),
+            (error) => toastError(t('common.copie_impossible'), error),
+          ),
+        },
       ],
     });
   } else if (status.error) {

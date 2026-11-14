@@ -117,3 +117,23 @@ test('cœurs physiques sous macOS : sysctl hw.physicalcpu', async () => {
   assert.deepEqual(calls, [['/usr/sbin/sysctl', '-n', 'hw.physicalcpu']]);
   assert.equal(await macPhysicalCores({ run: (f, a, o, done) => done(new Error('absent'), '') }), null);
 });
+
+test('Mac Apple Silicon : Java Intel par Rosetta seulement pour les versions sans natives arm64', () => {
+  const { platformKey, hasArm64MacNatives, needsRosetta, rosettaInstalled } = require('../src/main/core/java');
+  const modern = { libraries: [{ name: 'org.lwjgl:lwjgl:3.3.3' }, { name: 'org.lwjgl:lwjgl:3.3.3:natives-macos-arm64' }] };
+  const legacy = { libraries: [{ name: 'org.lwjgl.lwjgl:lwjgl-platform:2.9.4-nightly-20150209', natives: { osx: 'natives-osx' }, downloads: { classifiers: { 'natives-osx': {} } } }] };
+  assert.equal(hasArm64MacNatives(modern), true);
+  assert.equal(hasArm64MacNatives(legacy), false);
+  assert.equal(hasArm64MacNatives({ libraries: [{ name: 'x', downloads: { classifiers: { 'natives-macos-arm64': {} } } }] }), true);
+  const appleSilicon = { platform: 'darwin', arch: 'arm64' };
+  assert.equal(needsRosetta(legacy, appleSilicon), true);
+  assert.equal(needsRosetta(modern, appleSilicon), false);
+  assert.equal(needsRosetta(legacy, { platform: 'darwin', arch: 'x64' }), false);
+  assert.equal(needsRosetta(legacy, { platform: 'linux', arch: 'arm64' }), false);
+  assert.equal(platformKey('x64', 'darwin'), 'mac-os');
+  assert.equal(platformKey('arm64', 'darwin'), 'mac-os-arm64');
+  assert.equal(platformKey('x64', 'win32'), 'windows-x64');
+  assert.equal(platformKey('x64', 'linux'), 'linux');
+  assert.equal(rosettaInstalled((file) => file === '/Library/Apple/usr/share/rosetta/rosetta'), true);
+  assert.equal(rosettaInstalled(() => false), false);
+});

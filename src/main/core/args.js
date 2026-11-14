@@ -40,10 +40,11 @@ function serverTarget(address) {
  * `quickPlay` : { type: 'singleplayer' | 'multiplayer', id } pour entrer directement dans un monde ou sur un serveur ;
  * `quickPlayPath` : fichier où le jeu note le monde ou le serveur rejoint (1.20 et plus).
  * Avant 1.20, seul un serveur peut être rejoint au démarrage (--server / --port).
- * @param {{ version: any, vars: Record<string, any>, settings: any, loggingConfig?: string | null, quickPlay?: { type: string, id: string, name?: string } | null, quickPlayPath?: string | null, javaMajor?: number }} options
+ * `platform` : système du PC (process.platform), remplaçable pour les tests.
+ * @param {{ version: any, vars: Record<string, any>, settings: any, loggingConfig?: string | null, quickPlay?: { type: string, id: string, name?: string } | null, quickPlayPath?: string | null, javaMajor?: number, platform?: string }} options
  * @returns {{ jvm: string[], game: string[], librarySearchPath: string, gc: string, quickPlay: string | null }}
  */
-function buildArguments({ version, vars, settings, loggingConfig, quickPlay = null, quickPlayPath = null, javaMajor = version.javaVersion?.majorVersion ?? 8 }) {
+function buildArguments({ version, vars, settings, loggingConfig, quickPlay = null, quickPlayPath = null, javaMajor = version.javaVersion?.majorVersion ?? 8, platform = process.platform }) {
   const modern = supportsQuickPlay(version);
   const target = quickPlay?.type === 'singleplayer' || quickPlay?.type === 'multiplayer' ? quickPlay : null;
   const features = {
@@ -76,9 +77,12 @@ function buildArguments({ version, vars, settings, loggingConfig, quickPlay = nu
       '-cp',
       vars.classpath,
     ];
-    if (process.platform === 'win32') {
+    if (platform === 'win32') {
       versionJvm.unshift('-XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump');
     }
+    // macOS : la fenêtre du jeu (LWJGL) doit naître sur le premier fil, sinon elle ne s'ouvre jamais. Les versions
+    // récentes l'ont dans leurs arguments (règle « osx »), les anciennes non : le launcher officiel l'ajoute aussi.
+    if (platform === 'darwin') versionJvm.unshift('-XstartOnFirstThread');
   }
   jvm.push(...versionJvm);
 

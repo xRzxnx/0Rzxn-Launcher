@@ -14,11 +14,31 @@ const RUNTIME_INDEX_URL =
   'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
 const MARKER = '.0rzxn-manifest';
 
-function platformKey() {
-  const { platform, arch } = process;
+/** Clé de Mojang pour un système et un processeur (`arch` : celui du PC, ou x64 pour Rosetta). */
+function platformKey(arch = process.arch, platform = process.platform) {
   if (platform === 'win32') return arch === 'arm64' ? 'windows-arm64' : arch === 'ia32' ? 'windows-x86' : 'windows-x64';
   if (platform === 'darwin') return arch === 'arm64' ? 'mac-os-arm64' : 'mac-os';
   return arch === 'ia32' ? 'linux-i386' : 'linux';
+}
+
+/**
+ * La version a-t-elle des natives pour les Mac Apple Silicon ? Oui à partir de Minecraft 1.19 (LWJGL 3.3,
+ * bibliothèques « …:natives-macos-arm64 ») ; avant, les natives n'existent qu'en Intel.
+ */
+function hasArm64MacNatives(version) {
+  return (version.libraries ?? []).some(
+    (lib) => /natives-macos-arm64/.test(lib.name ?? '') || Object.keys(lib.downloads?.classifiers ?? {}).some((key) => /natives-macos-arm64/.test(key)),
+  );
+}
+
+/** Mac Apple Silicon et version sans natives arm64 : le jeu tourne avec un Java Intel, traduit par Rosetta. */
+function needsRosetta(version, { platform = process.platform, arch = process.arch } = {}) {
+  return platform === 'darwin' && arch === 'arm64' && !hasArm64MacNatives(version);
+}
+
+/** Rosetta 2 installé (Apple le place toujours ici). */
+function rosettaInstalled(check = fs.existsSync) {
+  return check('/Library/Apple/usr/share/rosetta/rosetta');
 }
 
 /** Exécutable Java d'un runtime Mojang. Sous Windows, java.exe (et non javaw) pour lire les logs. */
@@ -30,17 +50,21 @@ function runtimeExecutable(dir) {
 
 /**
  * Installe (si besoin) le runtime `component` (ex. java-runtime-epsilon) et renvoie le chemin de Java.
- * Hors connexion, un runtime déjà installé est réutilisé.
+ * Hors connexion, un runtime déjà installé est réutilisé. `arch: 'x64'` sur un Mac Apple Silicon : version Intel
+ * (Rosetta), rangée à part (« jre-legacy-x64 ») pour ne pas écraser la version arm64 du même runtime.
+ * @param {any} dirs
+ * @param {string} component
+ * @param {{ signal?: AbortSignal, onProgress?: (p: any) => void, arch?: string }} [options]
  */
-async function ensureRuntime(dirs, component, { signal, onProgress } = {}) {
-  const dir = path.join(dirs.runtime, component);
+async function ensureRuntime(dirs, component, { signal, onProgress, arch = process.arch } = {}) {
+  const dir = path.join(dirs.runtime, arch === process.arch ? component : `${component}-${arch}`);
   const exe = runtimeExecutable(dir);
   const marker = path.join(dir, MARKER);
   const installed = exists(exe) && exists(marker);
 
   let entry;
   try {
-    entry = (await fetchJson(RUNTIME_INDEX_URL, { signal }))[platformKey()]?.[component]?.[0];
+    entry = (await fetchJson(RUNTIME_INDEX_URL, { signal }))[platformKey(arch)]?.[component]?.[0];
   } catch (error) {
     if (installed) return exe;
     throw new Error(t('java.java_est_pas_encore_installe', { component, message: error.message }));
@@ -241,4 +265,4 @@ async function findSystemJavas(dirs) {
   });
 }
 
-module.exports = { ensureRuntime, probeJava, probeJavaCached, javaBits, JAVA_32_MAX_GB, runtimeExecutable, listRuntimes, findSystemJavas, systemJavaCandidates, javaFolderName, majorOf };
+module.exports = { ensureRuntime, platformKey, hasArm64MacNatives, needsRosetta, rosettaInstalled, probeJava, probeJavaCached, javaBits, JAVA_32_MAX_GB, runtimeExecutable, listRuntimes, findSystemJavas, systemJavaCandidates, javaFolderName, majorOf };
