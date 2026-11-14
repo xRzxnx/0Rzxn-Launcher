@@ -116,17 +116,16 @@ function discordSection(prefs) {
 }
 
 function traySection(prefs) {
+  // Linux : bureau sans zone de notification (GNOME sans extension AppIndicator) → réglages éteints, explication.
+  const available = state.features.tray;
+  const tray = available && prefs.tray;
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'tray-title' },
     h('h2', { class: 'settings__title', id: 'tray-title' }, t('launcher.zone_de_notification')),
-    toggleRow('tray-label', t('launcher.icone_pres_de_horloge'), prefs.tray, () => setLauncherPref({ tray: !prefs.tray })),
-    toggleRow('close-label', t('launcher.fermer_la_fenetre_garde_le'), prefs.tray && prefs.closeToTray, () => setLauncherPref({ closeToTray: !prefs.closeToTray }), !prefs.tray),
-    h(
-      'p',
-      { class: 'hint' },
-      t('launcher.clic_sur_icone_afficher_ou'),
-    ),
+    toggleRow('tray-label', t('launcher.icone_pres_de_horloge'), tray, () => setLauncherPref({ tray: !prefs.tray }), !available),
+    toggleRow('close-label', t('launcher.fermer_la_fenetre_garde_le'), tray && prefs.closeToTray, () => setLauncherPref({ closeToTray: !prefs.closeToTray }), !tray),
+    h('p', { class: 'hint' }, available ? t('launcher.clic_sur_icone_afficher_ou') : t('launcher.zone_notification_indisponible')),
   );
 }
 
@@ -277,7 +276,7 @@ export function renderLauncherTab() {
     'div',
     null,
     h('p', { class: 'settings__scope-note' }, icon('settings', 20), t('launcher.reglages_du_launcher_lui_meme')),
-    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), downloadsSection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
+    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), downloadsSection(prefs), shortcutsSection(), gameSection(prefs), state.features.gpu && gpuSection(prefs)),
   );
 }
 

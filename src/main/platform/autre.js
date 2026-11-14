@@ -16,6 +16,10 @@ module.exports = {
   gpu,
   physicalCores: async () => null,
   processMetrics: { supported: false, watch: () => ({ stop() {} }), peak: async () => null },
+  /** Le bouton « Raccourci » n'est affiché que si le système en a. */
+  shortcutsSupported: false,
+  /** Zone de notification affichable (Linux : selon le bureau). */
+  trayAvailable: async () => true,
   createShortcut: () => {
     throw new Error(t('ipc.les_raccourcis_bureau_sont_disponibles'));
   },

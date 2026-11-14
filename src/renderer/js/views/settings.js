@@ -11,6 +11,14 @@ import { renderLauncherTab, renderStorageTab } from './launcher-settings.js';
 import { loadSystemJavas } from '../launcher-actions.js';
 import { performanceSections } from './performance.js';
 import { titleMenuSection } from './title-menu.js';
+import { OS } from '../os.js';
+
+// Exemple de chemin Java selon le système.
+const JAVA_EXAMPLE = {
+  windows: 'C:\\Program Files\\Java\\jdk-25\\bin\\java.exe',
+  mac: '/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home/bin/java',
+  linux: '/usr/lib/jvm/java-25-openjdk/bin/java',
+};
 
 const AFTER_LAUNCH = [
   { id: 'keep', get label() { return t('settings.rester_ouvert'); } },
@@ -114,7 +122,7 @@ function javaSection({ settings, save }, version) {
           class: 'input input--mono',
           type: 'text',
           spellcheck: 'false',
-          placeholder: 'C:\\Program Files\\Java\\jdk-25\\bin\\java.exe',
+          placeholder: JAVA_EXAMPLE[OS],
           value: settings.javaPath,
           onInput: (e) => { settings.javaPath = e.target.value; save(); },
         }),

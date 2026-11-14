@@ -1,6 +1,7 @@
 // Point d'entrée de l'interface : redessine tout à chaque changement d'état,
 // en conservant le focus, la saisie en cours et la position de défilement.
 // Les écrans migrés vers Preact (PREACT_VIEWS) ne sont pas reconstruits : Preact ne change que ce qui a bougé.
+import './os.js';
 import { renderModal, renderWelcome } from './views/modals.js';
 import { renderToasts } from './views/toasts.js';
 import { renderSidebar, renderTabs, renderTitlebarUpdate, renderTopbarRight } from './views/chrome.js';

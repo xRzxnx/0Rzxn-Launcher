@@ -14,6 +14,7 @@ const argument = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?
 
 contextBridge.exposeInMainWorld('launcher', {
   language: { lang: argument('ui-language') ?? 'fr', locale: argument('ui-locale') ?? 'fr-FR' },
+  platform: argument('ui-platform') ?? 'win32',
   info: invoke('app:info'),
   memory: invoke('system:memory'),
   setLanguage: invoke('launcher:setLanguage'),

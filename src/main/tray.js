@@ -8,9 +8,13 @@ const { Menu, Tray, dialog, nativeImage } = require('electron');
 
 const RECENT = 5;
 
-/** Icône de la zone de notification (tray.png et tray@2x.png), avec une pastille verte pendant une partie. */
-function trayIcon(playing) {
-  return nativeImage.createFromPath(path.join(__dirname, 'assets', playing ? 'tray-playing.png' : 'tray.png'));
+/**
+ * Icône de la zone de notification (tray.png et tray@2x.png), avec une pastille pendant une partie.
+ * macOS : version « Template » noire sur fond transparent, que le système colore selon la barre de menus claire ou sombre.
+ */
+function trayIcon(playing, platform = process.platform) {
+  const name = (playing ? 'tray-playing' : 'tray') + (platform === 'darwin' ? 'Template' : '');
+  return nativeImage.createFromPath(path.join(__dirname, 'assets', `${name}.png`));
 }
 
 const minutesSince = (at) => Math.max(0, Math.round((Date.now() - at) / 60000));
@@ -25,14 +29,22 @@ class LauncherTray {
     this.ctx = ctx;
     this.tray = null;
     this.playing = null;
+    // Faux sous Linux quand le bureau n'affiche pas les icônes de notification (GNOME sans extension AppIndicator).
+    this.available = true;
   }
 
   get enabled() {
     return Boolean(this.tray);
   }
 
+  /** Bureau sans zone de notification : l'icône est retirée et ne revient plus (« Garder en arrière-plan » non plus). */
+  setAvailable(available) {
+    this.available = available;
+    if (!available) this.setEnabled(false);
+  }
+
   setEnabled(on) {
-    if (on && !this.tray) {
+    if (on && !this.tray && this.available) {
       this.tray = new Tray(trayIcon(false));
       this.playing = false;
       this.tray.on('click', () => this.toggleWindow());

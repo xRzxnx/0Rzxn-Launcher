@@ -29,11 +29,15 @@ function createWindow() {
     title: '0Rzxn_ Launcher',
     backgroundColor: COLORS.background,
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: COLORS.titlebar, symbolColor: COLORS.symbols, height: 34 },
+    // macOS : les boutons du système (« feux tricolores ») à gauche, centrés dans la barre de 34 px.
+    // Windows et Linux : boutons dessinés par Electron à droite, sur le décor.
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 14, y: 11 } }
+      : { titleBarOverlay: { color: COLORS.titlebar, symbolColor: COLORS.symbols, height: 34 } }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      // La langue arrive avec la page : le premier rendu est déjà dans la bonne langue.
-      additionalArguments: [`--ui-language=${lang}`, `--ui-locale=${locale}`],
+      // La langue et le système arrivent avec la page : le premier rendu est déjà le bon.
+      additionalArguments: [`--ui-language=${lang}`, `--ui-locale=${locale}`, `--ui-platform=${process.platform}`],
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -136,13 +140,14 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
-    Menu.setApplicationMenu(null);
+    // macOS a toujours une barre de menus : menu minimal (Quitter, copier/coller, fenêtre), libellés traduits par le système.
+    // Sans le menu Édition, Cmd+C et Cmd+V ne marchent pas dans les champs.
+    Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null);
     ipc = registerIpc(() => mainWindow, { open: openWindow, close: closeWindow });
     createWindow();
     planifierNettoyage();
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
+    // macOS : clic sur l'icône du Dock, fenêtre fermée ou cachée.
+    app.on('activate', () => openWindow());
   });
 
   // Fenêtre fermée pendant une partie : le launcher continue (logs, fin de partie, zone de notification).

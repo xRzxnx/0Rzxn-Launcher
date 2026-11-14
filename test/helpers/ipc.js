@@ -40,6 +40,8 @@ platform.processMetrics = {
     return gameMetrics.peaks.get(pid) ?? null;
   },
 };
+// Zone de notification : toujours là dans les tests, quel que soit le bureau de la machine (CI Linux sans session).
+platform.trayAvailable = async () => true;
 
 const { registerIpc } = require('../../src/main/ipc');
 

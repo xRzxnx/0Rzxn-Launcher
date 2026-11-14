@@ -1,6 +1,7 @@
 // Actions de l'interface : elles appellent le processus principal puis mettent l'état à jour.
 import { t } from './i18n.js';
 import { api } from './api.js';
+import { OS } from './os.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
 import { listenToTasks } from './activity-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
@@ -63,6 +64,7 @@ export async function init() {
       s.appVersion = info.version;
       s.microsoftReady = info.microsoftReady;
       s.discordReady = info.discordReady;
+      if (info.features) s.features = info.features;
       s.globalSettings = settings;
       s.run = launchState.run;
       s.logs = launchState.logs;
@@ -219,8 +221,14 @@ export async function deleteInstance(id) {
 }
 
 export function createShortcut(id) {
+  // Windows : fichier .lnk sur le bureau. Linux : entrée dans le menu des applications, au nom de l'instance.
+  const name = state.instances.find((i) => i.id === id)?.name ?? id;
   api.createShortcut(id).then(
-    (file) => toast({ kind: 'success', title: t('actions.raccourci_cree'), text: t('actions.est_sur_ton_bureau_il', { file: file.replace(/\.lnk$/, '') }) }),
+    (file) => toast({
+      kind: 'success',
+      title: t('actions.raccourci_cree'),
+      text: OS === 'linux' ? t('actions.raccourci_menu_applications', { name }) : t('actions.est_sur_ton_bureau_il', { file: file.replace(/\.lnk$/, '') }),
+    }),
     (error) => toastError(t('actions.raccourci_impossible'), error),
   );
 }

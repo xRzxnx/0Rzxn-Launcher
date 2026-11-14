@@ -65,13 +65,18 @@
   box-shadow: var(--glass-shadow);
 }
 
-/* Barre de titre (les boutons de fenêtre natifs sont dessinés par Windows à droite) */
+/* Barre de titre (les boutons de fenêtre sont dessinés par Electron à droite sous Windows et Linux) */
 .titlebar {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
   padding: 0 150px 0 18px;
   -webkit-app-region: drag;
+}
+
+/* macOS : les « feux tricolores » sont à gauche (main.js trafficLightPosition), rien à droite */
+.os-mac .titlebar {
+  padding: 0 18px 0 84px;
 }
 
 .titlebar__brand {
