@@ -203,7 +203,7 @@ module.exports = {
   'ipc.java_inconnu': "Java desconocido.",
   'ipc.la_connexion_microsoft_est_pas': "El inicio de sesión de Microsoft aún no está activado: falta el identificador de la aplicación de Azure (consulta docs/MICROSOFT.md).",
   'ipc.lancer_avec_0rzxn_launcher': "Iniciar {name} con 0Rzxn_ Launcher",
-  'ipc.le_chiffrement_de_windows_est': "El cifrado de Windows no está disponible: no se puede guardar la sesión.",
+  'ipc.le_chiffrement_de_windows_est': "El cifrado del sistema no está disponible: no se puede guardar la sesión.",
   'ipc.le_compte_choisi_pour_cette': "La cuenta elegida para esta instancia ya no existe: se usa la cuenta activa.",
   'ipc.le_launcher_reste_ouvert_ici': "El launcher sigue abierto aquí. Haz clic derecho en el icono para salir.",
   'ipc.le_temps_de_jeu_de': "El tiempo de juego de esta partida no se guardará y la consola dejará de seguirla.",

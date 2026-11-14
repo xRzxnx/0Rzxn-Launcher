@@ -203,7 +203,7 @@ module.exports = {
   'ipc.java_inconnu': "Unknown Java.",
   'ipc.la_connexion_microsoft_est_pas': "Microsoft sign-in isn't enabled yet: the Azure application ID is missing (see docs/MICROSOFT.md).",
   'ipc.lancer_avec_0rzxn_launcher': "Launch {name} with 0Rzxn_ Launcher",
-  'ipc.le_chiffrement_de_windows_est': "Windows encryption isn't available: the session can't be saved.",
+  'ipc.le_chiffrement_de_windows_est': "Your system's encryption isn't available: the session can't be saved.",
   'ipc.le_compte_choisi_pour_cette': "The account chosen for this instance no longer exists: using the active account.",
   'ipc.le_launcher_reste_ouvert_ici': "The launcher stays open here. Right-click the icon to quit it.",
   'ipc.le_temps_de_jeu_de': "This game's playtime won't be saved and the console will stop following it.",

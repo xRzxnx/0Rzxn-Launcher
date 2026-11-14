@@ -434,7 +434,11 @@ function accountsDialog() {
                   'span',
                   { class: `account-row__type${a.needsLogin ? ' hint--warn' : ''}` },
                   a.type === 'microsoft' && icon('microsoft', 12),
-                  a.type === 'offline' ? offlineLine(a) : a.needsLogin ? t('modals.session_expiree_reconnecte_toi') : t('common.compte_microsoft'),
+                  a.type === 'offline'
+                    ? offlineLine(a)
+                    : a.needsLogin
+                      ? t(a.sessionOnly ? 'modals.reconnecte_toi_session_non_enregistree' : 'modals.session_expiree_reconnecte_toi')
+                      : a.sessionOnly ? t('modals.session_gardee_fermeture') : t('common.compte_microsoft'),
                 ),
               ),
               a.needsLogin
@@ -450,6 +454,19 @@ function accountsDialog() {
               ),
             );
           }),
+        ),
+      // Linux sans trousseau : la session Microsoft n'est pas écrite sur le disque (core/accounts.js memoryOnly).
+      state.accounts.some((a) => a.sessionOnly) &&
+        h(
+          'div',
+          { class: 'notice notice--warn', style: 'margin:0' },
+          icon('lock'),
+          h(
+            'div',
+            null,
+            h('p', { style: 'margin:0' }, t('modals.pas_de_trousseau')),
+            h('details', { style: 'margin-top:6px' }, h('summary', null, t('modals.comment_faire')), h('p', { style: 'margin:6px 0 0' }, t('modals.installer_un_trousseau'))),
+          ),
         ),
       h('h2', { class: 'label', style: 'margin:4px 0 0' }, t('common.ajouter_un_compte')),
       microsoftButton(),

@@ -2,7 +2,7 @@
 'use strict';
 
 // Comptes hors-ligne et Microsoft. Les jetons Microsoft sont chiffrés par un « coffre » fourni
-// par Electron (safeStorage, lié à la session Windows) : ce module reste en Node pur.
+// par Electron (safeStorage : DPAPI de Windows, trousseau de macOS ou de Linux) : ce module reste en Node pur.
 const { t } = require('../i18n');
 const crypto = require('node:crypto');
 const path = require('node:path');
@@ -25,10 +25,15 @@ const PLAIN_VAULT = {
   decrypt: (data) => Buffer.from(data.replace(/^plain:/, ''), 'base64').toString('utf8'),
 };
 
+// Session gardée en mémoire seulement (système sans vraie protection des jetons) : jamais écrite sur le disque.
+const MEMORY = 'mem:';
+
 class AccountStore {
   /**
    * @param {string} configDir
-   * @param {{ vault?: { encrypt(text: string): string, decrypt(data: string): string }, renew?: ((refreshToken: string, redirect?: string) => Promise<any>) | null }} [options]
+   * @param {{ vault?: { encrypt(text: string): string, decrypt(data: string): string, persistent?: () => boolean }, renew?: ((refreshToken: string, redirect?: string) => Promise<any>) | null }} [options]
+   *   vault.persistent() faux (Linux sans trousseau) : les jetons Microsoft restent en mémoire, accounts.json garde
+   *   le compte sans eux, marqué « à reconnecter » au prochain démarrage.
    *   renew : renouvelle une session Microsoft (core/microsoft.js renew, avec le client ID), selon l'adresse de retour du compte.
    */
   constructor(configDir, { vault = PLAIN_VAULT, renew = null } = {}) {
@@ -38,15 +43,42 @@ class AccountStore {
     this.data = readJson(this.file, { activeId: null, accounts: [] });
   }
 
+  /** Les jetons ne peuvent pas être protégés sur le disque : ils restent en mémoire jusqu'à la fermeture du launcher. */
+  memoryOnly() {
+    return this.vault.persistent ? !this.vault.persistent() : false;
+  }
+
   save() {
-    writeJson(this.file, this.data);
+    if (!this.memoryOnly()) {
+      writeJson(this.file, this.data);
+      return;
+    }
+    const accounts = this.data.accounts.map(({ secrets, ...account }) => (account.type === 'microsoft' ? { ...account, needsLogin: true } : account));
+    writeJson(this.file, { ...this.data, accounts });
   }
 
   list() {
+    const sessionOnly = this.memoryOnly();
     return {
       activeId: this.data.activeId,
-      accounts: this.data.accounts.map(({ id, type, name, uuid, needsLogin, look }) => ({ id, type, name, uuid, needsLogin: Boolean(needsLogin), look: look ?? null })),
+      accounts: this.data.accounts.map(({ id, type, name, uuid, needsLogin, look }) => ({
+        id,
+        type,
+        name,
+        uuid,
+        needsLogin: Boolean(needsLogin),
+        look: look ?? null,
+        ...(sessionOnly && type === 'microsoft' ? { sessionOnly: true } : {}),
+      })),
     };
+  }
+
+  encryptSecrets(text) {
+    return this.memoryOnly() ? MEMORY + Buffer.from(text, 'utf8').toString('base64') : this.vault.encrypt(text);
+  }
+
+  decryptSecrets(data) {
+    return data?.startsWith(MEMORY) ? Buffer.from(data.slice(MEMORY.length), 'base64').toString('utf8') : this.vault.decrypt(data);
   }
 
   all() {
@@ -113,7 +145,7 @@ class AccountStore {
       xuid: session.xuid,
       // Connexion faite dans le navigateur (phase 7) : le renouvellement utilise la même adresse de retour.
       ...(session.redirect === 'loopback' ? { redirect: 'loopback' } : {}),
-      secrets: this.vault.encrypt(
+      secrets: this.encryptSecrets(
         JSON.stringify({ refreshToken: session.refreshToken, accessToken: session.accessToken, expiresAt: session.expiresAt }),
       ),
     };
@@ -150,7 +182,7 @@ class AccountStore {
   async freshSecrets(account, log = () => {}, { force = false } = {}) {
     let secrets;
     try {
-      secrets = JSON.parse(this.vault.decrypt(account.secrets));
+      secrets = JSON.parse(this.decryptSecrets(account.secrets));
     } catch {
       account.needsLogin = true;
       this.save();
