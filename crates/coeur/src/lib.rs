@@ -19,6 +19,7 @@ pub mod loaders;
 pub mod mesures;
 pub mod nbt;
 pub mod net;
+pub mod partie;
 pub mod performances;
 pub mod reglages;
 pub mod regles;
