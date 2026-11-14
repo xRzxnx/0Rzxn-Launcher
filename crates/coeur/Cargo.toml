@@ -8,3 +8,20 @@ license.workspace = true
 commun.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+regex = "1.13.1"
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+flate2 = "1.1.10"
+crc32fast = "1.5.3"
+bytes = "1.12.1"
+fastrand = "2.5.0"
+futures-util = { version = "0.3.34", default-features = false, features = ["std", "alloc"] }
+sha1 = "0.11.0"
+sha2 = "0.11.1"
+httpdate = "1.0.3"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "http2", "system-proxy"] }
+tokio = { version = "1.54.1", features = ["fs", "io-util", "macros", "rt-multi-thread", "sync", "time"] }
+tokio-util = "0.7.20"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["net"] }

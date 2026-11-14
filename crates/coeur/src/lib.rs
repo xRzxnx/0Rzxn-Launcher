@@ -1,18 +1,20 @@
 //! Logique du launcher, sans Tauri : testable avec `cargo test`.
-//! R0 : lecture seule. Aucune fonction de ce crate n'écrit sur le disque.
 
+pub mod base;
 pub mod chemins;
 pub mod comptes;
+pub mod empreintes;
+pub mod erreur;
+pub mod fichiers;
+pub mod i18n;
 pub mod instances;
+pub mod journal;
+pub mod nbt;
+pub mod net;
 pub mod reglages;
-
-use serde::de::DeserializeOwned;
-use std::path::Path;
-
-/// Lit un fichier JSON ; None s'il manque ou est illisible (comme readJson côté Electron).
-pub fn lire_json<T: DeserializeOwned>(fichier: &Path) -> Option<T> {
-    serde_json::from_slice(&std::fs::read(fichier).ok()?).ok()
-}
+pub mod telechargement;
+pub mod temporaires;
+pub mod zip;
 
 #[cfg(test)]
 pub(crate) mod essai {
@@ -39,3 +41,6 @@ pub(crate) mod essai {
         }
     }
 }
+
+#[cfg(test)]
+pub(crate) mod essai_http;

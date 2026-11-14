@@ -485,6 +485,7 @@
  "launcher.version_inconnue": "unknown version",
  "launcher.zone_de_notification": "System tray",
  "launcher.zone_notification_indisponible": "Unavailable: your desktop doesn't show notification icons (on GNOME you need the AppIndicator extension). Closing the window quits the launcher.",
+ "main.ecran_pas_encore_porte": "Screen not ported to Rust yet.",
  "main.le_launcher_pas_pu_demarrer": "The launcher couldn't start",
  "mod_sets.disparait_de_la_liste_aucun": "“{name}” disappears from the list. No mod is deleted, enabled or disabled: they stay as they are.",
  "mod_sets.donne_un_nom_ton_ensemble": "Give your set a name.",

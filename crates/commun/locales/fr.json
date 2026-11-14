@@ -485,6 +485,7 @@
  "launcher.version_inconnue": "version inconnue",
  "launcher.zone_de_notification": "Zone de notification",
  "launcher.zone_notification_indisponible": "Indisponible : ton bureau n'affiche pas les icônes de notification (sous GNOME, il faut l'extension AppIndicator). Fermer la fenêtre quitte donc le launcher.",
+ "main.ecran_pas_encore_porte": "Écran pas encore porté en Rust.",
  "main.le_launcher_pas_pu_demarrer": "Le launcher n’a pas pu démarrer",
  "mod_sets.disparait_de_la_liste_aucun": "« {name} » disparaît de la liste. Aucun mod n’est supprimé, activé ou désactivé : ils restent comme ils sont.",
  "mod_sets.donne_un_nom_ton_ensemble": "Donne un nom à ton ensemble.",

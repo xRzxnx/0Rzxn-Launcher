@@ -13,7 +13,7 @@ struct Fichier {
 
 /// (comptes, compte actif). Le compte actif doit exister dans la liste.
 pub fn lire(donnees: &Path) -> (Vec<Compte>, Option<String>) {
-    let f: Fichier = crate::lire_json(&donnees.join("accounts.json")).unwrap_or_default();
+    let f: Fichier = crate::fichiers::lire_json(&donnees.join("accounts.json")).unwrap_or_default();
     let actif = f.active_id.filter(|id| f.accounts.iter().any(|c| &c.id == id));
     (f.accounts, actif)
 }

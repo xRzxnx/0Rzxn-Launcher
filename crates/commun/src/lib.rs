@@ -19,19 +19,104 @@ pub fn loader_name(loader: &str) -> &'static str {
     }
 }
 
-/// Réglages d'une instance (seuls ceux que l'accueil affiche pour l'instant).
+/// Réglages d'une instance, et réglages par défaut des nouvelles instances (DEFAULT_SETTINGS de core/instances.js).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Reglages {
+    /// Mémoire en Go (0,5 à 64).
     pub ram: f64,
+    /// auto | custom
     pub java: String,
     pub java_path: String,
+    pub width: u32,
+    pub height: u32,
+    pub fullscreen: bool,
+    pub jvm_args: String,
+    pub low_ram_warning: bool,
+    /// keep | minimize | hide
+    pub after_launch: String,
+    /// auto | g1 | zgc | none
+    pub jvm_preset: String,
+    /// normal | above
+    pub priority: String,
+    pub backup_auto: bool,
+    /// never | hardcore | always
+    pub backup_launch: String,
+    pub backup_keep: u32,
 }
 
 impl Default for Reglages {
     fn default() -> Self {
-        Self { ram: 4.0, java: "auto".into(), java_path: String::new() }
+        Self {
+            ram: 4.0,
+            java: "auto".into(),
+            java_path: String::new(),
+            width: 1280,
+            height: 720,
+            fullscreen: false,
+            jvm_args: String::new(),
+            low_ram_warning: true,
+            after_launch: "minimize".into(),
+            jvm_preset: "auto".into(),
+            priority: "normal".into(),
+            backup_auto: true,
+            backup_launch: "hardcore".into(),
+            backup_keep: 5,
+        }
     }
+}
+
+/// Téléchargements simultanés, au total et par serveur.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitesTelechargement {
+    pub concurrency: u32,
+    pub per_host: u32,
+}
+
+/// Réglages du launcher lui-même (Paramètres › Launcher), LAUNCHER_DEFAULTS de services/settings.js.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReglagesLauncher {
+    pub language: String,
+    pub accent: String,
+    pub discord: bool,
+    pub discord_show_name: bool,
+    pub tray: bool,
+    pub close_to_tray: bool,
+    pub light_mode: bool,
+    pub gpu_high_performance: bool,
+    pub auto_update: bool,
+    pub update_channel: String,
+    pub downloads: LimitesTelechargement,
+}
+
+impl Default for ReglagesLauncher {
+    fn default() -> Self {
+        Self {
+            language: "auto".into(),
+            accent: "violet".into(),
+            discord: false,
+            discord_show_name: true,
+            tray: true,
+            close_to_tray: false,
+            light_mode: true,
+            gpu_high_performance: false,
+            auto_update: true,
+            update_channel: "stable".into(),
+            downloads: LimitesTelechargement { concurrency: 16, per_host: 8 },
+        }
+    }
+}
+
+/// Dernier lancement d'une instance (launcher.db) : préparation, jusqu'au menu, pic de mémoire.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DernierLancement {
+    pub started_at: i64,
+    pub prepare_ms: Option<i64>,
+    pub menu_ms: Option<i64>,
+    pub peak_memory: Option<i64>,
 }
 
 /// Temps de jeu suivi : minutes par jour (« 2026-11-03 »), nombre de parties, plus longue partie.
@@ -97,6 +182,9 @@ pub struct Instance {
     /// Mods actifs (fichiers .jar du dossier mods).
     #[serde(default)]
     pub mods_actifs: Option<u32>,
+    /// Dernier lancement noté dans launcher.db.
+    #[serde(default)]
+    pub last_launch: Option<DernierLancement>,
 }
 
 fn icone_par_defaut() -> String {
