@@ -82,10 +82,15 @@ class LaunchSession extends EventEmitter {
     }
   }
 
-  stop() {
+  stop(graceMs = 10_000) {
     this.stopped = true;
-    if (this.child) this.child.kill();
-    else this.controller.abort();
+    const child = this.child;
+    if (!child) return this.controller.abort();
+    child.kill();
+    // Linux et macOS : SIGTERM laisse la JVM finir, mais un jeu bloqué (fenêtre d'erreur) ne quitte jamais.
+    setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }, graceMs).unref();
   }
 
   async run() {

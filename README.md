@@ -34,7 +34,7 @@ Get the latest version from the [releases page](https://github.com/xRzxnx/0Rzxn-
 | macOS, Apple Silicon | `0Rzxn_-Launcher-<version>-arm64.dmg` | Experimental, not signed by Apple. |
 | macOS, Intel | `0Rzxn_-Launcher-<version>-x64.dmg` | Experimental, not signed by Apple. |
 
-**Linux:** make the file executable (`chmod +x 0Rzxn_-Launcher-*.AppImage`) and open it. AppImages need FUSE 2: install `libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later). Your Microsoft session is kept between launches only if a keyring is installed (GNOME Keyring or KWallet); without one, you sign in again each time.
+**Linux:** make the file executable (`chmod +x 0Rzxn_-Launcher-*.AppImage`) and open it. AppImages need FUSE 2: install `libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later). Minecraft versions older than 1.13 need `xrandr` (package `x11-xserver-utils`, already there on most desktops). Your Microsoft session is kept between launches only if a keyring is installed (GNOME Keyring or KWallet); without one, you sign in again each time.
 
 **macOS:** open the dmg and drag the launcher into Applications. The app isn't signed by Apple, so macOS blocks the first launch: open **System Settings › Privacy & Security** and click **Open Anyway**. Updates aren't automatic on macOS: the launcher tells you when a new version is out and opens its page. On Apple Silicon Macs, Minecraft versions older than 1.19 run through Rosetta.
 

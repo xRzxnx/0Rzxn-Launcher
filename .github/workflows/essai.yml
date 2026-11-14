@@ -34,7 +34,8 @@ jobs:
 
       - name: Linux packages (screen, OpenGL, FUSE, screenshots)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb libfuse2t64 libgl1-mesa-dri imagemagick
+        # xrandr: LWJGL 2 (Minecraft before 1.13) reads the screen modes from it
+        run: sudo apt-get update && sudo apt-get install -y xvfb x11-xserver-utils libfuse2t64 libgl1-mesa-dri imagemagick
 
       - name: Build (Linux)
         if: runner.os == 'Linux'
@@ -52,7 +53,10 @@ jobs:
 
       - name: Play (macOS)
         if: runner.os == 'macOS'
+        env:
+          ESSAI_SANS_OPENGL: '1' # the macOS runners have no OpenGL: the game starts but can't open its window
         run: |
+          sudo softwareupdate --install-rosetta --agree-to-license || true
           hdiutil attach dist/*.dmg -mountpoint /tmp/dmg -nobrowse
           cp -R /tmp/dmg/*.app /tmp/
           hdiutil detach /tmp/dmg

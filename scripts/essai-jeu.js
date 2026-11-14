@@ -18,6 +18,9 @@ const CASES = [
 ];
 // Le jeu a chargé ses textures : le menu titre s'affiche juste après.
 const MENU = /Created: \d+x\d+(x\d+)? .*atlas/;
+// Les Mac de la CI n'ont pas d'OpenGL : le jeu ne peut pas ouvrir sa fenêtre, on vérifie seulement qu'il démarre
+// et tient 20 s (Java, natives, arguments, Rosetta).
+const UNTIL_RUNNING = process.env.ESSAI_SANS_OPENGL === '1';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -99,7 +102,7 @@ async function play(run, test) {
 
   const start = Date.now();
   const lines = [];
-  let ran = false;
+  let ran = 0;
   let menu = false;
   while (Date.now() - start < 10 * 60_000) {
     await sleep(2000);
@@ -108,8 +111,8 @@ async function play(run, test) {
       const text = typeof line === 'string' ? line : JSON.stringify(line);
       if (!lines.includes(text)) lines.push(text);
     }
-    if (state.run?.phase === 'running') ran = true;
-    if (lines.some((l) => MENU.test(l))) {
+    if (state.run?.phase === 'running') ran ||= Date.now();
+    if (lines.some((l) => MENU.test(l)) || (UNTIL_RUNNING && ran && state.run && Date.now() - ran > 20_000)) {
       menu = true;
       break;
     }
@@ -119,7 +122,8 @@ async function play(run, test) {
   screenshot(path.join(shots, `${process.platform}-${test.name}.png`));
   await run('window.launcher.launch.stop()').catch(() => {});
   console.log(lines.slice(-40).join('\n'));
-  console.log(`== ${test.name} : ${menu ? 'MENU ATTEINT' : ran ? 'jeu lancé, menu non détecté' : 'ÉCHEC avant le jeu'} en ${Math.round((Date.now() - start) / 1000)} s`);
+  const verdict = menu ? (UNTIL_RUNNING ? 'JEU DÉMARRÉ (sans OpenGL)' : 'MENU ATTEINT') : ran ? 'jeu lancé, menu non détecté' : 'ÉCHEC avant le jeu';
+  console.log(`== ${test.name} : ${verdict} en ${Math.round((Date.now() - start) / 1000)} s`);
   for (let i = 0; i < 30 && (await run('window.launcher.launch.state()')).run; i++) await sleep(1000);
   return menu;
 }

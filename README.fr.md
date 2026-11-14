@@ -15,7 +15,7 @@ La dernière version est sur la [page des releases](https://github.com/xRzxnx/0R
 | macOS, Apple Silicon | `0Rzxn_-Launcher-<version>-arm64.dmg` | Expérimental, non signé par Apple. |
 | macOS, Intel | `0Rzxn_-Launcher-<version>-x64.dmg` | Expérimental, non signé par Apple. |
 
-**Linux** : rends le fichier exécutable (`chmod +x 0Rzxn_-Launcher-*.AppImage`) puis ouvre-le. Les AppImage ont besoin de FUSE 2 : installe `libfuse2` (`libfuse2t64` depuis Ubuntu 24.04). Ta session Microsoft n'est gardée d'un lancement à l'autre que si un trousseau est installé (GNOME Keyring ou KWallet) ; sinon, il faut se reconnecter à chaque fois.
+**Linux** : rends le fichier exécutable (`chmod +x 0Rzxn_-Launcher-*.AppImage`) puis ouvre-le. Les AppImage ont besoin de FUSE 2 : installe `libfuse2` (`libfuse2t64` depuis Ubuntu 24.04). Les versions de Minecraft d'avant 1.13 ont besoin de `xrandr` (paquet `x11-xserver-utils`, déjà là sur la plupart des bureaux). Ta session Microsoft n'est gardée d'un lancement à l'autre que si un trousseau est installé (GNOME Keyring ou KWallet) ; sinon, il faut se reconnecter à chaque fois.
 
 **macOS** : ouvre le dmg et glisse le launcher dans Applications. L'app n'est pas signée par Apple, donc macOS bloque le premier lancement : ouvre **Réglages Système › Confidentialité et sécurité** et clique sur **Ouvrir quand même**. Les mises à jour ne sont pas automatiques sur Mac : le launcher prévient quand une version sort et ouvre sa page. Sur les Mac Apple Silicon, les versions de Minecraft d'avant 1.19 passent par Rosetta.
 
