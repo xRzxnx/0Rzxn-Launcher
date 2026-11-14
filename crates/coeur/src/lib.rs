@@ -1,5 +1,6 @@
 //! Logique du launcher, sans Tauri : testable avec `cargo test`.
 
+pub mod arguments;
 pub mod base;
 pub mod chemins;
 pub mod comptes;
@@ -7,13 +8,20 @@ pub mod empreintes;
 pub mod erreur;
 pub mod fichiers;
 pub mod i18n;
+pub mod installation;
 pub mod instances;
+pub mod java;
+pub mod jeu;
 pub mod journal;
 pub mod nbt;
 pub mod net;
+pub mod performances;
 pub mod reglages;
+pub mod regles;
+pub mod sortie_jeu;
 pub mod telechargement;
 pub mod temporaires;
+pub mod versions;
 pub mod zip;
 
 #[cfg(test)]
