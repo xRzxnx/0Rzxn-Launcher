@@ -987,6 +987,8 @@ export default {
   'update.wait_game': "La {version} espera a que termine tu partida",
   'update.wait_install': "La {version} espera a que termine la instalación",
   'update.whats_new': "Ver las novedades",
+  'update.download_version': "Descargar la {version}",
+  'update.available_mac': "La {version} está disponible. En Mac se instala a mano: descarga el archivo .dmg, ábrelo y arrastra 0Rzxn_ Launcher a Aplicaciones para reemplazar la versión anterior. Tus instancias y tus mundos no cambian.",
   'versions.aucune_pour_instant': "Ninguna por ahora",
   'versions.aucune_version_ne_correspond': "Ninguna versión coincide.",
   'versions.aucune_version_selectionnee': "Ninguna versión seleccionada",

@@ -7,7 +7,7 @@ import { formatSize, h, icon } from '../dom.js';
 import { cleanStorage, loadStorage, refreshDiscord, removeRuntime, selectedCleanup, setLauncherPref, toggleCleanup } from '../launcher-actions.js';
 import { SHORTCUTS } from '../shortcuts.js';
 import { ACCENTS, accentTokens, applyAccent } from '../theme.js';
-import { checkUpdate, installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
+import { RELEASES_URL, checkUpdate, downloadUpdate, installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
 import { selectedInstance, state, tasksBusy, toastError, update } from '../state.js';
 import { close, dialog } from './modals.js';
 import { languageSection } from './language.js';
@@ -129,8 +129,6 @@ function traySection(prefs) {
   );
 }
 
-const RELEASES_URL = 'https://github.com/xRzxnx/0Rzxn-Launcher/releases';
-
 function checkedAgo(time) {
   if (!time) return '';
   const minutes = Math.floor((Date.now() - time) / 60000);
@@ -170,6 +168,13 @@ function updateStatus(u) {
         h('button', { class: 'btn btn--primary', disabled: Boolean(waiting), onClick: installUpdate }, t('update.restart')),
       );
     }
+    case 'available':
+      return h(
+        'div',
+        null,
+        line(t('update.available_mac', { version: u.version })),
+        h('button', { class: 'btn btn--primary', onClick: () => downloadUpdate(u.version) }, icon('download'), t('update.download_version', { version: u.version })),
+      );
     case 'error':
       return line(u.error, 'hint hint--error');
     default:

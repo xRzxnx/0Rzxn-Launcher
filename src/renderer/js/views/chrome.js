@@ -7,7 +7,7 @@ import { pendingModUpdates } from '../mods-actions.js';
 import { LOADER_NAMES, LOADERS } from '../data.js';
 import { blockIcon, h, icon } from '../dom.js';
 import { openWizard } from '../wizard-actions.js';
-import { installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
+import { downloadUpdate, installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
 import { skinHead } from '../skin-view.js';
 import { activeAccount, instanceStatus, state, update } from '../state.js';
 import { activitySummary } from '../task-labels.js';
@@ -58,6 +58,9 @@ export function renderTabs() {
 /** Bouton de la barre de titre : visible seulement quand une mise à jour est prête. */
 export function renderTitlebarUpdate() {
   const u = state.launcherUpdate;
+  if (u?.status === 'available') {
+    return [h('button', { class: 'update-pill', onClick: () => downloadUpdate(u.version) }, icon('download'), t('update.download_version', { version: u.version }))];
+  }
   if (u?.status !== 'ready') return [];
   const waiting = updateBlocker();
   return [

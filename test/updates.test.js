@@ -129,3 +129,29 @@ test('les autres erreurs automatiques restent silencieuses', async () => {
   assert.equal((await m.check()).status, 'idle');
   assert.equal((await m.check({ manual: true })).error, tr('update.err_network'));
 });
+
+test('macOS : la nouvelle version est seulement annoncée, jamais téléchargée ni installée', async () => {
+  const updater = fakeUpdater();
+  let downloads = 0;
+  updater.downloadUpdate = async () => { downloads += 1; };
+  const settings = { channel: 'stable' };
+  const m = new UpdateManager({ supported: true, canInstall: false, loadUpdater: () => updater, isBusy: () => false, isAutomatic: () => true, channel: () => settings.channel, onState() {} });
+  updater.next = '0.6.0';
+  const state = await m.check({ manual: true });
+  assert.equal(state.status, 'available');
+  assert.equal(state.version, '0.6.0');
+  assert.equal(downloads, 0);
+  assert.throws(() => m.install(), { message: tr('update.none_ready') });
+  // Une version plus récente sort : la recherche suivante la trouve.
+  updater.next = '0.6.1';
+  assert.equal((await m.check()).version, '0.6.1');
+  // Bêta annoncée puis retour en stable : elle n'est plus proposée.
+  settings.channel = 'beta';
+  updater.next = '0.7.0-beta.1';
+  assert.equal((await m.check()).status, 'available');
+  settings.channel = 'stable';
+  updater.next = null;
+  m.channelChanged();
+  await new Promise((r) => setImmediate(r));
+  assert.notEqual(m.state.version, '0.7.0-beta.1');
+});

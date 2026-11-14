@@ -12,12 +12,14 @@ const isPrerelease = (version) => /^\d+\.\d+\.\d+-/.test(String(version ?? ''));
 
 /**
  * États : idle (rien de connu) | checking | current (à jour) | waiting (version trouvée, le jeu tourne)
- * | downloading | ready (installable) | error (après une recherche demandée, ou une signature refusée).
+ * | downloading | ready (installable) | available (macOS : à télécharger soi-même)
+ * | error (après une recherche demandée, ou une signature refusée).
  */
 class UpdateManager {
   /**
    * @param {object} options
    * @param {boolean} options.supported faux hors du launcher installé
+   * @param {boolean} [options.canInstall] faux sur macOS (pas de signature Apple) : état « available » au lieu du téléchargement
    * @param {() => object} options.loadUpdater charge electron-updater à la première recherche
    * @param {() => boolean} options.isBusy partie, lancement ou installation en cours
    * @param {() => boolean} options.isAutomatic réglage « rechercher automatiquement »
@@ -25,8 +27,8 @@ class UpdateManager {
    * @param {(state: object) => void} options.onState reçoit chaque changement d'état
    * @param {object} [options.log] info, warn, error
    */
-  constructor({ supported, loadUpdater, isBusy, isAutomatic, channel = () => 'stable', onState, log = null, now = Date.now, timers = { setTimeout, clearTimeout, setInterval, clearInterval } }) {
-    Object.assign(this, { loadUpdater, isBusy, isAutomatic, channel, onState, log, now, timers });
+  constructor({ supported, canInstall = true, loadUpdater, isBusy, isAutomatic, channel = () => 'stable', onState, log = null, now = Date.now, timers = { setTimeout, clearTimeout, setInterval, clearInterval } }) {
+    Object.assign(this, { canInstall, loadUpdater, isBusy, isAutomatic, channel, onState, log, now, timers });
     this.state = { supported, status: 'idle', version: null, percent: 0, transferred: 0, total: 0, checkedAt: null, error: null };
     this.updater = null;
     this.available = false;
@@ -129,6 +131,12 @@ class UpdateManager {
         this.set({ status: 'error', version, checkedAt, error: friendlyError({ code: 'ERR_UPDATER_INVALID_SIGNATURE' }, version) });
         return { ...this.state };
       }
+      // macOS sans signature Apple : electron-updater ne peut pas installer, la version est seulement annoncée.
+      if (!this.canInstall) {
+        this.manual = false;
+        this.set({ status: 'available', version, checkedAt });
+        return { ...this.state };
+      }
       this.available = true;
       this.set({ version, checkedAt });
       await this.download();
@@ -164,7 +172,7 @@ class UpdateManager {
   channelChanged() {
     if (!this.state.supported) return;
     const { status, version } = this.state;
-    if ((status === 'ready' || status === 'waiting') && !this.accepts(version)) {
+    if ((status === 'ready' || status === 'waiting' || status === 'available') && !this.accepts(version)) {
       if (this.updater) this.updater.autoInstallOnAppQuit = false;
       this.available = false;
       this.set({ status: 'idle', version: null, percent: 0, error: null });

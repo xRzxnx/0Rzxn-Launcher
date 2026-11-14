@@ -5,12 +5,12 @@
 <h1 align="center">0Rzxn_ Launcher</h1>
 
 <p align="center">
-  A fast, modern launcher for <b>Minecraft: Java Edition</b> on Windows.<br>
+  A fast, modern launcher for <b>Minecraft: Java Edition</b> on Windows, Linux and macOS.<br>
   Vanilla, mod loaders, Modrinth mods and modpacks, all in one dark, clean interface.
 </p>
 
 <p align="center">
-  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6">
+  <img alt="Platforms: Windows, Linux, macOS" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-0078D6">
   <img alt="Built with Electron" src="https://img.shields.io/badge/built%20with-Electron-47848F">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green">
 </p>
@@ -22,6 +22,21 @@
 *Version française : [README.fr.md](README.fr.md)*
 
 ---
+
+## Download
+
+Get the latest version from the [releases page](https://github.com/xRzxnx/0Rzxn-Launcher/releases/latest).
+
+| System | File | |
+|---|---|---|
+| Windows 10 or 11 (x64) | `0Rzxn_-Launcher-Setup-<version>.exe` | Installs for the current user, updates itself. |
+| Linux (x64) | `0Rzxn_-Launcher-<version>.AppImage` | Experimental, updates itself. |
+| macOS, Apple Silicon | `0Rzxn_-Launcher-<version>-arm64.dmg` | Experimental, not signed by Apple. |
+| macOS, Intel | `0Rzxn_-Launcher-<version>-x64.dmg` | Experimental, not signed by Apple. |
+
+**Linux:** make the file executable (`chmod +x 0Rzxn_-Launcher-*.AppImage`) and open it. AppImages need FUSE 2: install `libfuse2` (`libfuse2t64` on Ubuntu 24.04 and later). Your Microsoft session is kept between launches only if a keyring is installed (GNOME Keyring or KWallet); without one, you sign in again each time.
+
+**macOS:** open the dmg and drag the launcher into Applications. The app isn't signed by Apple, so macOS blocks the first launch: open **System Settings › Privacy & Security** and click **Open Anyway**. Updates aren't automatic on macOS: the launcher tells you when a new version is out and opens its page. On Apple Silicon Macs, Minecraft versions older than 1.19 run through Rosetta.
 
 ## Features
 
@@ -47,9 +62,9 @@
 - Light mode: the launcher uses almost no CPU while the game is running.
 
 **Comfort**
-- Available in **English**, **French** and **Spanish**: follows the Windows language, and changes instantly in Settings › Launcher.
+- Available in **English**, **French** and **Spanish**: follows the system language, and changes instantly in Settings › Launcher.
 - Accent color themes, system tray menu, keyboard shortcuts (AZERTY-friendly).
-- Automatic updates: new versions download in the background, never during a game, and install on restart. An opt-in beta channel is in Settings › Launcher.
+- Automatic updates: new versions download in the background, never during a game, and install on restart (on macOS, the launcher opens the download page). An opt-in beta channel is in Settings › Launcher.
 - Java and disk storage management.
 - Skin preview in 3D, saved skins, capes.
 
@@ -64,7 +79,7 @@ Microsoft login page (consumers tenant, XboxLive.signin + offline_access, author
 ```
 
 - **The launcher never sees your password.** You type it on Microsoft's own login page.
-- Tokens are stored **encrypted with Windows** (Electron `safeStorage`) on your PC only.
+- Tokens are stored **encrypted by the system** (Electron `safeStorage`: Windows DPAPI, the macOS Keychain, GNOME Keyring or KWallet on Linux) on your PC only. On Linux without a keyring, they stay in memory and are never written to disk.
 - Tokens are only sent to Microsoft, Xbox Live and Minecraft services, and to the local game process. They are masked in logs and crash reports.
 - No telemetry, no analytics, no ads, nothing sold.
 - The Azure application is registered for **personal Microsoft accounts only**.
@@ -73,7 +88,7 @@ Microsoft login page (consumers tenant, XboxLive.signin + offline_access, author
 
 ## Getting started
 
-Requirements: Windows 10 or 11 (x64) and [Node.js](https://nodejs.org/) 20 or later.
+Requirements: Windows 10 or 11 (x64), Linux or macOS, and [Node.js](https://nodejs.org/) 20 or later.
 
 ```bash
 npm install
@@ -102,10 +117,10 @@ A version like `1.2.3-beta.1` is published as a GitHub pre-release: only launche
 
 ## Where data is stored
 
-| Folder | Content |
-|---|---|
-| `%APPDATA%\.0rzxn\` | Versions, libraries, assets, Java runtimes and instances |
-| `%APPDATA%\0Rzxn_ Launcher\` | Accounts (tokens encrypted) and launcher settings |
+| Windows | Linux | macOS | Content |
+|---|---|---|---|
+| `%APPDATA%\.0rzxn\` | `~/.local/share/0rzxn/` | `~/Library/Application Support/.0rzxn/` | Versions, libraries, assets, Java runtimes and instances |
+| `%APPDATA%\0Rzxn_ Launcher\` | `~/.config/0Rzxn_ Launcher/` | `~/Library/Application Support/0Rzxn_ Launcher/` | Accounts (tokens encrypted) and launcher settings |
 
 Uninstalling keeps your worlds and settings.
 

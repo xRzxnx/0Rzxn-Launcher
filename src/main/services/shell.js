@@ -100,6 +100,7 @@ function createShell({ getWindow, services, launches, isTaskBusy, openWindow = n
   // Mises à jour du launcher : seulement dans la version installée, et jamais pendant une partie.
   const updates = new UpdateManager({
     supported: app.isPackaged,
+    canInstall: process.platform !== 'darwin',
     loadUpdater: () => require('electron-updater').autoUpdater,
     isBusy: () => Boolean(launches.session || isTaskBusy()),
     isAutomatic: () => services.settings.launcher().autoUpdate,
