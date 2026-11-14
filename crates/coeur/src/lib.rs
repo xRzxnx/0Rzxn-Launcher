@@ -13,6 +13,7 @@ pub mod instances;
 pub mod java;
 pub mod jeu;
 pub mod journal;
+pub mod loaders;
 pub mod nbt;
 pub mod net;
 pub mod performances;
