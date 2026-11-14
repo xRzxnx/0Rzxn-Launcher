@@ -2,10 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coeur::base::{Base, Tache};
+use coeur::jeu::Jeu;
 use coeur::net::Reseau;
-use commun::Demarrage;
-use std::sync::Arc;
-use tauri::{Manager, State, WebviewWindow};
+use coeur::partie::{Fenetre, Parties};
+use coeur::taches::Gestionnaire;
+use commun::{Demarrage, Instance};
+use serde_json::Value;
+use std::sync::{Arc, OnceLock, Weak};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 /// Langues préférées de l'utilisateur, comme app.getPreferredSystemLanguages() d'Electron.
 /// Windows : la liste « Langues » des paramètres (fr-FR, es-ES…), pas la langue d'affichage du système,
@@ -48,24 +52,96 @@ fn nettoyer_temporaires(base: Arc<Base>) {
     });
 }
 
+fn liste_instances(base: &Base) -> Vec<Instance> {
+    coeur::instances::lister(&coeur::chemins::racine_jeu())
+        .into_iter()
+        .map(|i| Instance { last_launch: base.dernier_lancement(&i.id), ..i })
+        .collect()
+}
+
 /// Tout ce que l'accueil affiche au démarrage.
 #[tauri::command]
 fn demarrage(base: State<Arc<Base>>) -> Demarrage {
-    let (racine, donnees) = (coeur::chemins::racine_jeu(), coeur::chemins::donnees());
+    let donnees = coeur::chemins::donnees();
     let ui = coeur::reglages::Magasin::new(&donnees).interface();
     let (accounts, active_account_id) = coeur::comptes::lire(&donnees);
     Demarrage {
         app_version: env!("CARGO_PKG_VERSION").into(),
         lang: coeur::i18n::langue().into(),
         platform: std::env::consts::OS.into(),
-        instances: coeur::instances::lister(&racine)
-            .into_iter()
-            .map(|i| commun::Instance { last_launch: base.dernier_lancement(&i.id), ..i })
-            .collect(),
+        instances: liste_instances(&base),
         accounts,
         active_account_id,
         selected_id: ui.selected_id,
         collapsed_groups: ui.collapsed_groups,
+    }
+}
+
+/// Instances relues après une partie (temps de jeu, dernier lancement, loader installé).
+#[tauri::command]
+fn instances(base: State<Arc<Base>>) -> Vec<Instance> {
+    liste_instances(&base)
+}
+
+/// Lance une instance (options : verify, prepareOnly, quickPlay). Les commandes qui démarrent du travail sont
+/// asynchrones : elles tournent dans le runtime tokio de Tauri.
+#[tauri::command]
+async fn lancer(parties: State<'_, Arc<Parties>>, id: String, options: Option<Value>) -> Result<commun::Partie, String> {
+    let o = options.unwrap_or_default();
+    let vrai = |c: &str| o.get(c).and_then(Value::as_bool) == Some(true);
+    let preparer = vrai("prepareOnly");
+    // shortcut: la sauvegarde des mondes avant la partie (réglage « Sauvegarde au lancement ») arrive avec les mondes (R4).
+    let quick_play = if preparer { None } else { parties.cible_quick_play(&id, o.get("quickPlay")).map_err(|e| e.message)? };
+    parties.demarrer(&id, vrai("verify"), preparer, quick_play).map_err(|e| e.message)
+}
+
+#[tauri::command]
+async fn arreter(parties: State<'_, Arc<Parties>>) -> Result<(), String> {
+    parties.arreter();
+    Ok(())
+}
+
+/// État de la partie pour une interface qui s'ouvre (run, logs, mesures).
+#[tauri::command]
+fn etat_partie(parties: State<Arc<Parties>>) -> Value {
+    parties.etat_courant()
+}
+
+#[tauri::command]
+fn taches(taches: State<Arc<Gestionnaire>>) -> Vec<coeur::taches::Vue> {
+    taches.liste()
+}
+
+#[tauri::command]
+async fn annuler_tache(taches: State<'_, Arc<Gestionnaire>>, id: Option<String>) -> Result<bool, String> {
+    Ok(taches.annuler(id.as_deref()))
+}
+
+/// La fenêtre principale autour de la partie : réduite ou cachée au lancement, rendue à la fin.
+struct FenetrePrincipale(AppHandle);
+
+impl FenetrePrincipale {
+    fn fenetre(&self) -> Option<WebviewWindow> {
+        self.0.get_webview_window("principale")
+    }
+}
+
+impl Fenetre for FenetrePrincipale {
+    fn minimiser(&self) {
+        if let Some(f) = self.fenetre() {
+            let _ = f.minimize();
+        }
+    }
+    fn masquer(&self) {
+        // shortcut: sans icône près de l'horloge (R6), « Masquer » réduit la fenêtre pour qu'elle reste accessible.
+        self.minimiser();
+    }
+    fn montrer(&self) {
+        if let Some(f) = self.fenetre() {
+            let _ = f.show();
+            let _ = f.unminimize();
+            let _ = f.set_focus();
+        }
     }
 }
 
@@ -105,10 +181,39 @@ fn main() {
     reseau.version(env!("CARGO_PKG_VERSION"));
     reseau.limiter(Some(reglages.downloads.concurrency), Some(reglages.downloads.per_host));
     nettoyer_temporaires(base.clone());
+    let jeu = Jeu::new(coeur::chemins::Dossiers::new(&coeur::chemins::racine_jeu()), reseau.clone());
     tauri::Builder::default()
-        .manage(base)
-        .manage(reseau)
-        .invoke_handler(tauri::generate_handler![demarrage, fenetre])
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            let emettre: coeur::partie::Envoi = Arc::new(move |canal, charge| {
+                let _ = handle.emit(canal, charge);
+            });
+            // Les tâches d'une instance en partie attendent la fin : le gestionnaire demande aux parties.
+            let parties_lien: Arc<OnceLock<Weak<Parties>>> = Arc::default();
+            let lien = parties_lien.clone();
+            let taches = Gestionnaire::new(coeur::taches::Options {
+                envoyer: emettre.clone(),
+                historique: Some(base.clone()),
+                en_jeu: Box::new(move |id| lien.get().and_then(Weak::upgrade).and_then(|p| p.instance_en_jeu()).as_deref() == Some(id)),
+                ..Default::default()
+            });
+            let parties = Parties::new(coeur::partie::Options {
+                jeu,
+                base: base.clone(),
+                taches: taches.clone(),
+                donnees: donnees.clone(),
+                version_launcher: env!("CARGO_PKG_VERSION").into(),
+                envoyer: emettre,
+                fenetre: Some(Arc::new(FenetrePrincipale(app.handle().clone()))),
+            });
+            let _ = parties_lien.set(Arc::downgrade(&parties));
+            app.manage(base);
+            app.manage(reseau);
+            app.manage(taches);
+            app.manage(parties);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![demarrage, instances, lancer, arreter, etat_partie, taches, annuler_tache, fenetre])
         .build(tauri::generate_context!())
         .expect("the launcher could not start")
         .run(|app, evenement| {

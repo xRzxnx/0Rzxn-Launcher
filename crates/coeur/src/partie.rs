@@ -14,7 +14,6 @@ use crate::mesures;
 use crate::sortie_jeu::LigneJeu;
 use crate::taches::{Demande, Etape, Gestionnaire, Progres};
 use futures_util::FutureExt;
-use serde::Serialize;
 use serde_json::{Map, Value, json};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -37,41 +36,7 @@ pub trait Fenetre: Send + Sync {
     fn montrer(&self);
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Run {
-    pub instance_id: String,
-    /// preparing | running
-    pub phase: &'static str,
-    pub step: usize,
-    pub done: u64,
-    pub total: u64,
-    pub prepare_only: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub done_bytes: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub total_bytes: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub speed: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub eta: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub started_at: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub prepare_ms: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub menu_ms: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Mesures {
-    pub instance_id: String,
-    pub memory: Option<u64>,
-    pub peak: Option<u64>,
-    pub cpu: Option<u32>,
-    pub allocated: u64,
-}
+pub use commun::{MesuresJeu as Mesures, Partie as Run};
 
 /// Progression de la tâche « préparation », connue une fois la tâche démarrée.
 type ProgresPartage = Arc<Mutex<Option<Progres>>>;
@@ -220,7 +185,8 @@ impl Parties {
         }
 
         let arret = CancellationToken::new();
-        let run = Run { instance_id: instance_id.into(), phase: "preparing", prepare_only: preparer_seulement, ..Default::default() };
+        let run =
+            Run { instance_id: instance_id.into(), phase: "preparing".into(), prepare_only: preparer_seulement, ..Default::default() };
         let session_id = self.base.debut_session(instance_id, Some(&instance.version), Some(&instance.loader), None);
         {
             let mut e = self.etat();
@@ -374,7 +340,7 @@ impl Parties {
             e.pret_a = Some(quand);
             let (lance, sid) = (e.lance_a, e.session_id);
             let Some(r) = e.run.as_mut() else { return };
-            r.phase = "running";
+            r.phase = "running".into();
             r.started_at = Some(quand);
             r.prepare_ms = Some(quand - lance);
             (sid, r.instance_id.clone())
@@ -712,7 +678,7 @@ mod tests {
         // Manifeste vide gardé en mémoire : aucune requête, la version est introuvable.
         *p.jeu.manifeste.lock().unwrap() = Some(Arc::new(json!({ "versions": [] })));
         let run = p.demarrer("survie", false, false, None).unwrap();
-        assert_eq!((run.phase, run.instance_id.as_str()), ("preparing", "survie"));
+        assert_eq!((run.phase.as_str(), run.instance_id.as_str()), ("preparing", "survie"));
         assert!(p.demarrer("survie", false, false, None).is_err(), "une seule partie à la fois");
         for _ in 0..200 {
             if !p.en_cours() {
