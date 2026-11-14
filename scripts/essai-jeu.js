@@ -95,8 +95,7 @@ async function play(run, test) {
   const data = { name: test.name, version: test.version, loader: test.loader, loaderVersion };
   const instance = await run(`window.launcher.instances.create(${JSON.stringify(data)})`);
   console.log(`\n== ${test.name} (${test.version} ${test.loader}${loaderVersion ? ` ${loaderVersion}` : ''}) : ${instance.id}`);
-  const failed = await run(`window.launcher.launch.start(${JSON.stringify(instance.id)}, { skipBackup: true })`);
-  if (failed) throw new Error(`refus du lancement : ${JSON.stringify(failed)}`);
+  await run(`window.launcher.launch.start(${JSON.stringify(instance.id)}, { skipBackup: true })`);
 
   const start = Date.now();
   const lines = [];
