@@ -6,7 +6,7 @@ const globals = require('globals');
 
 module.exports = [
   // Dossiers cachés à la racine : données de l'aperçu, outils locaux.
-  { ignores: ['node_modules/', 'dist/', 'Maquettes/', 'build/', '.*/', 'src/renderer/vendor/'] },
+  { ignores: ['node_modules/', 'dist/', 'target/', 'crates/interface/dist/', 'Maquettes/', 'build/', '.*/', 'src/renderer/vendor/'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],

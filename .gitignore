@@ -15,3 +15,5 @@ dist/
 /docs/PLAN-V2.md
 /docs/PLAN-MONDES.md
 /docs/PLAN-V3.md
+/target/
+/crates/app/gen/
