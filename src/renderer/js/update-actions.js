@@ -25,6 +25,13 @@ export async function installUpdate() {
   }
 }
 
+export const RELEASES_URL = 'https://github.com/xRzxnx/0Rzxn-Launcher/releases';
+
+/** macOS : la nouvelle version s'installe à la main depuis sa page (le lien s'ouvre dans le navigateur). */
+export function downloadUpdate(version) {
+  window.open(`${RELEASES_URL}/tag/v${version}`);
+}
+
 /** Ce qui empêche de redémarrer le launcher : 'game', 'install', sinon une chaîne vide. */
 export function updateBlocker() {
   if (state.run) return 'game';

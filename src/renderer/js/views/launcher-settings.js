@@ -7,7 +7,7 @@ import { formatSize, h, icon } from '../dom.js';
 import { cleanStorage, loadStorage, refreshDiscord, removeRuntime, selectedCleanup, setLauncherPref, toggleCleanup } from '../launcher-actions.js';
 import { SHORTCUTS } from '../shortcuts.js';
 import { ACCENTS, accentTokens, applyAccent } from '../theme.js';
-import { checkUpdate, installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
+import { RELEASES_URL, checkUpdate, downloadUpdate, installUpdate, updateBlocker, updateWaitText } from '../update-actions.js';
 import { selectedInstance, state, tasksBusy, toastError, update } from '../state.js';
 import { close, dialog } from './modals.js';
 import { languageSection } from './language.js';
@@ -116,21 +116,18 @@ function discordSection(prefs) {
 }
 
 function traySection(prefs) {
+  // Linux : bureau sans zone de notification (GNOME sans extension AppIndicator) → réglages éteints, explication.
+  const available = state.features.tray;
+  const tray = available && prefs.tray;
   return h(
     'section',
     { class: 'settings__section', 'aria-labelledby': 'tray-title' },
     h('h2', { class: 'settings__title', id: 'tray-title' }, t('launcher.zone_de_notification')),
-    toggleRow('tray-label', t('launcher.icone_pres_de_horloge'), prefs.tray, () => setLauncherPref({ tray: !prefs.tray })),
-    toggleRow('close-label', t('launcher.fermer_la_fenetre_garde_le'), prefs.tray && prefs.closeToTray, () => setLauncherPref({ closeToTray: !prefs.closeToTray }), !prefs.tray),
-    h(
-      'p',
-      { class: 'hint' },
-      t('launcher.clic_sur_icone_afficher_ou'),
-    ),
+    toggleRow('tray-label', t('launcher.icone_pres_de_horloge'), tray, () => setLauncherPref({ tray: !prefs.tray }), !available),
+    toggleRow('close-label', t('launcher.fermer_la_fenetre_garde_le'), tray && prefs.closeToTray, () => setLauncherPref({ closeToTray: !prefs.closeToTray }), !tray),
+    h('p', { class: 'hint' }, available ? t('launcher.clic_sur_icone_afficher_ou') : t('launcher.zone_notification_indisponible')),
   );
 }
-
-const RELEASES_URL = 'https://github.com/xRzxnx/0Rzxn-Launcher/releases';
 
 function checkedAgo(time) {
   if (!time) return '';
@@ -171,6 +168,13 @@ function updateStatus(u) {
         h('button', { class: 'btn btn--primary', disabled: Boolean(waiting), onClick: installUpdate }, t('update.restart')),
       );
     }
+    case 'available':
+      return h(
+        'div',
+        null,
+        line(t('update.available_mac', { version: u.version })),
+        h('button', { class: 'btn btn--primary', onClick: () => downloadUpdate(u.version) }, icon('download'), t('update.download_version', { version: u.version })),
+      );
     case 'error':
       return line(u.error, 'hint hint--error');
     default:
@@ -277,7 +281,7 @@ export function renderLauncherTab() {
     'div',
     null,
     h('p', { class: 'settings__scope-note' }, icon('settings', 20), t('launcher.reglages_du_launcher_lui_meme')),
-    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), downloadsSection(prefs), shortcutsSection(), gameSection(prefs), gpuSection(prefs)),
+    h('div', { class: 'settings__grid' }, languageSection(), themeSection(prefs), updateSection(prefs), discordSection(prefs), traySection(prefs), downloadsSection(prefs), shortcutsSection(), gameSection(prefs), state.features.gpu && gpuSection(prefs)),
   );
 }
 

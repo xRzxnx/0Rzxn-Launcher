@@ -1,7 +1,8 @@
 'use strict';
 
 // Génère les icônes depuis src/renderer/assets/logo-mark.svg : build/icon.ico et build/icon.png (exe, installateur),
-// src/main/assets/tray*.png (zone de notification). Le rendu passe par Chromium, d'où le lancement avec Electron.
+// src/main/assets/tray*.png (zone de notification, versions Template pour macOS) et icon.png (raccourcis Linux).
+// Le rendu passe par Chromium, d'où le lancement avec Electron.
 // Usage : npm run icon
 const fs = require('node:fs');
 const path = require('node:path');
@@ -32,20 +33,23 @@ const SMALL = [
 ];
 
 // S'exécute dans la page : dessine la tuile et le logo, renvoie les pixels RGBA et le PNG.
-const RENDER = `async ({ size, mark, tile, small, dot }) => {
+// « template » (barre de menus de macOS) : logo seul, noir sur fond transparent, pastille découpée.
+const RENDER = `async ({ size, mark, tile, small, dot, template }) => {
   const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  const gradient = ctx.createLinearGradient(0, 0, size, size);
-  gradient.addColorStop(0, tile[0]);
-  gradient.addColorStop(1, tile[1]);
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.roundRect(0, 0, size, size, size * 0.22);
-  ctx.fill();
+  if (!template) {
+    const gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, tile[0]);
+    gradient.addColorStop(1, tile[1]);
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, size, size, size * 0.22);
+    ctx.fill();
+  }
   if (size === 16) {
     small.forEach((row, y) => [...row].forEach((c, x) => {
       if (c === '.') return;
-      ctx.fillStyle = y === 12 ? '#3ddc84' : '#fff';
+      ctx.fillStyle = template ? '#000' : y === 12 ? '#3ddc84' : '#fff';
       ctx.fillRect(x, y, 1, 1);
     }));
   } else {
@@ -53,8 +57,25 @@ const RENDER = `async ({ size, mark, tile, small, dot }) => {
     image.src = mark;
     await image.decode();
     ctx.drawImage(image, 0, 0, size, size);
+    if (template) {
+      ctx.globalCompositeOperation = 'source-in';
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, size, size);
+      ctx.globalCompositeOperation = 'source-over';
+    }
   }
-  if (dot) {
+  if (dot && template) {
+    const r = size * 0.23;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(size - r, size - r, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(size - r, size - r, r * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (dot) {
     const r = size * 0.23;
     ctx.fillStyle = '#11131c';
     ctx.beginPath();
@@ -120,8 +141,8 @@ async function main() {
   await win.loadURL('about:blank');
   const svg = fs.readFileSync(path.join(ROOT, 'src/renderer/assets/logo-mark.svg'));
   const mark = `data:image/svg+xml;base64,${svg.toString('base64')}`;
-  const render = async (size, dot = false) => {
-    const args = JSON.stringify({ size, mark, tile: TILE, small: SMALL, dot });
+  const render = async (size, dot = false, template = false) => {
+    const args = JSON.stringify({ size, mark, tile: TILE, small: SMALL, dot, template });
     const { png, rgba } = await win.webContents.executeJavaScript(`(${RENDER})(${args})`);
     return { png: Buffer.from(png, 'base64'), rgba };
   };
@@ -139,7 +160,12 @@ async function main() {
   for (const [name, dot] of [['tray', false], ['tray-playing', true]]) {
     fs.writeFileSync(path.join(assets, `${name}.png`), (await render(16, dot)).png);
     fs.writeFileSync(path.join(assets, `${name}@2x.png`), (await render(32, dot)).png);
+    // macOS : le suffixe « Template » fait colorer l'icône par le système (barre de menus claire ou sombre).
+    fs.writeFileSync(path.join(assets, `${name}Template.png`), (await render(16, dot, true)).png);
+    fs.writeFileSync(path.join(assets, `${name}Template@2x.png`), (await render(32, dot, true)).png);
   }
+  // Linux : icône des raccourcis d'instance (.desktop), copiée dans les données du launcher.
+  fs.writeFileSync(path.join(assets, 'icon.png'), (await render(256)).png);
 }
 
 app

@@ -178,10 +178,12 @@ function settingsOf(cfg) {
 /**
  * Dossier d'instances par défaut : celui du launcher compatible le plus courant s'il est installé
  * (réglage InstanceDir de son fichier .cfg, sinon « instances »). Les deux noms ci-dessous sont
- * ceux de ses fichiers sur le disque, nécessaires pour le trouver.
+ * ceux de ses fichiers sur le disque, nécessaires pour le trouver. `roots` : ses dossiers de données possibles
+ * (platform/chemins.js importRoots) ; le premier qui existe est pris, sinon le premier de la liste.
+ * @param {string[]} roots
  */
-function defaultInstancesDir(appData) {
-  const root = path.join(appData, 'PrismLauncher');
+function defaultInstancesDir(roots) {
+  const root = roots.find((r) => exists(r)) ?? roots[0];
   let dir = 'instances';
   try {
     const line = fs.readFileSync(path.join(root, 'prismlauncher.cfg'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('InstanceDir='));

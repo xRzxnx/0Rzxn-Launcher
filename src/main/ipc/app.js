@@ -10,6 +10,7 @@ const net = require('../core/net');
 const discordConfig = require('../discord-config');
 const { clientId: MICROSOFT_CLIENT_ID } = require('../microsoft-config');
 const { launchArgument, text } = require('./handle');
+const platform = require('../platform');
 
 // Bilan mensuel : le processus principal vérifie que le contenu reçu est bien un PNG de taille raisonnable.
 const RECAP_MAX_BYTES = 4 * 1024 * 1024;
@@ -24,6 +25,8 @@ function register({ handle, getWindow, services, dirs, appShell, applyLanguage, 
     root: dirs.root,
     microsoftReady: Boolean(MICROSOFT_CLIENT_ID),
     discordReady: Boolean(discordConfig.clientId),
+    // Ce que ce système sait faire : les réglages et boutons qui n'existent pas ici sont masqués.
+    features: { shortcuts: platform.shortcutsSupported, gpu: platform.gpu.supported, tray: tray.available },
   }));
   handle('system:memory', () => ({ totalGb: os.totalmem() / 1024 ** 3, freeGb: os.freemem() / 1024 ** 3 }));
 

@@ -16,6 +16,8 @@ export const state = {
   settingsScope: 'instance', // instance | global | launcher | storage
   launcherPrefs: null, // { accent, discord, discordShowName, tray, closeToTray }
   discordReady: false, // Application ID Discord configuré (src/main/discord-config.js)
+  // Ce que le système sait faire (app:info) : raccourcis d'instance, préférence de carte graphique, zone de notification.
+  features: { shortcuts: true, gpu: true, tray: true },
   discord: null, // { configured, running, showing }
   launcherUpdate: null, // { supported, status, version, percent, transferred, total, checkedAt, error }
   storage: {

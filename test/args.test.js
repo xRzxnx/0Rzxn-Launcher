@@ -107,6 +107,14 @@ test('buildArguments ancien : minecraftArguments, résolution et classpath', () 
   assert.equal(out.gc, 'g1');
 });
 
+test('buildArguments ancien sous macOS : -XstartOnFirstThread, sans l’astuce de Windows', () => {
+  const mac = buildArguments({ version: LEGACY, vars: VARS, settings: SETTINGS, platform: 'darwin' });
+  assert.equal(mac.jvm.filter((arg) => arg === '-XstartOnFirstThread').length, 1);
+  assert.equal(mac.jvm.some((arg) => arg.startsWith('-XX:HeapDumpPath=')), false);
+  const windows = buildArguments({ version: LEGACY, vars: VARS, settings: SETTINGS, platform: 'win32' });
+  assert.equal(windows.jvm.includes('-XstartOnFirstThread'), false);
+});
+
 test('buildArguments ancien : un serveur se rejoint avec --server/--port, pas un monde', () => {
   const multi = buildArguments({ version: LEGACY, vars: VARS, settings: SETTINGS, quickPlay: { type: 'multiplayer', id: 'play.exemple.fr:25570' } });
   assert.deepEqual(multi.game.slice(-4), ['--server', 'play.exemple.fr', '--port', '25570']);

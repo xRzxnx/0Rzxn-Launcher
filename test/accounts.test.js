@@ -48,3 +48,46 @@ test('AccountStore : pseudos invalides ou en double refusés', (t) => {
   store.addOffline('Joueur');
   assert.throws(() => store.addOffline('JOUEUR'));
 });
+
+// ---------- Linux sans trousseau (phase 9) ----------
+
+const SESSION = { uuid: '0123456789abcdef0123456789abcdef', name: 'Ana', xuid: '42', refreshToken: 'r1', accessToken: 'a1', expiresAt: Date.now() + 3_600_000 };
+
+test('AccountStore sans trousseau : jetons en mémoire seulement, compte à reconnecter au redémarrage', async (t) => {
+  const dir = tempDir(t);
+  const vault = { persistent: () => false, encrypt: () => { throw new Error('jamais'); }, decrypt: () => { throw new Error('jamais'); } };
+  const store = new AccountStore(dir, { vault });
+  const list = store.addMicrosoft(SESSION);
+  assert.deepEqual(list.accounts.map((a) => [a.type, a.needsLogin, a.sessionOnly]), [['microsoft', false, true]]);
+  // Le jeton marche pendant la session…
+  assert.equal((await store.launchAccount()).accessToken, 'a1');
+  // … mais n'est jamais écrit sur le disque.
+  const onDisk = fs.readFileSync(path.join(dir, 'accounts.json'), 'utf8');
+  assert.ok(!onDisk.includes('a1') && !onDisk.includes('r1') && !onDisk.includes('secrets'), onDisk);
+  // Le hors-ligne reste possible, et le fichier garde le compte (nom, uuid) marqué « à reconnecter ».
+  store.addOffline('Bob');
+  const reopened = new AccountStore(dir, { vault });
+  const ana = reopened.list().accounts.find((a) => a.type === 'microsoft');
+  assert.deepEqual([ana.name, ana.needsLogin, ana.sessionOnly], ['Ana', true, true]);
+  await assert.rejects(reopened.launchAccount(() => {}, ana.id));
+});
+
+test('AccountStore avec trousseau : rien ne change, sessionOnly absent', (t) => {
+  const dir = tempDir(t);
+  const store = new AccountStore(dir, { vault: { persistent: () => true, encrypt: (s) => `enc:${s}`, decrypt: (s) => s.slice(4) } });
+  const [account] = store.addMicrosoft(SESSION).accounts;
+  assert.equal('sessionOnly' in account, false);
+  assert.match(fs.readFileSync(path.join(dir, 'accounts.json'), 'utf8'), /"secrets": "enc:/);
+});
+
+test('coffre : Linux en « basic_text » ne protège pas les jetons, les autres systèmes oui', () => {
+  require('./helpers/faux-electron');
+  const { persistent } = require('../src/main/services/vault');
+  const storage = (backend, available = true) => ({ isEncryptionAvailable: () => available, getSelectedStorageBackend: () => backend });
+  assert.equal(persistent({ platform: 'linux', storage: storage('basic_text') }), false);
+  assert.equal(persistent({ platform: 'linux', storage: storage('gnome_libsecret') }), true);
+  assert.equal(persistent({ platform: 'linux', storage: storage('kwallet6') }), true);
+  assert.equal(persistent({ platform: 'win32', storage: storage('unknown') }), true);
+  assert.equal(persistent({ platform: 'darwin', storage: storage('unknown') }), true);
+  assert.equal(persistent({ platform: 'win32', storage: storage('unknown', false) }), false);
+});

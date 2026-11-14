@@ -30,7 +30,7 @@ function exists(file) {
 }
 
 /**
- * Dossiers partagés du launcher, sous la racine choisie (par défaut %APPDATA%\.0rzxn).
+ * Dossiers partagés du launcher, sous la racine choisie (par défaut %APPDATA%\.0rzxn, voir platform/chemins.js gameRoot).
  * La racine est convertie en chemin physique : si le dossier est redirigé (lien, jonction,
  * virtualisation de Windows), Java et Fabric comparent des chemins identiques à ceux du launcher.
  */

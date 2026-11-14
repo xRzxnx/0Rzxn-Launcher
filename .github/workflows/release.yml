@@ -1,6 +1,7 @@
 name: Release
 
-# Builds the Windows installer from main and publishes the GitHub release that installed launchers read.
+# Builds the Windows installer, the Linux AppImage and the macOS dmgs from main, and publishes the GitHub release
+# that installed launchers read.
 # Started by `npm run publier` (workflow_dispatch on main). Pull requests that touch the release pipeline
 # run it as a dry run: everything except signing, VirusTotal and the release itself.
 on:
@@ -25,7 +26,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Linux (AppImage) and macOS (dmg for Apple Silicon and Intel, plus the zips that only carry latest-mac.yml:
+  # unsigned macOS apps can't update themselves, the launcher only sees the new version and opens its page).
+  # Nothing here is signed by SignPath; macOS apps get the free ad-hoc signature (package.json mac.identity "-").
+  unix:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            build: --linux AppImage
+          - os: macos-latest
+            build: --mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npx electron-builder ${{ matrix.build }} --publish never
+
+      - name: Keep the files
+        uses: actions/upload-artifact@v7
+        with:
+          name: unix-${{ runner.os }}
+          path: |
+            dist/*.AppImage
+            dist/*.dmg
+            dist/*.zip
+            dist/*.blockmap
+            dist/*-linux.yml
+            dist/*-mac.yml
+          if-no-files-found: error
+          retention-days: 7
+
   release:
+    needs: unix
     runs-on: windows-latest
     timeout-minutes: 90
     permissions:
@@ -168,6 +215,23 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Linux and macOS files
+        uses: actions/download-artifact@v7
+        with:
+          pattern: unix-*
+          path: dist/unix
+          merge-multiple: true
+
+      - name: Check the Linux and macOS files
+        run: |
+          ls -l dist/unix
+          v="${{ steps.version.outputs.version }}"
+          for f in "0Rzxn_-Launcher-$v.AppImage" "0Rzxn_-Launcher-$v-arm64.dmg" "0Rzxn_-Launcher-$v-x64.dmg"; do
+            [ -f "dist/unix/$f" ] || { echo "Missing dist/unix/$f"; exit 1; }
+          done
+
+      # One analysis per downloadable file (the macOS zips hold the same app as the dmgs). Exit code: 2 if any file
+      # is blocked, otherwise 1 if any analysis failed, 0 if all are clean.
       - name: VirusTotal
         id: virustotal
         if: env.DRY_RUN != 'true'
@@ -175,8 +239,18 @@ jobs:
           VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
           set +e
-          node scripts/virustotal.js "dist/${{ steps.version.outputs.installer }}" --json virustotal.json
-          echo "code=$?" >> "$GITHUB_OUTPUT"
+          v="${{ steps.version.outputs.version }}"
+          worst=0
+          scan() {
+            node scripts/virustotal.js "$2" --json "vt-$1.json"
+            c=$?
+            if [ "$c" = "2" ] || { [ "$c" != "0" ] && [ "$worst" = "0" ]; }; then worst=$c; fi
+          }
+          scan windows "dist/${{ steps.version.outputs.installer }}"
+          scan linux "dist/unix/0Rzxn_-Launcher-$v.AppImage"
+          scan mac-arm64 "dist/unix/0Rzxn_-Launcher-$v-arm64.dmg"
+          scan mac-x64 "dist/unix/0Rzxn_-Launcher-$v-x64.dmg"
+          echo "code=$worst" >> "$GITHUB_OUTPUT"
 
       - name: Release
         if: env.DRY_RUN != 'true'
@@ -191,13 +265,15 @@ jobs:
             git log ${previous:+$previous..}HEAD --no-merges --format='- %s' > notes.md
           fi
           code="${{ steps.virustotal.outputs.code }}"
-          line=$(node -e "try { const r = require('./virustotal.json'); console.log(r.notes ?? '') } catch { }")
           printf '\n---\n\n' >> notes.md
-          if [ -n "$line" ]; then printf '%s\n\n' "$line" >> notes.md; fi
+          for part in "windows:Windows" "linux:Linux" "mac-arm64:macOS Apple Silicon" "mac-x64:macOS Intel"; do
+            line=$(node -e "try { const r = require('./vt-${part%%:*}.json'); console.log(r.notes ?? '') } catch { }")
+            if [ -n "$line" ]; then printf '%s\n\n' "${line/\*\*VirusTotal\*\*/**VirusTotal ${part#*:}**}" >> notes.md; fi
+          done
           printf '[Code signing policy](https://github.com/${{ github.repository }}/blob/main/CODE_SIGNING_POLICY.md)\n' >> notes.md
           kind=--latest
           [ "${{ steps.version.outputs.prerelease }}" = "true" ] && kind=--prerelease
-          gh release create "$tag" "$installer" "$installer.blockmap" dist/latest.yml \
+          gh release create "$tag" "$installer" "$installer.blockmap" dist/latest.yml dist/unix/* \
             --draft --title "$tag" --notes-file notes.md --target "$GITHUB_SHA" $kind
           if [ "$code" = "2" ]; then
             echo "::error::VirusTotal: too many detections. The release $tag stays a draft; check the report before publishing it by hand."

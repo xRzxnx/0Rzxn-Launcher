@@ -1,6 +1,7 @@
 // Actions de l'interface : elles appellent le processus principal puis mettent l'état à jour.
 import { t } from './i18n.js';
 import { api } from './api.js';
+import { OS } from './os.js';
 import { loadCrashes, openCrashes } from './crash-actions.js';
 import { listenToTasks } from './activity-actions.js';
 import { loadLauncherPrefs } from './launcher-actions.js';
@@ -63,6 +64,7 @@ export async function init() {
       s.appVersion = info.version;
       s.microsoftReady = info.microsoftReady;
       s.discordReady = info.discordReady;
+      if (info.features) s.features = info.features;
       s.globalSettings = settings;
       s.run = launchState.run;
       s.logs = launchState.logs;
@@ -96,6 +98,8 @@ export async function init() {
 }
 
 const REOPEN_VIEWS = new Set(['home', 'mods', 'worlds', 'versions', 'console', 'activity', 'settings']);
+// Installation de Rosetta 2 par Apple (Terminal), pour les anciennes versions sur Mac Apple Silicon.
+const ROSETTA_COMMAND = 'softwareupdate --install-rosetta --agree-to-license';
 
 /** L'écran affiché est tenu à jour dans le moteur (en mémoire seulement), pour rouvrir la fenêtre au même endroit. */
 function rememberView() {
@@ -219,8 +223,14 @@ export async function deleteInstance(id) {
 }
 
 export function createShortcut(id) {
+  // Windows : fichier .lnk sur le bureau. Linux : entrée dans le menu des applications, au nom de l'instance.
+  const name = state.instances.find((i) => i.id === id)?.name ?? id;
   api.createShortcut(id).then(
-    (file) => toast({ kind: 'success', title: t('actions.raccourci_cree'), text: t('actions.est_sur_ton_bureau_il', { file: file.replace(/\.lnk$/, '') }) }),
+    (file) => toast({
+      kind: 'success',
+      title: t('actions.raccourci_cree'),
+      text: OS === 'linux' ? t('actions.raccourci_menu_applications', { name }) : t('actions.est_sur_ton_bureau_il', { file: file.replace(/\.lnk$/, '') }),
+    }),
     (error) => toastError(t('actions.raccourci_impossible'), error),
   );
 }
@@ -546,6 +556,23 @@ async function handleLaunchStatus(status) {
       actions: [
         { label: t('actions.repasser_java_automatique'), run: () => { instance.settings.java = 'auto'; saveSettings('instance', instance.id); } },
         { label: t('common.parametres'), run: () => update((s) => { s.view = 'settings'; s.settingsScope = 'instance'; s.selectedId = instance.id; }) },
+      ],
+    });
+  } else if (status.error && status.errorCode === 'ROSETTA_MISSING') {
+    // Mac Apple Silicon sans Rosetta : la commande d'installation d'Apple, prête à coller dans le Terminal.
+    toast({
+      kind: 'error',
+      title: t('actions.besoin_de_rosetta', { version: instance?.version ?? '' }),
+      text: status.error,
+      timeout: 0,
+      actions: [
+        {
+          label: t('actions.copier_la_commande'),
+          run: () => navigator.clipboard.writeText(ROSETTA_COMMAND).then(
+            () => toast({ kind: 'success', title: t('actions.commande_copiee'), text: ROSETTA_COMMAND }),
+            (error) => toastError(t('common.copie_impossible'), error),
+          ),
+        },
       ],
     });
   } else if (status.error) {

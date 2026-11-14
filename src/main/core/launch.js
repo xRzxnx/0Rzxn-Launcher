@@ -12,7 +12,7 @@ const path = require('node:path');
 const { buildArguments } = require('./args');
 const { downloadAll } = require('./download');
 const install = require('./install');
-const { JAVA_32_MAX_GB, ensureRuntime, probeJavaCached } = require('./java');
+const { JAVA_32_MAX_GB, ensureRuntime, needsRosetta, probeJavaCached, rosettaInstalled } = require('./java');
 const { GameLogParser, censor, clock } = require('./logs');
 const { LOADER_NAMES, installLoader } = require('./loaders');
 const titleMenu = require('./title-menu');
@@ -82,10 +82,15 @@ class LaunchSession extends EventEmitter {
     }
   }
 
-  stop() {
+  stop(graceMs = 10_000) {
     this.stopped = true;
-    if (this.child) this.child.kill();
-    else this.controller.abort();
+    const child = this.child;
+    if (!child) return this.controller.abort();
+    child.kill();
+    // Linux et macOS : SIGTERM laisse la JVM finir, mais un jeu bloqué (fenêtre d'erreur) ne quitte jamais.
+    setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }, graceMs).unref();
   }
 
   async run() {
@@ -124,7 +129,13 @@ class LaunchSession extends EventEmitter {
       javaExe = settings.javaPath;
     } else {
       const component = version.javaVersion?.component ?? 'jre-legacy';
-      javaExe = await ensureRuntime(dirs, component, { signal, onProgress: (p) => this.progress(3, p.done, p.total, p) });
+      // Mac Apple Silicon, version d'avant 1.19 : ses natives n'existent qu'en Intel, donc Java Intel par Rosetta.
+      const rosetta = needsRosetta(version);
+      if (rosetta && !rosettaInstalled()) {
+        throw Object.assign(new Error(t('launch.rosetta_manquant', { version: instance.version })), { code: 'ROSETTA_MISSING' });
+      }
+      if (rosetta) this.log(t('launch.rosetta', { version: instance.version }));
+      javaExe = await ensureRuntime(dirs, component, { signal, onProgress: (p) => this.progress(3, p.done, p.total, p), arch: rosetta ? 'x64' : process.arch });
     }
 
     // 5. Loader de mods (après Java : les processeurs de Forge et NeoForge sont des programmes Java)
@@ -272,7 +283,7 @@ class LaunchSession extends EventEmitter {
       this.log(t('launch.impossible_de_demarrer_java', { message: error.message }), 'LAUNCHER/ERROR');
       this.emit('failed', { message: t('launch.impossible_de_demarrer_java_2', { code: error.code ?? error.message }), cancelled: false });
     });
-    child.once('close', (code, signalName) => {
+    const finish = (code, signalName) => {
       if (reported) return;
       reported = true;
       stdout.flush();
@@ -281,7 +292,10 @@ class LaunchSession extends EventEmitter {
       const crashed = !this.stopped && code !== 0;
       this.log(this.stopped ? t('launch.jeu_arrete_depuis_le_launcher') : t('launch.jeu_ferme_code_de_sortie', { code: code ?? signalName }), crashed ? 'LAUNCHER/ERROR' : 'LAUNCHER');
       this.emit('exit', { code, crashed, minutes });
-    });
+    };
+    child.once('close', finish);
+    // Un programme lancé par le jeu (boîte d'erreur osascript sur Mac) peut garder ses sorties ouvertes après sa fin.
+    child.once('exit', (code, signalName) => setTimeout(() => finish(code, signalName), 2000).unref());
   }
 }
 

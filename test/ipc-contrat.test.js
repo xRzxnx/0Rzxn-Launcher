@@ -88,8 +88,13 @@ test('erreurs : notées au journal puis renvoyées telles quelles (synchrones et
 test('app:info et system:memory', async (t) => {
   const ipc = startIpc(t);
   const info = await ipc.invoke('app:info');
-  assert.deepEqual(Object.keys(info).sort(), ['discordReady', 'microsoftReady', 'platform', 'root', 'version']);
+  assert.deepEqual(Object.keys(info).sort(), ['discordReady', 'features', 'microsoftReady', 'platform', 'root', 'version']);
   assert.equal(info.platform, process.platform);
+  // Phase 9 : ce que le système sait faire, pour masquer les réglages qui n'existent pas.
+  assert.deepEqual(Object.keys(info.features).sort(), ['gpu', 'shortcuts', 'tray']);
+  assert.equal(info.features.gpu, process.platform === 'win32');
+  assert.equal(info.features.shortcuts, process.platform !== 'darwin');
+  assert.equal(info.features.tray, true);
   assert.ok(fs.existsSync(path.join(info.root, 'instances')));
   const memory = await ipc.invoke('system:memory');
   assert.ok(memory.totalGb > 0 && memory.freeGb > 0);

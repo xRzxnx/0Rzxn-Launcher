@@ -6,6 +6,7 @@ const { t } = require('../i18n');
 const { app, dialog } = require('electron');
 const path = require('node:path');
 const importer = require('../core/importer');
+const { importRoots } = require('../platform/chemins');
 const { text } = require('./handle');
 
 function register({ handle, getWindow, services, instances, runTask }) {
@@ -23,9 +24,10 @@ function register({ handle, getWindow, services, instances, runTask }) {
     }
     return found;
   };
-  handle('import:scanInstances', () => instancesFrom(importer.defaultInstancesDir(app.getPath('appData'))));
+  const defaultDir = () => importer.defaultInstancesDir(importRoots({ appData: app.getPath('appData') }));
+  handle('import:scanInstances', () => instancesFrom(defaultDir()));
   handle('import:pickInstances', async () => {
-    const dir = await pickFolder(t('ipc.dossier_instances_un_autre_launcher'), importer.defaultInstancesDir(app.getPath('appData')));
+    const dir = await pickFolder(t('ipc.dossier_instances_un_autre_launcher'), defaultDir());
     return dir ? instancesFrom(dir) : null;
   });
   handle('import:instance', (dir) => {

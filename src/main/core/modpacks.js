@@ -20,12 +20,15 @@ const PACK_KEYS = Object.fromEntries(Object.entries(LOADER_KEYS).map(([key, load
 // À la mise à jour, on ne remplace jamais les réglages ni les mondes du joueur.
 const keepOnUpdate = (rel) => rel === 'options.txt' || rel.startsWith('saves/');
 
-/** Chemin dans le dossier du jeu, en refusant toute sortie du dossier (« ../ », chemin absolu). */
+/**
+ * Chemin dans le dossier du jeu, en refusant toute sortie du dossier (« ../ », chemin absolu) et les lettres de lecteur
+ * (« C:/… ») sur tous les systèmes : un modpack ne contient que des chemins relatifs.
+ */
 function safeTarget(gameDir, rel) {
   const clean = String(rel ?? '').replace(/\\/g, '/');
   const root = path.resolve(gameDir);
   const target = path.resolve(root, clean);
-  if (!clean || path.isAbsolute(clean) || !target.startsWith(root + path.sep)) throw new Error(t('modpacks.chemin_refuse_dans_le_modpack', { rel }));
+  if (!clean || path.isAbsolute(clean) || /^[a-z]:/i.test(clean) || !target.startsWith(root + path.sep)) throw new Error(t('modpacks.chemin_refuse_dans_le_modpack', { rel }));
   return target;
 }
 

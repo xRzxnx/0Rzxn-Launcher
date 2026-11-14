@@ -2,7 +2,22 @@
 
 *English version: [README.md](README.md)*
 
-Launcher Minecraft: Java Edition pour Windows (Electron).
+Launcher Minecraft: Java Edition pour Windows, Linux et macOS (Electron).
+
+## Télécharger
+
+La dernière version est sur la [page des releases](https://github.com/xRzxnx/0Rzxn-Launcher/releases/latest).
+
+| Système | Fichier | |
+|---|---|---|
+| Windows 10 ou 11 (x64) | `0Rzxn_-Launcher-Setup-<version>.exe` | Installation pour ton compte, mises à jour automatiques. |
+| Linux (x64) | `0Rzxn_-Launcher-<version>.AppImage` | Expérimental, mises à jour automatiques. |
+| macOS, Apple Silicon | `0Rzxn_-Launcher-<version>-arm64.dmg` | Expérimental, non signé par Apple. |
+| macOS, Intel | `0Rzxn_-Launcher-<version>-x64.dmg` | Expérimental, non signé par Apple. |
+
+**Linux** : rends le fichier exécutable (`chmod +x 0Rzxn_-Launcher-*.AppImage`) puis ouvre-le. Les AppImage ont besoin de FUSE 2 : installe `libfuse2` (`libfuse2t64` depuis Ubuntu 24.04). Les versions de Minecraft d'avant 1.13 ont besoin de `xrandr` (paquet `x11-xserver-utils`, déjà là sur la plupart des bureaux). Ta session Microsoft n'est gardée d'un lancement à l'autre que si un trousseau est installé (GNOME Keyring ou KWallet) ; sinon, il faut se reconnecter à chaque fois.
+
+**macOS** : ouvre le dmg et glisse le launcher dans Applications. L'app n'est pas signée par Apple, donc macOS bloque le premier lancement : ouvre **Réglages Système › Confidentialité et sécurité** et clique sur **Ouvrir quand même**. Les mises à jour ne sont pas automatiques sur Mac : le launcher prévient quand une version sort et ouvre sa page. Sur les Mac Apple Silicon, les versions de Minecraft d'avant 1.19 passent par Rosetta.
 
 ## Lancer l'app
 
@@ -36,9 +51,9 @@ Les icônes sont générées depuis `src/renderer/assets/logo-mark.svg` par `npm
 - **Modpacks** : installer depuis Modrinth ou importer un `.mrpack` (nouvelle instance), mettre à jour (réglages et mondes conservés), exporter une instance en `.mrpack`.
 - Comptes **Microsoft** et **hors-ligne**. Un nouveau compte hors-ligne demande d'abord un compte Microsoft qui possède le jeu. La connexion Microsoft attend l'accord de Mojang : voir [docs/MICROSOFT.md](docs/MICROSOFT.md).
 - Console en direct (logs XML de Minecraft convertis, jeton masqué), arrêt du jeu, détection des crashs.
-- **Langues** : français, anglais et espagnol, selon la langue de Windows, et changement immédiat dans Paramètres › Launcher.
+- **Langues** : français, anglais et espagnol, selon la langue du système, et changement immédiat dans Paramètres › Launcher.
 - **Confort** : couleur d'accent au choix, statut Discord pendant une partie (désactivé par défaut, voir [docs/DISCORD.md](docs/DISCORD.md)), icône dans la zone de notification, raccourcis clavier (Ctrl+/ pour l'aide), gestion des Java et nettoyage de l'espace disque (Paramètres › Java et stockage).
-- **Mises à jour** : les nouvelles versions se téléchargent en arrière-plan, jamais pendant une partie, et s'installent au redémarrage. Canal bêta au choix dans Paramètres › Launcher.
+- **Mises à jour** : les nouvelles versions se téléchargent en arrière-plan, jamais pendant une partie, et s'installent au redémarrage (sur Mac, le launcher ouvre la page de téléchargement). Canal bêta au choix dans Paramètres › Launcher.
 
 Testé en vrai : 1.8.9 (Java 8), 1.12.2 (Java 8), 1.21.11 (Java 21) et 26.3 (Java 25).
 
@@ -61,7 +76,9 @@ Signature gratuite fournie par [SignPath.io](https://about.signpath.io), certifi
 ## Où sont les données
 
 - `%APPDATA%\.0rzxn\` : versions, bibliothèques, assets, Java (`runtime\`) et instances (`instances\<id>\minecraft\` = dossier du jeu).
+  Linux : `~/.local/share/0rzxn/` ; macOS : `~/Library/Application Support/.0rzxn/`.
 - `%APPDATA%\0Rzxn_ Launcher\` : comptes (`accounts.json`) et réglages globaux (`settings.json`).
+  Linux : `~/.config/0Rzxn_ Launcher/` ; macOS : `~/Library/Application Support/0Rzxn_ Launcher/`.
 
 ## Organisation du code
 

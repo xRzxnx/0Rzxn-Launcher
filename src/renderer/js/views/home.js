@@ -418,7 +418,7 @@ function instanceBlock(instance, status, details) {
       blockAction('upload', t('home.exporter'), {
         onClick: () => update((s) => { s.modal = { type: 'export', instanceId: instance.id, draft: { name: instance.modpack?.name ?? instance.name, version: '1.0.0', summary: '' } }; }),
       }),
-      blockAction('link', t('home.raccourci'), { onClick: () => createShortcut(instance.id) }),
+      state.features.shortcuts && blockAction('link', t('home.raccourci'), { onClick: () => createShortcut(instance.id) }),
       blockAction('shield', t('home.verifier'), { disabled: !instance.installed || Boolean(state.run), onClick: () => verifyInstance(instance.id) }),
       blockAction('trash', t('common.supprimer'), {
         class: 'block-action block-action--danger',

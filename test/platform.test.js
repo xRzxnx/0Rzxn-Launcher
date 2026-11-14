@@ -16,24 +16,27 @@ const shape = (object) =>
     .sort()
     .map((key) => `${key}:${typeof object[key]}`);
 
-test('platformFor : Windows ou version neutre', () => {
+test('platformFor : Windows, Linux, macOS ou version neutre', () => {
   assert.equal(platformFor('win32').name, 'windows');
-  assert.equal(platformFor('linux').name, 'autre');
-  assert.equal(platformFor('darwin').name, 'autre');
+  assert.equal(platformFor('linux').name, 'linux');
+  assert.equal(platformFor('darwin').name, 'mac');
+  assert.equal(platformFor('freebsd').name, 'autre');
 });
 
-test('les deux implémentations exposent les mêmes fonctions', () => {
+test('toutes les implémentations exposent les mêmes fonctions', () => {
   const windows = platformFor('win32');
-  const autre = platformFor('linux');
-  assert.deepEqual(shape(autre), shape(windows));
   const gpuShape = (g) => ['supported', 'listGpus', 'preference', 'setHighPerformance', 'clearPreference'].map((key) => `${key}:${typeof g[key]}`);
-  assert.deepEqual(gpuShape(autre.gpu), gpuShape(windows.gpu));
   assert.equal(windows.gpu.supported, true);
-  assert.equal(autre.gpu.supported, false);
+  for (const name of ['linux', 'darwin', 'freebsd']) {
+    const other = platformFor(name);
+    assert.deepEqual(shape(other), shape(windows), name);
+    assert.deepEqual(gpuShape(other.gpu), gpuShape(windows.gpu), name);
+    assert.equal(other.gpu.supported, false, name);
+  }
 });
 
 test('version neutre : rien n’est lu ni écrit, le raccourci est refusé', async () => {
-  const autre = platformFor('linux');
+  const autre = platformFor('freebsd');
   assert.deepEqual(await autre.gpu.listGpus(), []);
   assert.equal(await autre.gpu.preference('java'), null);
   await autre.gpu.setHighPerformance(['java']);

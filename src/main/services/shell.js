@@ -9,6 +9,7 @@ const { DiscordPresence, gameActivity } = require('../core/discord');
 const { UpdateManager } = require('../core/updates');
 const discordConfig = require('../discord-config');
 const { LauncherTray } = require('../tray');
+const platform = require('../platform');
 
 const LOADER_NAMES = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' };
 
@@ -91,10 +92,15 @@ function createShell({ getWindow, services, launches, isTaskBusy, openWindow = n
     updates.gameChanged();
   };
   tray.setEnabled(services.settings.launcher().tray);
+  // Linux : l'icône créée n'apparaît pas si le bureau n'a pas de zone de notification ; on la retire alors.
+  platform.trayAvailable().then((available) => {
+    if (!available) tray.setAvailable(false);
+  });
 
   // Mises à jour du launcher : seulement dans la version installée, et jamais pendant une partie.
   const updates = new UpdateManager({
     supported: app.isPackaged,
+    canInstall: process.platform !== 'darwin',
     loadUpdater: () => require('electron-updater').autoUpdater,
     isBusy: () => Boolean(launches.session || isTaskBusy()),
     isAutomatic: () => services.settings.launcher().autoUpdate,

@@ -11,7 +11,9 @@ module.exports = {
   name: 'windows',
   gpu,
   physicalCores,
+  shortcutsSupported: true,
   createShortcut,
+  trayAvailable: async () => true,
   /** Mémoire et processeur du jeu (PowerShell). */
   processMetrics: { supported: true, watch: processMetrics.watchProcess, peak: processMetrics.peakMemory },
   /** Après une installation manuelle : retire les anciennes copies (chargé seulement à ce moment-là). */
