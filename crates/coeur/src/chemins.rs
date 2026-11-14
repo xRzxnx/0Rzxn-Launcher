@@ -69,11 +69,25 @@ impl Dossiers {
     }
 }
 
-/// « \?\C:\… » (canonicalize sous Windows) → « C:\… », que Java et les classpaths comprennent.
+/// « \\?\C:\… » (canonicalize sous Windows) → « C:\… », que Java et les classpaths comprennent.
 fn sans_prefixe_long(p: PathBuf) -> PathBuf {
     let s = p.to_string_lossy();
-    match s.strip_prefix(r"\?\") {
+    match s.strip_prefix(r"\\?\") {
         Some(reste) if reste.as_bytes().get(1) == Some(&b':') => PathBuf::from(reste),
         _ => p,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn racine_sans_prefixe_long() {
+        assert_eq!(sans_prefixe_long(PathBuf::from(r"\\?\C:\jeu")), PathBuf::from(r"C:\jeu"));
+        assert_eq!(sans_prefixe_long(PathBuf::from(r"\\?\UNC\serveur\jeu")), PathBuf::from(r"\\?\UNC\serveur\jeu"));
+        let d = Dossiers::new(&std::env::temp_dir().join("coeur-essai-racine"));
+        assert!(!d.racine.to_string_lossy().starts_with(r"\\"), "{}", d.racine.display());
+        assert!(d.racine.is_absolute());
     }
 }
