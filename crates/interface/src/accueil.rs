@@ -2,7 +2,10 @@
 
 use crate::chrome::tete;
 use crate::icones::icone;
-use crate::texte::{arrondi, cle_du_jour, format_court, format_date, format_derniere_partie, format_go, format_temps_de_jeu, t, tv};
+use crate::texte::{
+    arrondi, cle_du_jour, format_court, format_date, format_derniere_partie, format_go, format_memoire, format_secondes,
+    format_temps_de_jeu, t, tv,
+};
 use crate::{Etat, Statut, statut};
 use commun::{Instance, loader_name};
 use leptos::prelude::*;
@@ -130,6 +133,7 @@ fn bloc_instance(etat: Etat, instance: &Instance) -> impl IntoView {
         java_label(instance)
     };
     let ram = RwSignal::new(instance.settings.ram);
+    let pic = instance.last_launch.as_ref().and_then(|l| l.peak_memory);
     let ram_max = 2.0_f64.max(instance.settings.ram).max(16.0);
     let action = |nom: &'static str, cle: &str, desactive: bool| {
         view! { <button class="block-action" disabled=desactive>{icone(nom)}{t(cle)}</button> }
@@ -170,6 +174,8 @@ fn bloc_instance(etat: Etat, instance: &Instance) -> impl IntoView {
                         on:input=move |e| ram.set(event_target_value(&e).parse().unwrap_or(4.0))
                     />
                     <p class="ram-advice"></p>
+                    // Pic de mémoire de la dernière partie (mesuré) : aide à juger le réglage.
+                    {pic.map(|p| view! { <p class="ram-pc">{tv("home.derniere_partie_pic", &[("peak", &format_memoire(p as f64))])}</p> })}
                 </div>
                 <button class="spec-tile">
                     <span class="spec-tile__label">"Java"</span>
@@ -201,6 +207,33 @@ fn tuile(label: String, valeur: String, pied: impl IntoView, extra: impl IntoVie
 
 fn note(texte: String) -> impl IntoView {
     view! { <span class="stat-tile__foot">{texte}</span> }
+}
+
+/// Après une partie : temps du dernier lancement et mémoire utilisée au plus (launcher.db).
+fn tuiles_lancement(instance: &Instance) -> Option<impl IntoView + use<>> {
+    let l = instance.last_launch.clone().filter(|l| l.prepare_ms.is_some() || l.peak_memory.is_some())?;
+    let total = match (l.prepare_ms, l.menu_ms) {
+        (Some(p), Some(m)) => Some(p + m),
+        (p, _) => p,
+    };
+    let s = |ms: i64| format_secondes(ms as f64);
+    let duree = total.map(|total| {
+        let pied = match (l.prepare_ms, l.menu_ms) {
+            (Some(p), Some(m)) => tv("home.preparation_plus_jeu", &[("prepare", &s(p)), ("game", &s(m))]),
+            (p, _) => tv("home.de_preparation", &[("time", &s(p.unwrap_or(0)))]),
+        };
+        tuile(t("home.dernier_lancement"), s(total), note(pied), ())
+    });
+    let ram = instance.settings.ram;
+    let memoire = l.peak_memory.map(|pic| {
+        tuile(
+            t("home.memoire_derniere_partie"),
+            format_memoire(pic as f64),
+            note(tv("home.au_plus_sur_alloues", &[("allocated", &format_go(ram))])),
+            (),
+        )
+    });
+    Some(view! { <section class="stat-tiles stat-tiles--launch" aria-label=t("home.dernier_lancement")>{duree}{memoire}</section> })
 }
 
 /// Temps de jeu : quatre tuiles compactes (total, semaine, parties, record).
@@ -290,12 +323,13 @@ pub fn Accueil() -> impl IntoView {
             .into_any();
         };
         let st = statut(&instance);
-        // shortcut: les tuiles « Dernier lancement » (launcher.db, R1) et la carte modpack (R4) ne sont pas encore là.
+        // shortcut: la carte modpack arrive en R4.
         view! {
             <div>
                 {hero(etat, &instance, &st)}
                 <div class="home__content">
                     {bloc_instance(etat, &instance)}
+                    {tuiles_lancement(&instance)}
                     {(instance.playtime > 0.0).then(|| tuiles_temps(etat, &instance))}
                 </div>
             </div>

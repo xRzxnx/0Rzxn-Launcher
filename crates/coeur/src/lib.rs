@@ -1,5 +1,6 @@
 //! Logique du launcher, sans Tauri : testable avec `cargo test`.
 
+pub mod base;
 pub mod chemins;
 pub mod comptes;
 pub mod fichiers;

@@ -139,3 +139,14 @@ pub fn comparer_naturel(a: &str, b: &str) -> std::cmp::Ordering {
     }
     ma.len().cmp(&mb.len())
 }
+
+/// Mémoire en octets → « 5,2 Go » (une décimale au plus).
+pub fn format_memoire(octets: f64) -> String {
+    format_go(arrondi(octets / 1024f64.powi(3) * 10.0) / 10.0)
+}
+
+/// « 1,4 s » : toujours une décimale.
+pub fn format_secondes(ms: f64) -> String {
+    let valeur = format!("{:.1}", ms / 1000.0);
+    tv("home.secondes", &[("value", &if lang() == "en" { valeur } else { valeur.replace('.', ",") })])
+}

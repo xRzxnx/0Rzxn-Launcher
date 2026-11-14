@@ -1,8 +1,9 @@
 // Pas de console noire derrière la fenêtre sous Windows (sauf en debug, pour lire les erreurs).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use coeur::base::Base;
 use commun::Demarrage;
-use tauri::WebviewWindow;
+use tauri::{Manager, State, WebviewWindow};
 
 /// Langues préférées de l'utilisateur, comme app.getPreferredSystemLanguages() d'Electron.
 /// Windows : la liste « Langues » des paramètres (fr-FR, es-ES…), pas la langue d'affichage du système,
@@ -24,7 +25,7 @@ fn langues_systeme() -> Vec<String> {
 
 /// Tout ce que l'accueil affiche au démarrage.
 #[tauri::command]
-fn demarrage() -> Demarrage {
+fn demarrage(base: State<Base>) -> Demarrage {
     let (racine, donnees) = (coeur::chemins::racine_jeu(), coeur::chemins::donnees());
     let ui = coeur::reglages::Magasin::new(&donnees).interface();
     let (accounts, active_account_id) = coeur::comptes::lire(&donnees);
@@ -32,7 +33,10 @@ fn demarrage() -> Demarrage {
         app_version: env!("CARGO_PKG_VERSION").into(),
         lang: coeur::i18n::langue().into(),
         platform: std::env::consts::OS.into(),
-        instances: coeur::instances::lister(&racine),
+        instances: coeur::instances::lister(&racine)
+            .into_iter()
+            .map(|i| commun::Instance { last_launch: base.dernier_lancement(&i.id), ..i })
+            .collect(),
         accounts,
         active_account_id,
         selected_id: ui.selected_id,
@@ -71,8 +75,17 @@ fn main() {
         coeur::i18n::langue(),
         journal.map(|j| j.fichier().display().to_string()).unwrap_or_default()
     ));
+    let base = Base::ouvrir(&donnees.join("launcher.db"));
     tauri::Builder::default()
+        .manage(base)
         .invoke_handler(tauri::generate_handler![demarrage, fenetre])
-        .run(tauri::generate_context!())
-        .expect("the launcher could not start");
+        .build(tauri::generate_context!())
+        .expect("the launcher could not start")
+        .run(|app, evenement| {
+            // Une fermeture propre de la base retire ses fichiers -wal et -shm.
+            if let tauri::RunEvent::Exit = evenement {
+                app.state::<Base>().fermer();
+                coeur::journal::info("Quit");
+            }
+        });
 }
