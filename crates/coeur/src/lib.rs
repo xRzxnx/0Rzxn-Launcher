@@ -27,6 +27,7 @@ pub mod mesures;
 pub mod microsoft;
 pub mod modpacks;
 pub mod modrinth;
+pub mod mondes;
 pub mod nbt;
 pub mod net;
 pub mod partie;
