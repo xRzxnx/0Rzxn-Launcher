@@ -34,6 +34,12 @@ pub fn svg(nom: &str) -> &'static str {
         "close" => svg!(r#"<path d="M6 6l12 12M18 6L6 18"/>"#, r#"stroke-width="2.5""#),
         "alert" => svg!(r#"<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17v1"/>"#, r#"stroke-width="2.5""#),
         "info" => svg!(r#"<rect x="4" y="4" width="16" height="16"/><path d="M12 11v6M12 7.5v.5"/>"#),
+        "clock" => svg!(r#"<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>"#),
+        "lock" => svg!(r#"<rect x="5" y="11" width="14" height="10"/><path d="M8 11V7h8v4"/>"#),
+        "browser" => svg!(r#"<rect x="3" y="4" width="18" height="16"/><path d="M3 9h18M6 6.5h1M9 6.5h1"/>"#),
+        "microsoft" => {
+            r##"<svg viewBox="0 0 18 18"><rect x="0" y="0" width="8.5" height="8.5" fill="#f25022"/><rect x="9.5" y="0" width="8.5" height="8.5" fill="#7fba00"/><rect x="0" y="9.5" width="8.5" height="8.5" fill="#00a4ef"/><rect x="9.5" y="9.5" width="8.5" height="8.5" fill="#ffb900"/></svg>"##
+        }
         "search" => svg!(r#"<rect x="4" y="4" width="12" height="12"/><path d="M16 16l5 5"/>"#),
         "download" => svg!(r#"<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>"#, r#"stroke-width="2.5""#),
         "trash" => svg!(r#"<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>"#),
@@ -62,4 +68,9 @@ pub fn svg(nom: &str) -> &'static str {
 /// `<span class="icon">` comme icon() de dom.js.
 pub fn icone(nom: &'static str) -> impl IntoView {
     view! { <span class="icon" aria-hidden="true" inner_html=svg(nom)></span> }
+}
+
+/// Icône de taille donnée (icon(nom, taille)).
+pub fn icone_taille(nom: &'static str, taille: u32) -> impl IntoView {
+    view! { <span class="icon" aria-hidden="true" style=format!("width:{taille}px;height:{taille}px") inner_html=svg(nom)></span> }
 }

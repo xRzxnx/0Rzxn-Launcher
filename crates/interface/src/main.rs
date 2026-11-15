@@ -3,6 +3,7 @@
 mod accueil;
 mod banniere;
 mod chrome;
+mod comptes;
 mod icones;
 mod partie;
 mod texte;
@@ -60,6 +61,11 @@ pub struct Etat {
     pub run: RwSignal<Option<Partie>>,
     pub mesures: RwSignal<Option<MesuresJeu>>,
     pub toasts: RwSignal<Vec<partie::Toast>>,
+    /// Fenêtre ouverte par-dessus l'écran (« accounts »).
+    pub modal: RwSignal<Option<&'static str>>,
+    pub connexion: RwSignal<Option<comptes::Connexion>>,
+    /// Avance toutes les 30 s : les temps restants affichés se mettent à jour.
+    pub horloge: RwSignal<u32>,
 }
 
 impl Etat {
@@ -125,6 +131,9 @@ fn etat_initial(depart: Result<Demarrage, String>) -> Etat {
         run: RwSignal::new(None),
         mesures: RwSignal::new(None),
         toasts: RwSignal::new(vec![]),
+        modal: RwSignal::new(None),
+        connexion: RwSignal::new(None),
+        horloge: RwSignal::new(0),
     }
 }
 
@@ -167,7 +176,7 @@ fn App(etat: Etat) -> impl IntoView {
         <chrome::BarreLaterale />
         <chrome::BarreDuHaut />
         <Principal />
-        <div id="modal-root"></div>
+        <div id="modal-root">{move || (etat.modal.get() == Some("accounts")).then(|| view! { <comptes::FenetreComptes /> })}</div>
         <div class="toasts" id="toasts" aria-live="polite"><partie::Toasts /></div>
     }
 }
@@ -180,6 +189,7 @@ fn main() {
         leptos::mount::mount_to_body(move || {
             let etat = etat_initial(depart);
             partie::suivre(etat);
+            comptes::suivre(etat);
             view! { <App etat /> }
         });
     });

@@ -49,6 +49,8 @@ pub struct Dossiers {
     pub runtime: PathBuf,
     pub instances: PathBuf,
     pub cache: PathBuf,
+    pub backups: PathBuf,
+    pub skins: PathBuf,
 }
 
 impl Dossiers {
@@ -64,6 +66,8 @@ impl Dossiers {
             runtime: d("runtime"),
             instances: d("instances"),
             cache: d("cache"),
+            backups: d("backups"),
+            skins: d("skins"),
             racine,
         }
     }

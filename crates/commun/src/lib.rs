@@ -202,6 +202,17 @@ pub struct Compte {
     #[serde(rename = "type")]
     pub kind: String,
     pub name: String,
+    #[serde(default)]
+    pub uuid: String,
+    /// Session Microsoft expirée ou illisible : reconnexion demandée.
+    #[serde(default)]
+    pub needs_login: bool,
+    /// Skin, cape et capes possédées (rien de secret).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub look: Option<serde_json::Value>,
+    /// Jetons gardés en mémoire seulement (système sans trousseau).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_only: Option<bool>,
 }
 
 /// Partie en cours ou en préparation (launch:status, launch:progress).

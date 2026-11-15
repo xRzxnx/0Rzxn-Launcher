@@ -3,7 +3,7 @@
 
 use crate::arguments::QuickPlay;
 use crate::base::Base;
-use crate::comptes;
+use crate::comptes::Comptes;
 use crate::crashes;
 use crate::erreur::{Erreur, Resultat};
 use crate::i18n::{t, tv};
@@ -16,7 +16,7 @@ use crate::taches::{Demande, Etape, Gestionnaire, Progres};
 use futures_util::FutureExt;
 use serde_json::{Map, Value, json};
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -67,8 +67,7 @@ pub struct Parties {
     pub jeu: Arc<Jeu>,
     base: Arc<Base>,
     taches: Arc<Gestionnaire>,
-    /// Dossier des réglages (accounts.json).
-    donnees: PathBuf,
+    comptes: Arc<Comptes>,
     version_launcher: String,
     envoyer: Envoi,
     fenetre: Option<Arc<dyn Fenetre>>,
@@ -89,7 +88,7 @@ pub struct Options {
     pub jeu: Arc<Jeu>,
     pub base: Arc<Base>,
     pub taches: Arc<Gestionnaire>,
-    pub donnees: PathBuf,
+    pub comptes: Arc<Comptes>,
     pub version_launcher: String,
     pub envoyer: Envoi,
     pub fenetre: Option<Arc<dyn Fenetre>>,
@@ -101,7 +100,7 @@ impl Parties {
             jeu: o.jeu,
             base: o.base,
             taches: o.taches,
-            donnees: o.donnees,
+            comptes: o.comptes,
             version_launcher: o.version_launcher,
             envoyer: o.envoyer,
             fenetre: o.fenetre,
@@ -177,8 +176,8 @@ impl Parties {
             return Err(Erreur::new(t("ipc.une_partie_ou_une_installation")));
         }
         let instance = instances::lire(self.racine(), instance_id).ok_or_else(|| Erreur::new(t("instances.instance_introuvable")))?;
-        let compte_id = comptes::choisir(&self.donnees, instance.account_id.as_deref())
-            .ok_or_else(|| Erreur::new(t("common.ajoute_un_compte_avant_de")))?;
+        let compte_id =
+            self.comptes.choisir(instance.account_id.as_deref()).ok_or_else(|| Erreur::new(t("common.ajoute_un_compte_avant_de")))?;
         // Une tâche longue (sauvegarde, mise à jour…) touche cette instance : la partie attend qu'elle finisse.
         if let Some(occupee) = self.taches.en_cours_sur(instance_id) {
             return Err(Erreur::new(tv("ipc.patiente_est_en_cours", &[("task", &occupee.label)])));
@@ -206,7 +205,7 @@ impl Parties {
         self.suivre_preparation(&instance.name, instance_id, preparer_seulement, arret.clone());
 
         let choisi_absent = instance.account_id.as_deref().is_some_and(|a| a != compte_id);
-        let donnees = self.donnees.clone();
+        let comptes = self.comptes.clone();
         let moi = self.moi.clone();
         let session = Session {
             jeu: self.jeu.clone(),
@@ -216,7 +215,7 @@ impl Parties {
                     if choisi_absent {
                         log(&t("ipc.le_compte_choisi_pour_cette"));
                     }
-                    comptes::compte_de_jeu(&donnees, &compte_id)
+                    comptes.compte_de_jeu(&compte_id, &*log).await
                 }
                 .boxed()
             }),
@@ -639,7 +638,7 @@ mod tests {
             jeu: Jeu::new(Dossiers::new(&d.0.join("racine")), Arc::new(Reseau::new())),
             base,
             taches: Gestionnaire::new(OptionsTaches::default()),
-            donnees: d.0.join("donnees"),
+            comptes: Arc::new(Comptes::new(&d.0.join("donnees"), Arc::new(crate::coffre::CoffreClair), None)),
             version_launcher: "0.7.0".into(),
             envoyer: Arc::new(move |c, v| e.lock().unwrap().push((c.into(), v))),
             fenetre: None,
