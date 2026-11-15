@@ -26,6 +26,7 @@ pub mod performances;
 pub mod reglages;
 pub mod regles;
 pub mod retour_local;
+pub mod skins;
 pub mod sortie_jeu;
 pub mod taches;
 pub mod telechargement;
