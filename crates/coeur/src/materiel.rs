@@ -17,7 +17,8 @@ pub struct Carte {
 /// Puce intégrée au processeur ? D'après le fabricant (PCI) et le nom.
 pub fn integree(nom: &str, pnp: &str) -> bool {
     static INTEL_ARC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)Arc\(TM\) [AB]\d|Arc [AB]\d").unwrap());
-    static AMD_APU: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)Radeon\(TM\)( \d+M)? Graphics|Radeon Graphics|Vega \d+ Graphics").unwrap());
+    static AMD_APU: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)Radeon\(TM\)( \d+M)? Graphics|Radeon Graphics|Vega \d+ Graphics").unwrap());
     let haut = pnp.to_uppercase();
     let fabricant = haut.find("VEN_").and_then(|i| haut.get(i + 4..i + 8));
     match fabricant {
@@ -29,7 +30,8 @@ pub fn integree(nom: &str, pnp: &str) -> bool {
 
 /// « NVIDIA GeForce RTX 3060 » → « RTX 3060 ».
 pub fn nom_court(nom: &str) -> String {
-    static MARQUES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\((R|TM)\)|\b(NVIDIA|GeForce|AMD|ATI|Intel|Laptop GPU|Graphics)\b").unwrap());
+    static MARQUES: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)\((R|TM)\)|\b(NVIDIA|GeForce|AMD|ATI|Intel|Laptop GPU|Graphics)\b").unwrap());
     MARQUES.replace_all(nom, "").split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
@@ -65,7 +67,9 @@ pub fn cartes() -> Vec<Carte> {
 pub fn coeurs_cpuinfo(cpuinfo: &str) -> Option<usize> {
     let mut paires = std::collections::HashSet::new();
     for bloc in cpuinfo.split("\n\n") {
-        let champ = |n: &str| bloc.lines().find_map(|l| l.strip_prefix(n).and_then(|r| r.trim_start().strip_prefix(':')).map(|v| v.trim().to_string()));
+        let champ = |n: &str| {
+            bloc.lines().find_map(|l| l.strip_prefix(n).and_then(|r| r.trim_start().strip_prefix(':')).map(|v| v.trim().to_string()))
+        };
         if let (Some(p), Some(c)) = (champ("physical id"), champ("core id")) {
             paires.insert((p, c));
         }
@@ -77,7 +81,9 @@ pub fn coeurs_cpuinfo(cpuinfo: &str) -> Option<usize> {
 pub fn coeurs_physiques() -> Option<usize> {
     #[cfg(windows)]
     {
-        use windows_sys::Win32::System::SystemInformation::{GetLogicalProcessorInformation, RelationProcessorCore, SYSTEM_LOGICAL_PROCESSOR_INFORMATION};
+        use windows_sys::Win32::System::SystemInformation::{
+            GetLogicalProcessorInformation, RelationProcessorCore, SYSTEM_LOGICAL_PROCESSOR_INFORMATION,
+        };
         let mut taille = 0u32;
         unsafe { GetLogicalProcessorInformation(std::ptr::null_mut(), &mut taille) };
         let n = taille as usize / size_of::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION>();
@@ -164,7 +170,11 @@ pub fn materiel() -> Materiel {
     let carte = f.carte.as_ref().map(|c| if c.integrated { t("hardware.carte_integree") } else { nom_court(&c.name) });
     let summary = [Some(go(f.total_go)), Some(coeurs.clone()), carte].into_iter().flatten().collect::<Vec<_>>().join(" \u{b7} ");
     let ram = tv("hardware.ram_total", &[("ram", &go(f.total_go))]);
-    let detail = [f.cpu.clone(), Some(coeurs), f.carte.as_ref().map(|c| c.name.clone()), Some(ram)].into_iter().flatten().collect::<Vec<_>>().join(" \u{b7} ");
+    let detail = [f.cpu.clone(), Some(coeurs), f.carte.as_ref().map(|c| c.name.clone()), Some(ram)]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" \u{b7} ");
     Materiel { total_gb: f.total_go, integrated: f.carte.as_ref().is_some_and(|c| c.integrated), summary, detail }
 }
 
@@ -182,7 +192,10 @@ mod tests {
         assert_eq!(nom_court("NVIDIA GeForce RTX 3060 Laptop GPU"), "RTX 3060");
         let l = [Carte { name: "UHD".into(), integrated: true }, Carte { name: "RTX".into(), integrated: false }];
         assert_eq!(carte_principale(&l).unwrap().name, "RTX");
-        assert_eq!(coeurs_cpuinfo("physical id\t: 0\ncore id\t: 0\n\nphysical id\t: 0\ncore id\t: 0\n\nphysical id\t: 0\ncore id\t: 1\n"), Some(2));
+        assert_eq!(
+            coeurs_cpuinfo("physical id\t: 0\ncore id\t: 0\n\nphysical id\t: 0\ncore id\t: 0\n\nphysical id\t: 0\ncore id\t: 1\n"),
+            Some(2)
+        );
         assert_eq!(coeurs_cpuinfo("processor : 0"), None);
     }
 

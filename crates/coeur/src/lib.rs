@@ -1,6 +1,7 @@
 //! Logique du launcher, sans Tauri : testable avec `cargo test`.
 
 pub mod arguments;
+pub mod art_titre;
 pub mod base;
 pub mod chemins;
 pub mod coffre;
@@ -9,6 +10,7 @@ pub mod contenu;
 pub mod controle_mods;
 pub mod crashes;
 pub mod dependances;
+pub mod ecran_titre;
 pub mod empreintes;
 pub mod ensembles;
 pub mod erreur;

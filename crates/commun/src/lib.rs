@@ -9,6 +9,11 @@ use std::collections::BTreeMap;
 
 pub const LOADERS: [&str; 5] = ["vanilla", "fabric", "quilt", "forge", "neoforge"];
 
+/// Champ présent, même à null : Some(Value::Null). Absent : None (par `default`).
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<serde_json::Value>, D::Error> {
+    serde::Deserialize::deserialize(d).map(Some)
+}
+
 pub fn loader_name(loader: &str) -> &'static str {
     match loader {
         "fabric" => "Fabric",
@@ -176,8 +181,8 @@ pub struct Instance {
     /// Modpack d'origine : { projectId, versionId, name, version, icon, files }.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modpack: Option<serde_json::Value>,
-    /// Écran titre Cristal : { style, card } ; absent = jamais réglé.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Écran titre Cristal : { style, card } ; absent (None) = jamais réglé, null (Some(Null)) = menu classique choisi.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "present")]
     pub title_menu: Option<serde_json::Value>,
     /// Ensembles de mods (validés) et ensemble actif.
     #[serde(default)]

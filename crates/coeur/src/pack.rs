@@ -26,7 +26,18 @@ pub struct ModPack {
 }
 
 const fn m(slug: &'static str, titre: &'static str, impact: &'static str, quoi: &'static str, ids: &'static [&'static str]) -> ModPack {
-    ModPack { slug, titre: Some(titre), cle_titre: None, impact, cle_quoi: quoi, ids, rivaux: &[], remplacant: None, remplacant_seulement: false, optionnel: false }
+    ModPack {
+        slug,
+        titre: Some(titre),
+        cle_titre: None,
+        impact,
+        cle_quoi: quoi,
+        ids,
+        rivaux: &[],
+        remplacant: None,
+        remplacant_seulement: false,
+        optionnel: false,
+    }
 }
 
 pub const PACK: [ModPack; 10] = [
@@ -47,7 +58,12 @@ pub const PACK: [ModPack; 10] = [
     m("ferrite-core", "FerriteCore", "ram", "performance.reduit_la_memoire_utilisee_donc", &["ferritecore"]),
     m("modernfix", "ModernFix", "start", "performance.demarrage_plus_rapide_et_moins", &["modernfix"]),
     m("dynamic-fps", "Dynamic FPS", "eco", "performance.baisse_les_fps_quand_la", &["dynamic_fps", "dynamicfps"]),
-    ModPack { titre: None, cle_titre: Some("performance.c2me_avance"), optionnel: true, ..m("c2me-fabric", "", "tick", "performance.genere_les_chunks_sur_plusieurs", &["c2me"]) },
+    ModPack {
+        titre: None,
+        cle_titre: Some("performance.c2me_avance"),
+        optionnel: true,
+        ..m("c2me-fabric", "", "tick", "performance.genere_les_chunks_sur_plusieurs", &["c2me"])
+    },
 ];
 
 impl ModPack {
@@ -130,7 +146,13 @@ pub async fn etat(c: &Contenu, dossier_jeu: &Path, instance: &Instance) -> Resul
             let nom = if r.mod_id == "optifine" || r.fichier.contains("optifine") { "OptiFine".to_string() } else { r.mod_id.clone() };
             ("conflict", Some(tv("performance.fait_deja_ce_travail", &[("value", &nom)])))
         } else if v.is_none() {
-            ("unavailable", Some(tv("performance.pas_de_version_pour", &[("LOADER_LABELS", nom_loader(&instance.loader)), ("version", &instance.version)])))
+            (
+                "unavailable",
+                Some(tv(
+                    "performance.pas_de_version_pour",
+                    &[("LOADER_LABELS", nom_loader(&instance.loader)), ("version", &instance.version)],
+                )),
+            )
         } else {
             ("available", None)
         };
@@ -230,7 +252,10 @@ mod tests {
         let instance = Instance { loader: "fabric".into(), version: "1.21.11".into(), ..Default::default() };
         // Sodium absent, Embeddium (son remplaçant) présent : le pack le compte.
         assert_eq!(compte(&c, &jeu, &instance).await.unwrap(), json!({ "installed": 2, "mods": 2 }));
-        assert_eq!(compte(&c, &jeu, &Instance { loader: "vanilla".into(), ..instance.clone() }).await.unwrap(), json!({ "installed": 0, "mods": 0 }));
+        assert_eq!(
+            compte(&c, &jeu, &Instance { loader: "vanilla".into(), ..instance.clone() }).await.unwrap(),
+            json!({ "installed": 0, "mods": 0 })
+        );
         assert_eq!(PACK.iter().filter(|p| p.optionnel).count(), 1);
         assert!(!PACK[9].titre().is_empty());
     }
