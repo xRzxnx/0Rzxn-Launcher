@@ -8,8 +8,10 @@ use tokio::net::TcpListener;
 
 #[derive(Debug, Clone)]
 pub struct Requete {
+    pub methode: String,
     pub chemin: String,
     pub entetes: Vec<(String, String)>,
+    pub corps: Vec<u8>,
 }
 
 impl Requete {
@@ -90,11 +92,24 @@ pub async fn servir(reponse: impl Fn(usize, &Requete) -> Reponse + Send + Sync +
                         Ok(n) => tampon.extend_from_slice(&b[..n]),
                     }
                 }
-                let texte = String::from_utf8_lossy(&tampon).into_owned();
+                let fin = tampon.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(0) + 4;
+                let texte = String::from_utf8_lossy(&tampon[..fin]).into_owned();
                 let mut lignes = texte.split("\r\n");
-                let chemin = lignes.next().unwrap_or("").split(' ').nth(1).unwrap_or("/").to_string();
-                let entetes = lignes.filter_map(|l| l.split_once(':')).map(|(n, v)| (n.trim().to_string(), v.trim().to_string())).collect();
-                let requete = Requete { chemin, entetes };
+                let premiere: Vec<&str> = lignes.next().unwrap_or("").split(' ').collect();
+                let methode = premiere.first().copied().unwrap_or("GET").to_string();
+                let chemin = premiere.get(1).copied().unwrap_or("/").to_string();
+                let entetes: Vec<(String, String)> =
+                    lignes.filter_map(|l| l.split_once(':')).map(|(n, v)| (n.trim().to_string(), v.trim().to_string())).collect();
+                let longueur: usize =
+                    entetes.iter().find(|(n, _)| n.eq_ignore_ascii_case("content-length")).and_then(|(_, v)| v.parse().ok()).unwrap_or(0);
+                let mut corps = tampon[fin..].to_vec();
+                while corps.len() < longueur {
+                    match flux.read(&mut b).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => corps.extend_from_slice(&b[..n]),
+                    }
+                }
+                let requete = Requete { methode, chemin, entetes, corps };
                 let numero = {
                     let mut st = s.lock().unwrap();
                     st.requetes.push(requete.clone());

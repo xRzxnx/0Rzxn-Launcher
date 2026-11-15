@@ -2,7 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use coeur::base::{Base, Tache};
+use coeur::comptes::Comptes;
 use coeur::jeu::Jeu;
+use coeur::microsoft;
 use coeur::net::Reseau;
 use coeur::partie::{Fenetre, Parties};
 use coeur::taches::Gestionnaire;
@@ -61,10 +63,9 @@ fn liste_instances(base: &Base) -> Vec<Instance> {
 
 /// Tout ce que l'accueil affiche au démarrage.
 #[tauri::command]
-fn demarrage(base: State<Arc<Base>>) -> Demarrage {
-    let donnees = coeur::chemins::donnees();
-    let ui = coeur::reglages::Magasin::new(&donnees).interface();
-    let (accounts, active_account_id) = coeur::comptes::lire(&donnees);
+fn demarrage(base: State<Arc<Base>>, comptes: State<Arc<Comptes>>) -> Demarrage {
+    let ui = coeur::reglages::Magasin::new(&coeur::chemins::donnees()).interface();
+    let coeur::comptes::Liste { accounts, active_id: active_account_id } = comptes.liste();
     Demarrage {
         app_version: env!("CARGO_PKG_VERSION").into(),
         lang: coeur::i18n::langue().into(),
@@ -182,6 +183,13 @@ fn main() {
     reseau.limiter(Some(reglages.downloads.concurrency), Some(reglages.downloads.per_host));
     nettoyer_temporaires(base.clone());
     let jeu = Jeu::new(coeur::chemins::Dossiers::new(&coeur::chemins::racine_jeu()), reseau.clone());
+    // Renouvellement des sessions Microsoft avant une partie ou un appel à Mojang.
+    let r = reseau.clone();
+    let renouveler: coeur::comptes::Renouveler = Arc::new(move |jeton, redirect| {
+        let r = r.clone();
+        Box::pin(async move { microsoft::renouveler(&r, &microsoft::Points::default(), &microsoft::client_id(), &jeton, &redirect).await })
+    });
+    let comptes = Arc::new(Comptes::new(&donnees, coeur::coffre::du_systeme(&donnees), Some(renouveler)));
     tauri::Builder::default()
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -201,12 +209,13 @@ fn main() {
                 jeu,
                 base: base.clone(),
                 taches: taches.clone(),
-                donnees: donnees.clone(),
+                comptes: comptes.clone(),
                 version_launcher: env!("CARGO_PKG_VERSION").into(),
                 envoyer: emettre,
                 fenetre: Some(Arc::new(FenetrePrincipale(app.handle().clone()))),
             });
             let _ = parties_lien.set(Arc::downgrade(&parties));
+            app.manage(comptes);
             app.manage(base);
             app.manage(reseau);
             app.manage(taches);

@@ -9,12 +9,16 @@ commun.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+md-5 = "0.11.0"
 regex = "1.13.1"
 rusqlite = { version = "0.41.1", features = ["bundled"] }
 flate2 = "1.1.10"
 crc32fast = "1.5.3"
+aes-gcm = "0.11.1"
+base64 = "0.23.1"
 bytes = "1.12.1"
 fastrand = "2.5.0"
+getrandom = "0.4.3"
 futures-util = { version = "0.3.34", default-features = false, features = ["std", "alloc"] }
 sha1 = "0.11.0"
 sha2 = "0.11.1"
@@ -25,7 +29,13 @@ tokio-util = "0.7.20"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56.0"
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_ProcessStatus", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_ProcessStatus", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", features = ["apple-native"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust", "vendored"] }
 
 [dev-dependencies]
 tokio = { version = "1.54.1", features = ["net"] }
