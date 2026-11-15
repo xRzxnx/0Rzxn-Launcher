@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 commun.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 console_error_panic_hook = "0.1.7"
 js-sys = "0.3.107"
 leptos = { version = "0.8.23", features = ["csr"] }
@@ -15,12 +16,14 @@ wasm-bindgen = "0.2.130"
 wasm-bindgen-futures = "0.4.80"
 web-sys = { version = "0.3.107", features = [
   "CanvasRenderingContext2d",
+  "Clipboard",
   "console",
   "Document",
   "DomRect",
   "Element",
   "HtmlCanvasElement",
   "HtmlElement",
+  "HtmlInputElement",
   "MediaQueryList",
   "Navigator",
   "PointerEvent",

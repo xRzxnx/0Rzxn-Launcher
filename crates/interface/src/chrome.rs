@@ -3,7 +3,7 @@
 use crate::icones::{icone, svg};
 use crate::texte::{comparer_naturel, t, tv};
 use crate::{Etat, appeler, statut};
-use commun::{Compte, Instance, LOADERS, loader_name};
+use commun::{Instance, LOADERS, loader_name};
 use leptos::prelude::*;
 
 const DECOR_PAR_DEFAUT: u32 = 120;
@@ -89,7 +89,7 @@ fn nom_onglet(id: &str) -> String {
 }
 
 /// Avatar pixel en attendant les vraies têtes de skin (avatar() de dom.js).
-fn avatar(variante: &str, taille: u32) -> impl IntoView + use<> {
+pub fn avatar(variante: &str, taille: u32) -> impl IntoView + use<> {
     const A: [&str; 8] = ["HHHHHHHH", "HHHHHHHH", "GHSSSSHG", "GSSSSSSG", "SWPSSPWS", "SSSSSSSS", "SSSMMSSS", "SSSSSSSS"];
     const B: [&str; 8] = ["OOOOOOOO", "OOOOOOOO", "OOSSSSOO", "OSSSSSSO", "OSESSESO", "OSSSSSSO", "OSSmmSSO", "OOSSSSOO"];
     let couleur = |c: char| match c {
@@ -111,10 +111,7 @@ fn avatar(variante: &str, taille: u32) -> impl IntoView + use<> {
     }
 }
 
-/// Tête du compte. shortcut: toujours l'avatar pixel ; les têtes de skin (cache skin://) arrivent en R3.
-pub fn tete(compte: &Compte, taille: u32) -> impl IntoView + use<> {
-    avatar(if compte.kind == "microsoft" { "a" } else { "b" }, taille)
-}
+pub use crate::comptes::tete;
 
 #[component]
 pub fn BarreDuHaut() -> impl IntoView {
@@ -139,7 +136,7 @@ pub fn BarreDuHaut() -> impl IntoView {
             None => (t("common.aucun_compte"), t("common.ajouter_un_compte")),
         };
         view! {
-            <button class="account-chip" aria-label=label>
+            <button class="account-chip" aria-label=label on:click=move |_| etat.modal.set(Some("accounts"))>
                 {match &compte {
                     Some(c) => tete(c, 30).into_any(),
                     None => view! { <span class="avatar" style="width:30px;height:30px;background:var(--line-3)"></span> }.into_any(),

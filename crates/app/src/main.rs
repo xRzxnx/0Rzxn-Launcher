@@ -1,12 +1,15 @@
 // Pas de console noire derrière la fenêtre sous Windows (sauf en debug, pour lire les erreurs).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod connexion;
+
 use coeur::base::{Base, Tache};
-use coeur::comptes::Comptes;
+use coeur::comptes::{Comptes, Liste};
 use coeur::jeu::Jeu;
 use coeur::microsoft;
 use coeur::net::Reseau;
 use coeur::partie::{Fenetre, Parties};
+use coeur::skins::{Bibliotheque, GardeRobe, Mojang};
 use coeur::taches::Gestionnaire;
 use commun::{Demarrage, Instance};
 use serde_json::Value;
@@ -118,6 +121,116 @@ async fn annuler_tache(taches: State<'_, Arc<Gestionnaire>>, id: Option<String>)
     Ok(taches.annuler(id.as_deref()))
 }
 
+// ---------- Comptes ----------
+
+fn texte_erreur(e: coeur::erreur::Erreur) -> String {
+    e.message
+}
+
+#[tauri::command]
+fn comptes_liste(comptes: State<Arc<Comptes>>) -> Liste {
+    comptes.liste()
+}
+
+#[tauri::command]
+fn ajouter_hors_ligne(comptes: State<Arc<Comptes>>, nom: String) -> Result<Liste, String> {
+    comptes.ajouter_hors_ligne(&nom).map_err(texte_erreur)
+}
+
+/// Connexion Microsoft (navigateur par défaut, « window » : fenêtre intégrée).
+#[tauri::command]
+async fn ajouter_microsoft(app: tauri::AppHandle, mode: Option<String>) -> Result<Value, String> {
+    connexion::ajouter_microsoft(&app, mode.as_deref().unwrap_or("browser")).await.map_err(texte_erreur)
+}
+
+#[tauri::command]
+fn connexion_rouvrir(app: tauri::AppHandle) -> bool {
+    connexion::rouvrir(&app)
+}
+
+#[tauri::command]
+fn connexion_fenetre(app: tauri::AppHandle) -> bool {
+    connexion::utiliser_fenetre(&app)
+}
+
+#[tauri::command]
+async fn connexion_annuler(app: tauri::AppHandle) -> Result<bool, String> {
+    Ok(connexion::annuler(&app).await)
+}
+
+#[tauri::command]
+fn retirer_compte(comptes: State<Arc<Comptes>>, id: String) -> Result<Liste, String> {
+    comptes.retirer(&id).map_err(texte_erreur)
+}
+
+#[tauri::command]
+fn activer_compte(comptes: State<Arc<Comptes>>, id: String) -> Result<Liste, String> {
+    comptes.activer(&id).map_err(texte_erreur)
+}
+
+/// Têtes des comptes depuis l'API publique de Mojang.
+#[tauri::command]
+async fn rafraichir_apparences(garde: State<'_, Arc<GardeRobe>>) -> Result<Liste, String> {
+    Ok(garde.rafraichir().await)
+}
+
+// ---------- Skins et capes ----------
+// shortcut: l'import d'un PNG (sélecteur de fichier) et l'écran « Skin et cape » arrivent avec les écrans (R5).
+
+#[tauri::command]
+async fn skins_etat(garde: State<'_, Arc<GardeRobe>>, id: String) -> Result<Value, String> {
+    garde.etat(&id).await.map_err(texte_erreur)
+}
+
+#[tauri::command]
+fn skins_bibliotheque(biblio: State<Arc<Bibliotheque>>) -> Vec<Value> {
+    biblio.liste()
+}
+
+#[tauri::command]
+async fn skins_copier_joueur(garde: State<'_, Arc<GardeRobe>>, nom: String) -> Result<Value, String> {
+    let (item, ajoute) = garde.copier_joueur(&nom).await.map_err(texte_erreur)?;
+    Ok(serde_json::json!({ "id": item.id, "name": item.name, "added": ajoute, "library": garde.biblio.liste() }))
+}
+
+#[tauri::command]
+fn skins_variante(biblio: State<Arc<Bibliotheque>>, id: String, variante: String) -> Result<Vec<Value>, String> {
+    biblio.changer_variante(&id, &variante).map_err(texte_erreur)?;
+    Ok(biblio.liste())
+}
+
+#[tauri::command]
+fn skins_retirer(biblio: State<Arc<Bibliotheque>>, id: String) -> Result<Vec<Value>, String> {
+    biblio.retirer(&id).map_err(texte_erreur)?;
+    Ok(biblio.liste())
+}
+
+/// Un refus de Mojang revient dans l'état (avec son code) : ce qui a déjà été appliqué reste à jour à l'écran.
+#[tauri::command]
+async fn skins_appliquer(garde: State<'_, Arc<GardeRobe>>, id: String, changement: Value) -> Result<Value, String> {
+    Ok(garde.appliquer(&id, &changement).await.unwrap_or_else(|e| garde.instantane(&id, Some(&e))))
+}
+
+#[tauri::command]
+async fn skins_par_defaut(garde: State<'_, Arc<GardeRobe>>, id: String) -> Result<Value, String> {
+    Ok(garde.par_defaut(&id).await.unwrap_or_else(|e| garde.instantane(&id, Some(&e))))
+}
+
+/// Images des skins : skin://texture/<empreinte> (cache de Mojang) et skin://library/<id> (« Mes skins ») seulement.
+async fn image_skin(biblio: Arc<Bibliotheque>, uri: String) -> tauri::http::Response<Vec<u8>> {
+    let sans = uri.split(['?', '#']).next().unwrap_or("");
+    let (genre, id) = sans.trim_end_matches('/').rsplit_once('/').map(|(a, b)| (a.rsplit('/').next().unwrap_or(""), b)).unwrap_or(("", ""));
+    let fichier = match genre {
+        "library" => biblio.fichier_skin(id),
+        "texture" => biblio.texture(id).await,
+        _ => Err(coeur::erreur::Erreur::new("unknown")),
+    };
+    match fichier.ok().and_then(|f| std::fs::read(f).ok()) {
+        Some(png) => tauri::http::Response::builder().header("Content-Type", "image/png").body(png).unwrap_or_default(),
+        None => tauri::http::Response::builder().status(404).body(vec![]).unwrap_or_default(),
+    }
+}
+
 /// La fenêtre principale autour de la partie : réduite ou cachée au lancement, rendue à la fin.
 struct FenetrePrincipale(AppHandle);
 
@@ -190,7 +303,16 @@ fn main() {
         Box::pin(async move { microsoft::renouveler(&r, &microsoft::Points::default(), &microsoft::client_id(), &jeton, &redirect).await })
     });
     let comptes = Arc::new(Comptes::new(&donnees, coeur::coffre::du_systeme(&donnees), Some(renouveler)));
+    let biblio = Arc::new(Bibliotheque::new(&jeu.dossiers.skins, &jeu.dossiers.cache, reseau.clone(), Mojang::default()));
+    let garde = Arc::new(GardeRobe::new(comptes.clone(), biblio.clone(), reseau.clone(), microsoft::Points::default()));
+    let biblio_images = biblio.clone();
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .register_asynchronous_uri_scheme_protocol("skin", move |_ctx, requete, reponse| {
+            let (b, uri) = (biblio_images.clone(), requete.uri().to_string());
+            tauri::async_runtime::spawn(async move { reponse.respond(image_skin(b, uri).await) });
+        })
+        .manage(connexion::Connexion::default())
         .setup(move |app| {
             let handle = app.handle().clone();
             let emettre: coeur::partie::Envoi = Arc::new(move |canal, charge| {
@@ -216,13 +338,40 @@ fn main() {
             });
             let _ = parties_lien.set(Arc::downgrade(&parties));
             app.manage(comptes);
+            app.manage(biblio);
+            app.manage(garde);
             app.manage(base);
             app.manage(reseau);
             app.manage(taches);
             app.manage(parties);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![demarrage, instances, lancer, arreter, etat_partie, taches, annuler_tache, fenetre])
+        .invoke_handler(tauri::generate_handler![
+            demarrage,
+            instances,
+            lancer,
+            arreter,
+            etat_partie,
+            taches,
+            annuler_tache,
+            fenetre,
+            comptes_liste,
+            ajouter_hors_ligne,
+            ajouter_microsoft,
+            connexion_rouvrir,
+            connexion_fenetre,
+            connexion_annuler,
+            retirer_compte,
+            activer_compte,
+            rafraichir_apparences,
+            skins_etat,
+            skins_bibliotheque,
+            skins_copier_joueur,
+            skins_variante,
+            skins_retirer,
+            skins_appliquer,
+            skins_par_defaut
+        ])
         .build(tauri::generate_context!())
         .expect("the launcher could not start")
         .run(|app, evenement| {

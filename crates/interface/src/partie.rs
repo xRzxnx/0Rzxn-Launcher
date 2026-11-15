@@ -125,6 +125,8 @@ fn changement(etat: Etat, s: Statut) {
     let instance = id.and_then(|id| etat.instances.with_untracked(|l| l.iter().find(|i| i.id == id).cloned()));
     let nom = instance.as_ref().map_or_else(|| "L'instance".into(), |i| i.name.clone());
     if let Some(e) = &s.error {
+        // Une session Microsoft expirée est signalée dans la liste des comptes.
+        crate::comptes::rafraichir(etat);
         let titre = match s.error_code.as_deref() {
             Some("JAVA_32_BIT") => t("actions.lancement_arrete_java_32"),
             Some("ROSETTA_MISSING") => {
