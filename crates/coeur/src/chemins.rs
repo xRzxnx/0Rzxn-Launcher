@@ -6,16 +6,16 @@ use std::path::PathBuf;
 /// Nom du dossier des réglages : celui qu'Electron dérivait du productName.
 const NOM_APP: &str = "0Rzxn_ Launcher";
 
-fn maison() -> PathBuf {
+pub fn maison() -> PathBuf {
     env::var_os("HOME").or_else(|| env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default()
 }
 
-fn xdg(var: &str, defaut: &str) -> PathBuf {
+pub fn xdg(var: &str, defaut: &str) -> PathBuf {
     env::var_os(var).filter(|v| !v.is_empty()).map(PathBuf::from).unwrap_or_else(|| maison().join(defaut))
 }
 
 /// Dossier « appData » d'Electron : %APPDATA%, ~/Library/Application Support, $XDG_CONFIG_HOME.
-fn app_data() -> PathBuf {
+pub fn app_data() -> PathBuf {
     if cfg!(windows) {
         env::var_os("APPDATA").map(PathBuf::from).unwrap_or_else(|| maison().join("AppData").join("Roaming"))
     } else if cfg!(target_os = "macos") {
