@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::Path;
 
-fn id_valide(id: &str) -> bool {
+pub fn id_valide(id: &str) -> bool {
     !id.is_empty() && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
@@ -50,6 +50,13 @@ pub fn lire(racine: &Path, id: &str) -> Option<Instance> {
     // Réglages vérifiés un par un (une valeur fausse ne fait pas disparaître l'instance).
     let reglages = crate::reglages::nettoyer_instance(&brut["settings"], &commun::Reglages::default());
     brut["settings"] = serde_json::to_value(reglages).ok()?;
+    let (ensembles, actif) = crate::gestion_instances::nettoyer_ensembles(&brut["modSets"], &brut["activeModSet"]);
+    brut["modSets"] = Value::Array(ensembles);
+    brut["activeModSet"] = actif.map_or(Value::Null, Value::String);
+    brut["recent"] = Value::Array(crate::gestion_instances::nettoyer_recents(&brut["recent"]));
+    if let Some(m) = brut.get("titleMenu").filter(|m| !m.is_null()) {
+        brut["titleMenu"] = crate::gestion_instances::options_menu(m);
+    }
     let sup: Supplement = serde_json::from_value(brut.clone()).ok()?;
     let mut instance: Instance = serde_json::from_value(brut).ok()?;
     if !LOADERS.contains(&instance.loader.as_str()) {
@@ -71,6 +78,7 @@ pub fn lire(racine: &Path, id: &str) -> Option<Instance> {
         .and_then(|j| j.java_version)
         .map(|j| j.major_version);
     instance.mods_actifs = (!vanilla).then(|| compter_jars(&dossier.join("minecraft").join("mods")));
+    instance.quick_play = crate::gestion_instances::quick_play_version(&instance.version);
     Some(instance)
 }
 
