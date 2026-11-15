@@ -110,7 +110,7 @@ impl Default for ReglagesLauncher {
 }
 
 /// Dernier lancement d'une instance (launcher.db) : préparation, jusqu'au menu, pic de mémoire.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DernierLancement {
     pub started_at: i64,
@@ -141,7 +141,7 @@ pub struct Fond {
 }
 
 /// Instance telle que l'interface la reçoit : instance.json + ce que le moteur calcule.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Instance {
     pub id: String,
@@ -173,6 +173,20 @@ pub struct Instance {
     pub background: Option<Fond>,
     #[serde(default)]
     pub imported_from: Option<serde_json::Value>,
+    /// Modpack d'origine : { projectId, versionId, name, version, icon, files }.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modpack: Option<serde_json::Value>,
+    /// Écran titre Cristal : { style, card } ; absent = jamais réglé.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_menu: Option<serde_json::Value>,
+    /// Ensembles de mods (validés) et ensemble actif.
+    #[serde(default)]
+    pub mod_sets: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub active_mod_set: Option<String>,
+    /// Liste « Reprendre » : mondes et serveurs rejoints, le plus récent d'abord.
+    #[serde(default)]
+    pub recent: Vec<serde_json::Value>,
     // Calculés par le moteur, absents d'instance.json :
     #[serde(default)]
     pub installed: bool,
@@ -185,6 +199,9 @@ pub struct Instance {
     /// Dernier lancement noté dans launcher.db.
     #[serde(default)]
     pub last_launch: Option<DernierLancement>,
+    /// Quick Play (entrer directement dans un monde) possible pour cette version.
+    #[serde(default)]
+    pub quick_play: bool,
 }
 
 fn icone_par_defaut() -> String {
