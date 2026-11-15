@@ -3,6 +3,7 @@
 use crate::fichiers::lire_json;
 use commun::{Instance, LOADERS};
 use serde::Deserialize;
+use serde_json::{Value, json};
 use std::path::Path;
 
 fn id_valide(id: &str) -> bool {
@@ -91,9 +92,129 @@ pub fn lister(racine: &Path) -> Vec<Instance> {
     liste
 }
 
+pub fn dossier(racine: &Path, id: &str) -> std::path::PathBuf {
+    racine.join("instances").join(id)
+}
+
+/// Modifie instance.json en gardant les champs que ce code ne connaît pas. Sans effet si l'instance n'existe plus.
+fn modifier(racine: &Path, id: &str, f: impl FnOnce(&mut serde_json::Map<String, Value>)) -> std::io::Result<()> {
+    if !id_valide(id) {
+        return Ok(());
+    }
+    let fichier = dossier(racine, id).join("instance.json");
+    let Some(Value::Object(mut m)) = lire_json::<Value>(&fichier) else { return Ok(()) };
+    f(&mut m);
+    crate::fichiers::ecrire_json(&fichier, &m)
+}
+
+/// Le loader de mods de l'instance est installé sous cette version.
+pub fn marquer_loader_installe(racine: &Path, id: &str, version_id: &str) -> std::io::Result<()> {
+    modifier(racine, id, |m| {
+        let v = json!({ "loader": m.get("loader"), "loaderVersion": m.get("loaderVersion"), "versionId": version_id });
+        m.insert("loaderInstalled".into(), v);
+    })
+}
+
+/// Partie finie : temps de jeu, dernière partie et statistiques par jour (un peu plus d'un an gardé).
+pub fn noter_partie(racine: &Path, id: &str, minutes: u64, fin_ms: i64) -> std::io::Result<()> {
+    modifier(racine, id, |m| {
+        let jeu = m.get("playtime").and_then(Value::as_f64).unwrap_or(0.0) + minutes as f64;
+        m.insert("playtime".into(), json!(jeu));
+        m.insert("lastPlayedAt".into(), json!(fin_ms));
+        if minutes == 0 {
+            return;
+        }
+        let debut = fin_ms - minutes as i64 * 60_000;
+        let mut stats = json!({ "days": {}, "sessions": 0, "longest": 0, "since": debut });
+        if let Some(Value::Object(anciennes)) = m.get("stats") {
+            for (k, v) in anciennes {
+                stats[k] = v.clone();
+            }
+        }
+        let mut curseur = debut;
+        while curseur < fin_ms {
+            let jour = chrono::DateTime::from_timestamp_millis(curseur).unwrap_or_default().with_timezone(&chrono::Local);
+            let minuit = (jour.date_naive() + chrono::Days::new(1)).and_hms_opt(0, 0, 0).unwrap_or_default();
+            let lendemain = minuit.and_local_timezone(chrono::Local).earliest().map_or(fin_ms, |t| t.timestamp_millis());
+            let tranche = fin_ms.min(lendemain) - curseur;
+            let cle = jour.format("%Y-%m-%d").to_string();
+            let avant = stats["days"].get(&cle).and_then(Value::as_f64).unwrap_or(0.0);
+            stats["days"][&cle] = json!(((avant + tranche as f64 / 60_000.0) * 10.0).round() / 10.0);
+            curseur += tranche.max(1);
+        }
+        if let Some(jours) = stats["days"].as_object_mut() {
+            let mut cles: Vec<String> = jours.keys().cloned().collect();
+            cles.sort();
+            for k in &cles[..cles.len().saturating_sub(400)] {
+                jours.remove(k);
+            }
+        }
+        stats["sessions"] = json!(stats["sessions"].as_u64().unwrap_or(0) + 1);
+        stats["longest"] = json!(stats["longest"].as_f64().unwrap_or(0.0).max(minutes as f64));
+        m.insert("stats".into(), stats);
+    })
+}
+
+/// Monde ou serveur rejoint pendant la partie (liste « Reprendre », 5 au plus, le plus récent d'abord).
+pub fn noter_quick_play(racine: &Path, id: &str, genre: &str, cible: &str, nom: &str, quand: i64) -> std::io::Result<()> {
+    if (genre != "singleplayer" && genre != "multiplayer") || cible.is_empty() || cible.chars().count() > 260 {
+        return Ok(());
+    }
+    modifier(racine, id, |m| {
+        let nom: String = if nom.is_empty() { cible.into() } else { nom.chars().take(100).collect() };
+        let mut liste = vec![json!({ "type": genre, "id": cible, "name": nom, "at": quand })];
+        for r in m.get("recent").and_then(Value::as_array).into_iter().flatten() {
+            let (g, c) = (r.get("type").and_then(Value::as_str), r.get("id").and_then(Value::as_str));
+            if matches!(g, Some("singleplayer" | "multiplayer"))
+                && c.is_some_and(|c| !c.is_empty())
+                && (g != Some(genre) || c != Some(cible))
+            {
+                liste.push(r.clone());
+            }
+        }
+        liste.truncate(5);
+        m.insert("recent".into(), Value::Array(liste));
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::essai::Dossier;
+    use serde_json::Value;
+
+    #[test]
+    fn parties_et_mondes_rejoints() {
+        let d = Dossier::nouveau("instances-parties");
+        d.ecrire(
+            "instances/survie/instance.json",
+            r#"{"id":"survie","name":"S","version":"1.21.11","loader":"fabric","loaderVersion":"0.19.5","perso":1}"#,
+        );
+        super::marquer_loader_installe(&d.0, "survie", "fabric-loader-0.19.5-1.21.11").unwrap();
+        let midi =
+            chrono::Local::now().date_naive().and_hms_opt(12, 0, 0).unwrap().and_local_timezone(chrono::Local).unwrap().timestamp_millis();
+        super::noter_partie(&d.0, "survie", 30, midi).unwrap();
+        super::noter_partie(&d.0, "survie", 0, midi + 1).unwrap();
+        for n in 0..6 {
+            super::noter_quick_play(&d.0, "survie", "singleplayer", &format!("Monde {n}"), "", n).unwrap();
+        }
+        super::noter_quick_play(&d.0, "survie", "singleplayer", "Monde 2", "Mon monde", 9).unwrap();
+        super::noter_quick_play(&d.0, "survie", "realms", "x", "", 9).unwrap();
+        super::noter_partie(&d.0, "absente", 5, midi).unwrap();
+
+        let v: Value = crate::fichiers::lire_json(&d.0.join("instances/survie/instance.json")).unwrap();
+        assert_eq!(v["perso"], 1);
+        assert_eq!(v["loaderInstalled"]["versionId"], "fabric-loader-0.19.5-1.21.11");
+        assert_eq!(v["loaderInstalled"]["loaderVersion"], "0.19.5");
+        assert_eq!((v["playtime"].as_f64(), v["lastPlayedAt"].as_i64()), (Some(30.0), Some(midi + 1)));
+        let jour = chrono::Local::now().format("%Y-%m-%d").to_string();
+        assert_eq!(
+            (v["stats"]["days"][&jour].as_f64(), v["stats"]["sessions"].as_u64(), v["stats"]["longest"].as_f64()),
+            (Some(30.0), Some(1), Some(30.0))
+        );
+        let recents: Vec<&str> = v["recent"].as_array().unwrap().iter().map(|r| r["id"].as_str().unwrap()).collect();
+        assert_eq!(recents, ["Monde 2", "Monde 5", "Monde 4", "Monde 3", "Monde 1"]);
+        assert_eq!(v["recent"][0]["name"], "Mon monde");
+    }
 
     #[test]
     fn installee_seulement_avec_version_et_loader() {

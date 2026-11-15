@@ -201,8 +201,19 @@ fn groupes(etat: Etat) -> Vec<(Option<&'static str>, Vec<Instance>)> {
         .collect()
 }
 
+/// Instance choisie dans la barre latérale : on reste sur Mods ou Mondes, sinon l'accueil.
+fn choisir_id(etat: Etat, id: &str) {
+    etat.choisie.set(Some(id.into()));
+    etat.vue.update(|v| {
+        if !matches!(*v, "mods" | "worlds") {
+            *v = "home"
+        }
+    });
+}
+
 fn ligne_instance(etat: Etat, instance: Instance) -> impl IntoView {
-    let st = statut(&instance);
+    let run = etat.run.get();
+    let st = statut(&instance, run.as_ref());
     let id = instance.id.clone();
     let id_actuel = id.clone();
     let actuelle = move || {
@@ -211,23 +222,20 @@ fn ligne_instance(etat: Etat, instance: Instance) -> impl IntoView {
     };
     let choisir = {
         let id = id.clone();
-        move |_| {
-            etat.choisie.set(Some(id.clone()));
-            etat.vue.update(|v| {
-                if !matches!(*v, "mods" | "worlds") {
-                    *v = "home"
-                }
-            });
-        }
+        move |_| choisir_id(etat, &id)
     };
     let badge = (st.kind != "idle").then(|| view! { <span class=format!("block__badge block__badge--{}", st.kind)></span> });
     let texte_statut = format!("{} · {}", instance.version, st.label);
-    // R0 : rien ne se lance encore ; le bouton est là pour comparer l'apparence.
-    let jouer = etat.compte_actif().is_some().then(|| {
+    let jouer = (etat.compte_actif().is_some() && run.is_none()).then(|| {
+        let id = instance.id.clone();
+        let lancer = move |_| {
+            choisir_id(etat, &id);
+            crate::partie::lancer(etat, id.clone(), false);
+        };
         let titre =
             if instance.installed { t("common.jouer") } else { tv("chrome.installer_puis_jouer", &[("version", &instance.version)]) };
         view! {
-            <button class="instance-play" aria-label=tv("chrome.jouer", &[("name", &instance.name)]) title=titre>
+            <button class="instance-play" aria-label=tv("chrome.jouer", &[("name", &instance.name)]) title=titre on:click=lancer>
                 {icone("play")}
             </button>
         }

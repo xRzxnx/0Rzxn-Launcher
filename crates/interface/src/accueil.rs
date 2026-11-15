@@ -1,13 +1,15 @@
-//! Onglet Accueil (portage de views/home.js). R0 : lecture seule, aucun bouton n'agit encore.
+//! Onglet Accueil (portage de views/home.js).
 
 use crate::chrome::tete;
 use crate::icones::icone;
+use crate::partie::{self, ETAPE_FICHIERS, ETAPE_JAVA, ETAPE_LOADER, ETAPE_MEMOIRE, NOMBRE_ETAPES, etape, pourcentage};
+use crate::texte::num;
 use crate::texte::{
     arrondi, cle_du_jour, format_court, format_date, format_derniere_partie, format_go, format_memoire, format_secondes,
     format_temps_de_jeu, t, tv,
 };
 use crate::{Etat, Statut, statut};
-use commun::{Instance, loader_name};
+use commun::{Instance, Partie, loader_name};
 use leptos::prelude::*;
 
 fn java_label(instance: &Instance) -> String {
@@ -25,18 +27,39 @@ fn loader_label(instance: &Instance) -> String {
     format!("{} {court}", loader_name(&instance.loader))
 }
 
-fn bouton_jouer(etat: Etat, instance: &Instance) -> AnyView {
+fn bouton_jouer(etat: Etat, instance: &Instance, st: &Statut) -> AnyView {
     if etat.compte_actif().is_none() {
         return view! { <button class="play play--disabled" disabled>{t("common.aucun_compte")}</button> }.into_any();
     }
-    if !instance.installed {
-        return view! { <button class="play play--install">{icone("download")}{tv("home.installer", &[("version", &instance.version)])}</button> }.into_any();
+    let arreter = move |_| partie::arreter(etat);
+    if st.kind == "running" {
+        return view! {
+            <button class="play play--running" on:click=arreter>
+                <span class="dot" aria-hidden="true"></span>
+                {t("home.en_jeu_arreter")}
+            </button>
+        }
+        .into_any();
     }
-    view! { <button class="play">{icone("play")}{t("common.jouer")}</button> }.into_any()
+    if st.kind == "busy" {
+        return view! { <button class="play play--busy" title=t("common.annuler") on:click=arreter>{st.label.clone()}</button> }.into_any();
+    }
+    if etat.run.get().is_some() {
+        return view! { <button class="play play--disabled" disabled>{t("home.une_autre_partie_tourne")}</button> }.into_any();
+    }
+    let id = instance.id.clone();
+    let jouer = move |_| partie::lancer(etat, id.clone(), false);
+    if !instance.installed {
+        return view! {
+            <button class="play play--install" on:click=jouer>{icone("download")}{tv("home.installer", &[("version", &instance.version)])}</button>
+        }
+        .into_any();
+    }
+    view! { <button class="play" on:click=jouer>{icone("play")}{t("common.jouer")}</button> }.into_any()
 }
 
 fn hero(etat: Etat, instance: &Instance, st: &Statut) -> impl IntoView {
-    let pastille = if st.kind == "ready" { t("common.prete") } else { t("common.installer") };
+    let pastille = st.label.clone();
     let derniere = format_derniere_partie(instance.last_played_at);
     let sous_titre = format!(
         "{} · {} · {}{}",
@@ -69,7 +92,7 @@ fn hero(etat: Etat, instance: &Instance, st: &Statut) -> impl IntoView {
                 <p class="hero__sub">{sous_titre}</p>
             </div>
             <div class="hero__bar">
-                {bouton_jouer(etat, instance)}
+                {bouton_jouer(etat, instance, st)}
                 <div class="version-box">
                     <span class="version-box__body">
                         <span class="label">{t("common.version")}</span>
@@ -138,7 +161,8 @@ fn bloc_instance(etat: Etat, instance: &Instance) -> impl IntoView {
     let action = |nom: &'static str, cle: &str, desactive: bool| {
         view! { <button class="block-action" disabled=desactive>{icone(nom)}{t(cle)}</button> }
     };
-    let _ = etat;
+    let id = instance.id.clone();
+    let verifier = move |_| partie::lancer(etat, id.clone(), true);
     view! {
         <section class="instance-block" aria-label=t("common.instance") on:pointermove=viser on:pointerleave=quitter>
             <button class=format!("cube-stage loader--{}", instance.loader) aria-label=t("home.faire_tourner_le_bloc") on:click=tourner>
@@ -187,10 +211,142 @@ fn bloc_instance(etat: Etat, instance: &Instance) -> impl IntoView {
                 {action("copy", "home.dupliquer", false)}
                 {action("upload", "home.exporter", false)}
                 {action("link", "home.raccourci", false)}
-                {action("shield", "home.verifier", !instance.installed)}
+                <button class="block-action" disabled=!instance.installed || etat.run.get().is_some() on:click=verifier>
+                    {icone("shield")}
+                    {t("home.verifier")}
+                </button>
                 <button class="block-action block-action--danger">{icone("trash")}{t("common.supprimer")}</button>
             </div>
         </section>
+    }
+}
+
+/// Partie en cours : mémoire et processeur du jeu (toutes les 2 s), temps de lancement.
+fn carte_partie(etat: Etat, instance: &Instance) -> impl IntoView + use<> {
+    let id = instance.id.clone();
+    move || {
+        let m = etat.mesures.get().filter(|m| m.instance_id == id);
+        let run = etat.run.get();
+        // Barre à l'échelle du plus grand : Java utilise un peu plus que la mémoire réglée.
+        let echelle = m.as_ref().map_or(1.0, |m| m.allocated.max(m.memory.unwrap_or(0)).max(m.peak.unwrap_or(0)).max(1) as f64);
+        let utilise = m.as_ref().and_then(|m| m.memory).map_or(0.0, |o| o as f64 / echelle * 100.0);
+        let pic = m.as_ref().and_then(|m| m.peak).map(|o| o as f64 / echelle * 100.0);
+        let (prep, menu) = (run.as_ref().and_then(|r| r.prepare_ms), run.as_ref().and_then(|r| r.menu_ms));
+        let total = prep.zip(menu).map(|(p, m)| p + m);
+        let s = |ms: i64| format_secondes(ms as f64);
+        let note_lancement = prep.map(|p| {
+            let suite = match menu {
+                Some(m) => tv("home.jusqu_au_menu", &[("time", &s(m))]),
+                None => t("home.menu_en_attente"),
+            };
+            format!("{} · {suite}", tv("home.de_preparation", &[("time", &s(p))]))
+        });
+        let memoire = m.as_ref().and_then(|m| m.memory).map_or_else(|| "…".into(), |o| format_memoire(o as f64));
+        let alloue =
+            m.as_ref().map(|m| view! { <small>{tv("home.sur_alloues", &[("allocated", &format_memoire(m.allocated as f64))])}</small> });
+        let note_pic = m.as_ref().and_then(|m| m.peak).map(|p| {
+            view! { <span class="live-card__note">{tv("home.pic_de_cette_partie", &[("peak", &format_memoire(p as f64))])}</span> }
+        });
+        let cpu = m.as_ref().and_then(|m| m.cpu).map_or_else(|| "…".into(), |c| tv("home.pourcent", &[("value", &c.to_string())]));
+        view! {
+            <section class="live-card" aria-label=t("home.partie_en_cours")>
+                <div class="live-card__cell">
+                    <span class="live-card__label">{t("home.memoire_du_jeu")}</span>
+                    <span class="live-card__value">{memoire}{alloue}</span>
+                    <span
+                        class="live-card__meter"
+                        role="progressbar"
+                        aria-valuenow=utilise.round().to_string()
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-label=t("home.memoire_du_jeu")
+                    >
+                        <i style=format!("width:{utilise}%")></i>
+                        {pic.map(|p| view! { <b class="live-card__peak" style=format!("left:{p}%")></b> })}
+                    </span>
+                    {note_pic}
+                </div>
+                <div class="live-card__cell">
+                    <span class="live-card__label">{t("home.processeur")}</span>
+                    <span class="live-card__value">{cpu}<small>{t("home.du_pc")}</small></span>
+                </div>
+                <div class="live-card__cell">
+                    <span class="live-card__label">{t("home.lancement")}</span>
+                    <span class="live-card__value">{total.or(prep).map_or_else(|| "…".into(), s)}</span>
+                    <span class="live-card__note">{note_lancement}</span>
+                </div>
+            </section>
+        }
+    }
+}
+
+fn detail_etape(i: usize, r: &Partie, instance: &Instance) -> String {
+    let compte = r.step == i && r.total > 0;
+    let (fait, total) = (r.done.to_string(), r.total.to_string());
+    let java = java_label(instance);
+    match i {
+        ETAPE_FICHIERS if compte => tv("home.fichiers", &[("done", &num(r.done as f64)), ("total", &num(r.total as f64))]),
+        ETAPE_JAVA if compte => tv("home.fichiers_2", &[("details", &java), ("done", &fait), ("total", &total)]),
+        ETAPE_JAVA => tv("home.runtime_mojang", &[("details", &java)]),
+        ETAPE_MEMOIRE => tv("home.demandes", &[("ram", &format_go(instance.settings.ram))]),
+        ETAPE_LOADER if instance.loader != "vanilla" && compte => {
+            tv("home.fichiers_3", &[("instance", &loader_label(instance)), ("done", &fait), ("total", &total)])
+        }
+        ETAPE_LOADER if instance.loader != "vanilla" => loader_label(instance),
+        _ => etape(i).1,
+    }
+}
+
+/// Préparation en cours : avancement, étape et liste des étapes.
+fn panneau_progression(etat: Etat, instance: &Instance, r: &Partie) -> impl IntoView + use<> {
+    let p = pourcentage(r);
+    let titre = if r.prepare_only {
+        "home.verifying_mc"
+    } else if instance.installed {
+        "home.launching_mc"
+    } else {
+        "home.installing_mc"
+    };
+    let etapes = (0..NOMBRE_ETAPES)
+        .map(|i| {
+            let genre = if i < r.step {
+                "done"
+            } else if i == r.step {
+                "active"
+            } else {
+                "todo"
+            };
+            view! {
+                <li class=format!("step step--{genre}") aria-current=(genre == "active").then_some("step")>
+                    <span class="step__mark" aria-hidden="true">{(genre == "done").then(|| icone("check"))}</span>
+                    <span class="step__body">
+                        <span class="step__name">{etape(i).0}</span>
+                        <span class="step__detail">{detail_etape(i, r, instance)}</span>
+                    </span>
+                </li>
+            }
+        })
+        .collect_view();
+    let fichiers = (r.total > 0)
+        .then(|| view! { <span>{tv("home.fichiers", &[("done", &num(r.done as f64)), ("total", &num(r.total as f64))])}</span> });
+    let numero =
+        tv("home.etape", &[("step", &(r.step + 1).to_string()), ("LAUNCH_STEPS", &NOMBRE_ETAPES.to_string()), ("name", &etape(r.step).0)]);
+    view! {
+        <h2 class="home__heading">
+            {tv(titre, &[("version", &instance.version)])}
+            <span class="home__heading-value">{format!("{p} %")}</span>
+        </h2>
+        <div class="progress" role="progressbar" aria-valuenow=p.to_string() aria-valuemin="0" aria-valuemax="100" aria-label=t("home.progression")>
+            <div class="progress__fill" style=format!("width:{p}%")></div>
+        </div>
+        <p class="progress-stats">
+            <span>{numero}</span>
+            {fichiers}
+            <button class="btn btn--ghost" style="height:28px;margin-left:auto;font-size:14px" on:click=move |_| partie::arreter(etat)>
+                {t("common.annuler")}
+            </button>
+        </p>
+        <ol class="steps" aria-label=t("home.etapes_du_lancement")>{etapes}</ol>
     }
 }
 
@@ -322,14 +478,32 @@ pub fn Accueil() -> impl IntoView {
             }
             .into_any();
         };
-        let st = statut(&instance);
+        let run = etat.run.get();
+        let st = statut(&instance, run.as_ref());
+        if st.kind == "busy"
+            && let Some(r) = &run
+        {
+            return view! {
+                <div>
+                    {hero(etat, &instance, &st)}
+                    <div class="home__content">
+                        <section class="card">
+                            <div class="stats">{panneau_progression(etat, &instance, r)}</div>
+                        </section>
+                    </div>
+                </div>
+            }
+            .into_any();
+        }
+        let en_jeu = st.kind == "running";
         // shortcut: la carte modpack arrive en R4.
         view! {
             <div>
                 {hero(etat, &instance, &st)}
                 <div class="home__content">
+                    {en_jeu.then(|| carte_partie(etat, &instance))}
                     {bloc_instance(etat, &instance)}
-                    {tuiles_lancement(&instance)}
+                    {(!en_jeu).then(|| tuiles_lancement(&instance))}
                     {(instance.playtime > 0.0).then(|| tuiles_temps(etat, &instance))}
                 </div>
             </div>
