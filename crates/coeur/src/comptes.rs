@@ -479,6 +479,50 @@ mod tests {
         assert_eq!(c.compte_de_jeu(&id, &|_| {}).await.unwrap().access_token, "x");
     }
 
+    /// Relit en lecture seule les sessions d'un dossier de réglages existant (ORZXN_ESSAI_DONNEES) : rien n'est
+    /// écrit, aucun jeton n'est affiché (seulement leur taille et l'expiration).
+    #[test]
+    #[ignore]
+    fn relire_une_session_existante() {
+        let dossier = std::path::PathBuf::from(std::env::var("ORZXN_ESSAI_DONNEES").unwrap());
+        let avant = std::fs::read(dossier.join("accounts.json")).unwrap();
+        let c = Comptes::new(&dossier, crate::coffre::du_systeme(&dossier), None);
+        for compte in c.tous().iter().filter(|c| texte(c, "type") == "microsoft") {
+            let id = texte(compte, "id");
+            match c.dechiffrer(&id, &texte(compte, "secrets")).ok().and_then(|s| serde_json::from_str::<Secrets>(&s).ok()) {
+                Some(s) => println!(
+                    "{} : session lue, jeton {} caractères, renouvellement {} caractères, expire dans {} min",
+                    texte(compte, "name"),
+                    s.access_token.len(),
+                    s.refresh_token.len(),
+                    (s.expires_at - crate::base::maintenant()) / 60_000
+                ),
+                None => println!("{} : session illisible", texte(compte, "name")),
+            }
+        }
+        assert_eq!(std::fs::read(dossier.join("accounts.json")).unwrap(), avant, "rien n'est écrit");
+    }
+
+    /// Essai du renouvellement : marque expirées les sessions d'un dossier d'ESSAI (ORZXN_ESSAI_DONNEES).
+    #[test]
+    #[ignore]
+    fn expirer_les_sessions_d_essai() {
+        let dossier = std::path::PathBuf::from(std::env::var("ORZXN_ESSAI_DONNEES").unwrap());
+        assert!(dossier.to_string_lossy().contains(".apercu"), "dossier d'essai seulement");
+        let c = Comptes::new(&dossier, crate::coffre::du_systeme(&dossier), None);
+        for compte in c.tous().iter().filter(|c| texte(c, "type") == "microsoft") {
+            let id = texte(compte, "id");
+            let mut s: Secrets = serde_json::from_str(&c.dechiffrer(&id, &texte(compte, "secrets")).unwrap()).unwrap();
+            s.expires_at = 0;
+            let chiffre = c.chiffrer(&id, &serde_json::to_string(&s).unwrap()).unwrap();
+            c.modifier(&id, |m| {
+                m.insert("secrets".into(), chiffre.into());
+            })
+            .unwrap();
+            println!("{} : session marquée expirée", texte(compte, "name"));
+        }
+    }
+
     struct SansTrousseau;
     impl Coffre for SansTrousseau {
         fn persistant(&self) -> bool {
