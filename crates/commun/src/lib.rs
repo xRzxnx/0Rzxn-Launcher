@@ -184,6 +184,9 @@ pub struct Instance {
     pub mod_sets: Vec<serde_json::Value>,
     #[serde(default)]
     pub active_mod_set: Option<String>,
+    /// Loader installé : { loader, loaderVersion, versionId }.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loader_installed: Option<serde_json::Value>,
     /// Liste « Reprendre » : mondes et serveurs rejoints, le plus récent d'abord.
     #[serde(default)]
     pub recent: Vec<serde_json::Value>,
