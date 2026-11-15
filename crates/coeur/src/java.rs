@@ -179,6 +179,7 @@ pub fn lire_version_java(sortie: &str) -> Option<InfoJava> {
 
 /// Programme lancé sans fenêtre de console sous Windows.
 pub fn commande(exe: &Path) -> tokio::process::Command {
+    #[cfg_attr(not(windows), allow(unused_mut))] // seul Windows ajoute une option
     let mut c = tokio::process::Command::new(exe);
     #[cfg(windows)]
     c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
