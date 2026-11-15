@@ -342,7 +342,7 @@ pub async fn importer(
     jeu: &Jeu,
     source_dir: &Path,
     defauts: &Reglages,
-    progres: &dyn Fn(usize, usize),
+    progres: &(dyn Fn(usize, usize) + Send + Sync),
     annule: &AtomicBool,
 ) -> Resultat<Importee> {
     let racine = &jeu.dossiers.racine;

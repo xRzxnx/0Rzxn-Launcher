@@ -2,6 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod connexion;
+mod contenu;
+
+use contenu::Services;
 
 use coeur::base::{Base, Tache};
 use coeur::comptes::{Comptes, Liste};
@@ -89,14 +92,29 @@ fn instances(base: State<Arc<Base>>) -> Vec<Instance> {
 
 /// Lance une instance (options : verify, prepareOnly, quickPlay). Les commandes qui démarrent du travail sont
 /// asynchrones : elles tournent dans le runtime tokio de Tauri.
+/// Sauvegarde des mondes d'abord (réglage « Sauvegarde au lancement ») : { backupError } si elle échoue.
 #[tauri::command]
-async fn lancer(parties: State<'_, Arc<Parties>>, id: String, options: Option<Value>) -> Result<commun::Partie, String> {
+async fn lancer(
+    parties: State<'_, Arc<Parties>>,
+    services: State<'_, Arc<Services>>,
+    id: String,
+    options: Option<Value>,
+) -> Result<Value, String> {
     let o = options.unwrap_or_default();
     let vrai = |c: &str| o.get(c).and_then(Value::as_bool) == Some(true);
     let preparer = vrai("prepareOnly");
-    // shortcut: la sauvegarde des mondes avant la partie (réglage « Sauvegarde au lancement ») arrive avec les mondes (R4).
+    if !preparer && !vrai("skipBackup") {
+        if parties.en_cours() {
+            return Err(coeur::i18n::t("ipc.une_partie_ou_une_installation"));
+        }
+        let instance =
+            coeur::instances::lire(&coeur::chemins::racine_jeu(), &id).ok_or_else(|| coeur::i18n::t("instances.instance_introuvable"))?;
+        if let Some(echec) = services.sauvegarde_avant(&instance, "launch").await {
+            return Ok(echec);
+        }
+    }
     let quick_play = if preparer { None } else { parties.cible_quick_play(&id, o.get("quickPlay")).map_err(|e| e.message)? };
-    parties.demarrer(&id, vrai("verify"), preparer, quick_play).map_err(|e| e.message)
+    parties.demarrer(&id, vrai("verify"), preparer, quick_play).map(|p| serde_json::to_value(p).unwrap_or_default()).map_err(|e| e.message)
 }
 
 #[tauri::command]
@@ -312,6 +330,7 @@ fn main() {
             let (b, uri) = (biblio_images.clone(), requete.uri().to_string());
             tauri::async_runtime::spawn(async move { reponse.respond(image_skin(b, uri).await) });
         })
+        .register_uri_scheme_protocol("fond", |_ctx, requete| contenu::image_fond(&requete.uri().to_string()))
         .manage(connexion::Connexion::default())
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -328,7 +347,7 @@ fn main() {
                 ..Default::default()
             });
             let parties = Parties::new(coeur::partie::Options {
-                jeu,
+                jeu: jeu.clone(),
                 base: base.clone(),
                 taches: taches.clone(),
                 comptes: comptes.clone(),
@@ -337,6 +356,7 @@ fn main() {
                 fenetre: Some(Arc::new(FenetrePrincipale(app.handle().clone()))),
             });
             let _ = parties_lien.set(Arc::downgrade(&parties));
+            app.manage(Services::new(jeu, base.clone(), taches.clone(), parties.clone()));
             app.manage(comptes);
             app.manage(biblio);
             app.manage(garde);
@@ -370,7 +390,58 @@ fn main() {
             skins_variante,
             skins_retirer,
             skins_appliquer,
-            skins_par_defaut
+            skins_par_defaut,
+            contenu::instances_creer,
+            contenu::instances_modifier,
+            contenu::optimisations_liste,
+            contenu::optimisations_revenir,
+            contenu::instances_dupliquer,
+            contenu::instances_importer_fond,
+            contenu::instances_nettoyer_fond,
+            contenu::instances_supprimer,
+            contenu::instances_ouvrir_dossier,
+            contenu::instances_exporter,
+            contenu::contenu_lister,
+            contenu::contenu_plan_version,
+            contenu::contenu_basculer,
+            contenu::contenu_supprimer,
+            contenu::contenu_installer,
+            contenu::contenu_mettre_a_jour,
+            contenu::contenu_importer,
+            contenu::contenu_ouvrir_dossier,
+            contenu::ensembles_creer,
+            contenu::ensembles_renommer,
+            contenu::ensembles_supprimer,
+            contenu::ensembles_appliquer,
+            contenu::controle_mods,
+            contenu::controle_resoudre,
+            contenu::menu_titre_etat,
+            contenu::menu_titre_appliquer,
+            contenu::menu_titre_auto,
+            contenu::menu_titre_retirer,
+            contenu::modrinth_rechercher,
+            contenu::modrinth_projet,
+            contenu::modrinth_versions,
+            contenu::modpacks_installer,
+            contenu::modpacks_importer,
+            contenu::modpacks_verifier,
+            contenu::modpacks_mettre_a_jour,
+            contenu::import_analyser,
+            contenu::import_instance,
+            contenu::mondes_liste,
+            contenu::mondes_sauvegarder,
+            contenu::mondes_restaurer,
+            contenu::mondes_supprimer,
+            contenu::mondes_supprimer_sauvegarde,
+            contenu::mondes_ouvrir_dossier,
+            contenu::stockage_utilisation,
+            contenu::stockage_plan,
+            contenu::stockage_nettoyer,
+            contenu::perf_guide_ram,
+            contenu::perf_apercu,
+            contenu::perf_pack,
+            contenu::perf_installer_pack,
+            contenu::systeme_memoire
         ])
         .build(tauri::generate_context!())
         .expect("the launcher could not start")

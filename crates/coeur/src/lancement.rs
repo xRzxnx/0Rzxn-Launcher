@@ -298,7 +298,12 @@ async fn preparer(s: Session, ctx: &Contexte) -> Resultat<Option<Partie>> {
     // 8. Natives et assets anciens
     ctx.progres(7);
     std::fs::create_dir_all(&dossier_jeu)?;
-    // shortcut: l'écran titre Cristal (FancyMenu) est mis à jour avec le contenu (R4).
+    if instance.title_menu.as_ref().is_some_and(Value::is_object) {
+        // Un écran titre raté ne doit jamais empêcher de jouer.
+        if let Err(e) = crate::ecran_titre::rafraichir(&dossier_jeu, &instance, Some(&compte.name), true) {
+            ctx.journal(&tv("launch.menu_titre_erreur", &[("message", &e.message)]), "LAUNCHER/WARN");
+        }
+    }
     let id_assets = version.pointer("/assetIndex/id").and_then(Value::as_str).unwrap_or("");
     let assets_jeu = jeu.reconstruire_assets(&assets.index, id_assets, &dossier_jeu)?;
     let chemin = |p: &Path| p.to_string_lossy().into_owned();

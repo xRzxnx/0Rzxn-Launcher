@@ -187,15 +187,22 @@ struct Lancer {
 }
 
 /// Jouer (ou Vérifier : `verifier` = vérification complète sans lancer le jeu).
-// shortcut: sans contrôle des mods ni alerte de mémoire avant la partie : ils arrivent avec le contenu (R4).
+// shortcut: les fenêtres d'avant la partie (contrôle des mods, mémoire, sauvegarde ratée « Réessayer / Continuer
+// sans ») arrivent avec les écrans (R5) ; leurs commandes existent déjà (controle_mods, menu_titre_auto…).
 pub fn lancer(etat: Etat, id: String, verifier: bool) {
     if etat.run.get_untracked().is_some() {
         return;
     }
     leptos::task::spawn_local(async move {
         let o = Options { verify: verifier, prepare_only: verifier };
-        match appeler::<Partie>("lancer", Lancer { id, options: o }).await {
-            Ok(r) => etat.run.set(Some(r)),
+        match appeler::<serde_json::Value>("lancer", Lancer { id, options: o }).await {
+            Ok(v) if v.get("backupError").is_some() => {
+                toast(etat, "error", t("actions.lancement_impossible"), v["backupError"].as_str().map(String::from), 9000)
+            }
+            Ok(v) => match serde_json::from_value::<Partie>(v) {
+                Ok(r) => etat.run.set(Some(r)),
+                Err(e) => toast(etat, "error", t("actions.lancement_impossible"), Some(e.to_string()), 9000),
+            },
             Err(e) => toast(etat, "error", t("actions.lancement_impossible"), Some(e), 9000),
         }
     });
